@@ -1,0 +1,7 @@
+[package]
+name = "numtracker"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fd-lock = "4.0.2"
