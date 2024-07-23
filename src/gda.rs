@@ -32,7 +32,7 @@ impl GdaNumTracker {
             return Err(InvalidExtension);
         }
         let directory = directory.into();
-        let _lock_file = directory.join(&format!(".numtracker_lock.{extension}"));
+        let _lock_file = directory.join(format!(".numtracker_lock.{extension}"));
         Ok(Self {
             directory,
             extension,
@@ -48,17 +48,17 @@ impl GdaNumTracker {
     /// let _lock = self.file_lock()?;
     /// let _lock = _lock.write()?;
     /// // ... rest of method
-    /// // lock will be release when dropped
+    /// // lock will be released when dropped
     /// ```
     /// # Notes
     /// This is an advisory lock only and will only prevent concurrent access by other applications
     /// that are aware of and opt in to respecting this lock. It does not prevent access to the
     /// directory from other uses/processes that don't check.
-    #[must_use]
     fn file_lock(&self) -> Result<RwLock<impl AsFd>, std::io::Error> {
         let lock = OpenOptions::new()
             .create(true)
             .write(true)
+            .truncate(true)
             .open(&self._lock_file)?;
         let _lock = RwLock::new(lock);
         Ok(_lock)
