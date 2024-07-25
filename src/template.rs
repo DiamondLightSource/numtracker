@@ -1,0 +1,278 @@
+pub trait FieldSource<F> {
+    type Err;
+    // TODO: don't expose the whole buf to the field source
+    fn write_to(&self, buf: &mut String, field: &F) -> Result<(), Self::Err>;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum Part<Field> {
+    Literal(String),
+    Field(Field),
+}
+#[derive(Debug)]
+pub struct Template<Field> {
+    parts: Vec<Part<Field>>,
+}
+
+#[derive(Debug)]
+enum ParseState {
+    /// We haven't started parsing anything yet
+    Init,
+    /// We are parsing a field key
+    PartialKey(String),
+    /// We are parsing a literal section of the template
+    Literal(String),
+    /// We are reading a literal section of the template but have encountered a (potentially
+    /// escaped) opening brace.
+    PendingLiteral(String),
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParseError {
+    position: usize,
+    kind: ErrorKind,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ErrorKind {
+    NestedKey,
+    EmptyKey,
+    IncompleteKey,
+}
+
+impl ParseError {
+    fn nested(position: usize) -> Self {
+        Self {
+            position,
+            kind: ErrorKind::NestedKey,
+        }
+    }
+    fn incomplete(position: usize) -> Self {
+        Self {
+            position,
+            kind: ErrorKind::IncompleteKey,
+        }
+    }
+    fn empty(position: usize) -> Self {
+        Self {
+            position,
+            kind: ErrorKind::EmptyKey,
+        }
+    }
+}
+
+impl<F: From<String>> Template<F> {
+    pub fn new<S: AsRef<str>>(template: S) -> Result<Self, ParseError> {
+        let mut parts = vec![];
+        let mut state = ParseState::Init;
+        for (i, c) in template.as_ref().chars().enumerate() {
+            match c {
+                '{' => match state {
+                    ParseState::Init => state = ParseState::PartialKey(String::new()),
+                    ParseState::PartialKey(_) => return Err(ParseError::nested(i)),
+                    ParseState::Literal(val) => state = ParseState::PendingLiteral(val),
+                    ParseState::PendingLiteral(val) => state = ParseState::Literal(val + "{"),
+                },
+                '}' => match state {
+                    ParseState::Init => state = ParseState::Literal("}".into()),
+                    ParseState::PartialKey(key) if key.trim().is_empty() => {
+                        return Err(ParseError::empty(i))
+                    }
+                    ParseState::PartialKey(key) => {
+                        parts.push(Part::Field(F::from(key)));
+                        state = ParseState::Init;
+                    }
+                    ParseState::PendingLiteral(_) => return Err(ParseError::empty(i)),
+                    ParseState::Literal(val) => state = ParseState::Literal(val + "}"),
+                },
+                c => match state {
+                    ParseState::Init => state = ParseState::Literal(c.into()),
+                    ParseState::PartialKey(mut key) => {
+                        key.push(c);
+                        state = ParseState::PartialKey(key);
+                    }
+                    ParseState::Literal(mut text) => {
+                        text.push(c);
+                        state = ParseState::Literal(text);
+                    }
+                    ParseState::PendingLiteral(text) => {
+                        parts.push(Part::Literal(text));
+                        state = ParseState::PartialKey(c.into());
+                    }
+                },
+            }
+        }
+        match state {
+            ParseState::Init => {}
+            ParseState::PendingLiteral(_) | ParseState::PartialKey(_) => {
+                return Err(ParseError::incomplete(template.as_ref().len()))
+            }
+            ParseState::Literal(text) => parts.push(Part::Literal(text)),
+        }
+        Ok(Self { parts })
+    }
+
+    pub fn render<Src: FieldSource<F>>(&self, src: Src) -> Result<String, Src::Err> {
+        let mut buf = String::new();
+        for part in &self.parts {
+            match part {
+                Part::Literal(text) => buf.push_str(&text),
+                Part::Field(f) => src.write_to(&mut buf, f)?,
+            }
+        }
+        Ok(buf)
+    }
+}
+
+#[cfg(test)]
+mod parser_tests {
+    use super::Part::*;
+    use super::*;
+
+    type StrTemplate = Template<String>;
+
+    fn literal(lit: &'static str) -> Part<String> {
+        Part::Literal(lit.into())
+    }
+    fn field(f: &'static str) -> Part<String> {
+        Part::Field(f.into())
+    }
+
+    #[test]
+    fn only_literal() {
+        let temp = Template::new("this is all literal").unwrap();
+        assert_eq!(temp.parts, vec![literal("this is all literal")])
+    }
+
+    #[test]
+    fn only_single_field() {
+        let temp = StrTemplate::new("{year}").unwrap();
+        assert_eq!(temp.parts, vec![Field("year".into())]);
+    }
+
+    #[test]
+    fn only_fields() {
+        let temp = StrTemplate::new("{year}{visit}{proposal}").unwrap();
+        assert_eq!(
+            temp.parts,
+            vec![field("year"), field("visit"), field("proposal")]
+        );
+    }
+
+    #[test]
+    fn mixed_literal_and_fields() {
+        // Start/end with literal
+        let temp = StrTemplate::new("start{visit}middle{year}end").unwrap();
+        assert_eq!(
+            temp.parts,
+            vec![
+                literal("start"),
+                field("visit"),
+                literal("middle"),
+                field("year"),
+                literal("end")
+            ]
+        );
+
+        // Start/end with field
+        let temp = StrTemplate::new("{year}first{visit}second{proposal}").unwrap();
+        assert_eq!(
+            temp.parts,
+            vec![
+                field("year"),
+                literal("first"),
+                field("visit"),
+                literal("second"),
+                field("proposal")
+            ]
+        )
+    }
+
+    #[test]
+    fn escaped_open() {
+        let temp = StrTemplate::new("all {{ literal").unwrap();
+        assert_eq!(temp.parts, vec![literal("all { literal")])
+    }
+
+    macro_rules! error {
+        ($pos:literal, $kind:ident) => {
+            ParseError {
+                position: $pos,
+                kind: ErrorKind::$kind,
+            }
+        };
+    }
+
+    #[test]
+    fn empty_key() {
+        let temp = StrTemplate::new("missing {} key").unwrap_err();
+        assert_eq!(temp, error!(9, EmptyKey));
+
+        let temp = StrTemplate::new("whitespace {  } key").unwrap_err();
+        assert_eq!(temp, error!(14, EmptyKey));
+    }
+
+    #[test]
+    fn unmatched_close() {
+        let temp = StrTemplate::new("closing } only").unwrap();
+        assert_eq!(temp.parts, vec![literal("closing } only")]);
+
+        let temp = StrTemplate::new("} closing start").unwrap();
+        assert_eq!(temp.parts, vec![literal("} closing start")]);
+
+        let temp = StrTemplate::new("double {close}}").unwrap();
+        assert_eq!(
+            temp.parts,
+            vec![literal("double "), field("close"), literal("}")]
+        )
+    }
+
+    #[test]
+    fn nested_keys() {
+        let temp = StrTemplate::new("{nested{keys}}").unwrap_err();
+        assert_eq!(temp, error!(7, NestedKey))
+    }
+
+    #[test]
+    fn incomplete_key() {
+        let temp = StrTemplate::new("incomplete {key").unwrap_err();
+        assert_eq!(temp, error!(15, IncompleteKey));
+
+        let temp = StrTemplate::new("incomplete {").unwrap_err();
+        assert_eq!(temp, error!(12, IncompleteKey));
+    }
+}
+
+#[cfg(test)]
+mod template_tests {
+    use super::*;
+    type StrTemplate = Template<String>;
+
+    struct EchoSource;
+    impl FieldSource<String> for EchoSource {
+        type Err = ();
+
+        fn write_to(&self, buf: &mut String, field: &String) -> Result<(), Self::Err> {
+            buf.push_str(&field.to_uppercase());
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn literal_template() {
+        let text = StrTemplate::new("all literal")
+            .unwrap()
+            .render(EchoSource)
+            .unwrap();
+        assert_eq!(text, "all literal");
+    }
+
+    #[test]
+    fn mixed() {
+        let text = StrTemplate::new("/tmp/{instrument}/data/{year}/{visit}/")
+            .unwrap()
+            .render(EchoSource)
+            .unwrap();
+        assert_eq!(text, "/tmp/INSTRUMENT/data/YEAR/VISIT/");
+    }
+}
