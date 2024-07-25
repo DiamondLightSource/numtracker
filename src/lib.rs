@@ -3,21 +3,26 @@ pub mod paths;
 pub(crate) mod template;
 
 #[derive(Debug)]
-pub struct Code(pub String);
-#[derive(Debug)]
-pub struct Proposal(pub usize);
-#[derive(Debug)]
-pub struct Session(pub usize);
+pub struct Proposal {
+    pub code: String,
+    pub number: usize,
+}
 
 #[derive(Debug)]
-pub struct Visit(pub Code, pub Proposal, pub Session);
+pub struct Visit {
+    pub proposal: Proposal,
+    pub session: usize,
+}
 impl Visit {
     fn display(&self) -> String {
-        format!("{}{}-{}", self.0 .0, self.1 .0, self.2 .0)
+        format!(
+            "{}{}-{}",
+            self.proposal.code, self.proposal.number, self.session
+        )
     }
 
     fn proposal(&self) -> String {
-        format!("{}{}", self.0 .0, self.1 .0)
+        format!("{}{}", self.proposal.code, self.proposal.number)
     }
 }
 
