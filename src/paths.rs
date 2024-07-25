@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use chrono::{Datelike, Local};
 
-use crate::template::{FieldSource, Template};
+use crate::template::{FieldSource, Template, TemplateError};
 use crate::BeamlineContext;
 
 pub trait PathConstructor {
@@ -25,20 +25,24 @@ enum BeamlineField {
     Custom(String),
 }
 
-impl From<String> for BeamlineField {
-    fn from(value: String) -> Self {
+#[derive(Debug)]
+pub struct InvalidKey(String);
+
+impl TryFrom<String> for BeamlineField {
+    type Error = InvalidKey;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
-            "year" => BeamlineField::Year,
-            "visit" => BeamlineField::Visit,
-            "proposal" => BeamlineField::Proposal,
-            "instrument" => BeamlineField::Instrument,
-            _ => BeamlineField::Custom(value),
+            "year" => Ok(BeamlineField::Year),
+            "visit" => Ok(BeamlineField::Visit),
+            "proposal" => Ok(BeamlineField::Proposal),
+            "instrument" => Ok(BeamlineField::Instrument),
+            _ => Ok(BeamlineField::Custom(value)),
         }
     }
 }
 
 impl FieldSource<BeamlineField> for &BeamlineContext {
-    type Err = ();
+    type Err = InvalidKey;
 
     fn write_to(&self, buf: &mut String, field: &BeamlineField) -> Result<(), Self::Err> {
         _ = match field {
@@ -54,7 +58,7 @@ impl FieldSource<BeamlineField> for &BeamlineContext {
 }
 
 impl TemplatePathConstructor {
-    pub fn new(template: impl AsRef<str>) -> Result<Self, crate::template::ParseError> {
+    pub fn new(template: impl AsRef<str>) -> Result<Self, TemplateError<InvalidKey>> {
         Ok(Self {
             template: Template::new(template)?,
         })
@@ -62,7 +66,7 @@ impl TemplatePathConstructor {
 }
 
 impl PathConstructor for TemplatePathConstructor {
-    type Err = ();
+    type Err = InvalidKey;
 
     fn visit_directory(&self, visit: &BeamlineContext) -> Result<PathBuf, Self::Err> {
         Ok(PathBuf::from(&self.template.render(visit)?))

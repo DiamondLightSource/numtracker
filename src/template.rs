@@ -28,19 +28,20 @@ enum ParseState {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct ParseError {
+pub struct TemplateError<E> {
     position: usize,
-    kind: ErrorKind,
+    kind: ErrorKind<E>,
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum ErrorKind {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum ErrorKind<E> {
     NestedKey,
     EmptyKey,
     IncompleteKey,
+    UnrecognisedKey(E),
 }
 
-impl ParseError {
+impl<E> TemplateError<E> {
     fn nested(position: usize) -> Self {
         Self {
             position,
@@ -59,30 +60,40 @@ impl ParseError {
             kind: ErrorKind::EmptyKey,
         }
     }
+    fn unknown(position: usize, err: E) -> Self {
+        Self {
+            position,
+            kind: ErrorKind::UnrecognisedKey(err),
+        }
+    }
 }
 
-impl<F: From<String>> Template<F> {
-    pub fn new<S: AsRef<str>>(template: S) -> Result<Self, ParseError> {
+impl<F: TryFrom<String>> Template<F> {
+    pub fn new<S: AsRef<str>>(template: S) -> Result<Self, TemplateError<F::Error>> {
         let mut parts = vec![];
         let mut state = ParseState::Init;
         for (i, c) in template.as_ref().chars().enumerate() {
             match c {
                 '{' => match state {
                     ParseState::Init => state = ParseState::PartialKey(String::new()),
-                    ParseState::PartialKey(_) => return Err(ParseError::nested(i)),
+                    ParseState::PartialKey(_) => return Err(TemplateError::nested(i)),
                     ParseState::Literal(val) => state = ParseState::PendingLiteral(val),
                     ParseState::PendingLiteral(val) => state = ParseState::Literal(val + "{"),
                 },
                 '}' => match state {
                     ParseState::Init => state = ParseState::Literal("}".into()),
                     ParseState::PartialKey(key) if key.trim().is_empty() => {
-                        return Err(ParseError::empty(i))
+                        return Err(TemplateError::empty(i))
                     }
                     ParseState::PartialKey(key) => {
-                        parts.push(Part::Field(F::from(key)));
+                        match F::try_from(key) {
+                            Ok(field) => parts.push(Part::Field(field)),
+                            Err(e) => return Err(TemplateError::unknown(i, e)),
+                        }
+                        // parts.push(Part::Field(F::try_from(key)));
                         state = ParseState::Init;
                     }
-                    ParseState::PendingLiteral(_) => return Err(ParseError::empty(i)),
+                    ParseState::PendingLiteral(_) => return Err(TemplateError::empty(i)),
                     ParseState::Literal(val) => state = ParseState::Literal(val + "}"),
                 },
                 c => match state {
@@ -105,7 +116,7 @@ impl<F: From<String>> Template<F> {
         match state {
             ParseState::Init => {}
             ParseState::PendingLiteral(_) | ParseState::PartialKey(_) => {
-                return Err(ParseError::incomplete(template.as_ref().len()))
+                return Err(TemplateError::incomplete(template.as_ref().len()))
             }
             ParseState::Literal(text) => parts.push(Part::Literal(text)),
         }
@@ -196,7 +207,7 @@ mod parser_tests {
 
     macro_rules! error {
         ($pos:literal, $kind:ident) => {
-            ParseError {
+            TemplateError {
                 position: $pos,
                 kind: ErrorKind::$kind,
             }
