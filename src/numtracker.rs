@@ -25,7 +25,7 @@ impl GdaNumTracker {
     /// Create a new num tracker for the given directory and extension
     pub fn new<D: Into<PathBuf>>(directory: D) -> Self {
         let directory = directory.into();
-        let _lock_file = directory.join(format!(".numtracker_lock"));
+        let _lock_file = directory.join(".numtracker_lock");
         Self {
             directory,
             _lock_file,
@@ -65,10 +65,10 @@ impl GdaNumTracker {
     /// Create a file named for the given number and, if present, remove the file for the previous
     /// number.
     fn create_num_file(&self, num: usize, ext: &str) -> Result<(), std::io::Error> {
-        let next = self.file_name(num, &ext);
+        let next = self.file_name(num, ext);
         OpenOptions::new().create_new(true).write(true).open(next)?;
         if let Some(prev) = num.checked_sub(1) {
-            let prev = self.file_name(prev, &ext);
+            let prev = self.file_name(prev, ext);
             let _ = fs::remove_file(prev);
         }
         Ok(())

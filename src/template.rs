@@ -127,7 +127,7 @@ impl<F: TryFrom<String>> Template<F> {
         let mut buf = String::new();
         for part in &self.parts {
             match part {
-                Part::Literal(text) => buf.push_str(&text),
+                Part::Literal(text) => buf.push_str(text),
                 Part::Field(f) => src.write_to(&mut buf, f)?,
             }
         }
