@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
 pub mod numtracker;
@@ -28,10 +29,15 @@ impl AsRef<str> for Instrument {
 #[derive(Debug)]
 pub struct User(String);
 
+// Derived Default is OK without validation as empty path is a valid subdirectory
+#[derive(Debug, Default)]
+pub struct Subdirectory(PathBuf);
+
 pub struct BeamlineContext {
     instrument: Instrument,
     visit: Visit,
     user: User,
+    subdirectory: Subdirectory,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -44,6 +50,11 @@ pub enum InvalidVisit {
 
 #[derive(Debug)]
 pub struct EmptyUsername;
+
+#[derive(Debug)]
+pub enum InvalidSubdirectory {
+    InvalidComponent(usize),
+}
 
 impl Visit {
     pub fn new<C: Into<String>>(
@@ -96,12 +107,37 @@ impl User {
     }
 }
 
+impl Subdirectory {
+    pub fn new(sub: impl Into<PathBuf>) -> Result<Self, InvalidSubdirectory> {
+        let sub = sub.into();
+        for (i, comp) in sub.components().enumerate() {
+            let Component::Normal(_) = comp else {
+                return Err(InvalidSubdirectory::InvalidComponent(i));
+            };
+        }
+        Ok(Self(sub))
+    }
+}
+
+impl Display for Subdirectory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.display().fmt(f)
+    }
+}
+
+impl AsRef<Path> for Subdirectory {
+    fn as_ref(&self) -> &Path {
+        &self.0
+    }
+}
+
 impl BeamlineContext {
     pub fn new(instrument: impl Into<String>, visit: Visit, user: User) -> Self {
         Self {
             instrument: Instrument(instrument.into()),
             visit,
             user,
+            subdirectory: Subdirectory(PathBuf::new()),
         }
     }
     pub fn instrument(&self) -> &Instrument {
@@ -109,6 +145,10 @@ impl BeamlineContext {
     }
     pub fn visit(&self) -> &Visit {
         &self.visit
+    }
+    pub fn with_subdirectory(mut self, subdir: Subdirectory) -> Self {
+        self.subdirectory = subdir;
+        self
     }
 }
 
