@@ -30,6 +30,7 @@ pub struct User(String);
 
 pub struct BeamlineContext {
     instrument: Instrument,
+    visit: Visit,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -81,13 +82,17 @@ impl FromStr for Visit {
 }
 
 impl BeamlineContext {
-    pub fn new(instrument: impl Into<String>) -> Self {
+    pub fn new(instrument: impl Into<String>, visit: Visit) -> Self {
         Self {
             instrument: Instrument(instrument.into()),
+            visit,
         }
     }
     pub fn instrument(&self) -> &Instrument {
         &self.instrument
+    }
+    pub fn visit(&self) -> &Visit {
+        &self.visit
     }
 }
 

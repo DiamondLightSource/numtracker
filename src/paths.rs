@@ -48,8 +48,8 @@ impl FieldSource<BeamlineField> for &BeamlineContext {
         _ = match field {
             // Should be year of visit?
             BeamlineField::Year => buf.write_fmt(format_args!("{}", Local::now().year())),
-            BeamlineField::Visit => todo!(),
-            BeamlineField::Proposal => todo!(),
+            BeamlineField::Visit => write!(buf, "{}", self.visit()),
+            BeamlineField::Proposal => write!(buf, "{}", self.visit.proposal),
             BeamlineField::Instrument => buf.write_str(self.instrument.as_ref()),
             BeamlineField::Custom(_) => todo!(),
         };
