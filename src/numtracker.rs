@@ -18,18 +18,14 @@ pub trait NumTracker {
 #[derive(Debug)]
 pub struct GdaNumTracker {
     directory: PathBuf,
-    _lock_file: PathBuf,
 }
 
 impl GdaNumTracker {
+    const LOCK_FILE_NAME: &'static str = ".numtracker_lock";
     /// Create a new num tracker for the given directory and extension
     pub fn new<D: Into<PathBuf>>(directory: D) -> Self {
         let directory = directory.into();
-        let _lock_file = directory.join(".numtracker_lock");
-        Self {
-            directory,
-            _lock_file,
-        }
+        Self { directory }
     }
 
     /// Create a [RwLock] for this tracker's directory lock file
@@ -46,12 +42,15 @@ impl GdaNumTracker {
     /// This is an advisory lock only and will only prevent concurrent access by other applications
     /// that are aware of and opt in to respecting this lock. It does not prevent access to the
     /// directory from other uses/processes that don't check.
-    fn file_lock(&self) -> Result<RwLock<impl AsFd>, std::io::Error> {
+    fn file_lock(&self, ext: &str) -> Result<RwLock<impl AsFd>, std::io::Error> {
         let lock = OpenOptions::new()
             .create(true)
             .truncate(true)
             .write(true)
-            .open(&self._lock_file)?;
+            .open(
+                self.directory
+                    .join(format!("{}.{}", Self::LOCK_FILE_NAME, ext)),
+            )?;
         let _lock = RwLock::new(lock);
         Ok(_lock)
     }
@@ -120,10 +119,11 @@ impl NumTracker for GdaNumTracker {
     type Err = std::io::Error;
 
     fn increment_and_get(&mut self, ctx: &BeamlineContext) -> Result<usize, Self::Err> {
-        let mut _lock = self.file_lock()?;
+        let ext = ctx.instrument().as_ref();
+        let mut _lock = self.file_lock(ext)?;
         let _f = _lock.try_write()?;
-        let next = self.high_file(ctx.instrument.as_ref())? + 1;
-        self.create_num_file(next, ctx.instrument.as_ref())?;
+        let next = self.high_file(ext)? + 1;
+        self.create_num_file(next, ext)?;
         Ok(next)
     }
 }
