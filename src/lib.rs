@@ -31,6 +31,7 @@ pub struct User(String);
 pub struct BeamlineContext {
     instrument: Instrument,
     visit: Visit,
+    user: User,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -40,6 +41,9 @@ pub enum InvalidVisit {
     InvalidSession,
     InvalidProposal,
 }
+
+#[derive(Debug)]
+pub struct EmptyUsername;
 
 impl Visit {
     pub fn new<C: Into<String>>(
@@ -81,11 +85,23 @@ impl FromStr for Visit {
     }
 }
 
+impl User {
+    pub fn new(user: impl Into<String>) -> Result<Self, EmptyUsername> {
+        let user = user.into();
+        if user.is_empty() {
+            Err(EmptyUsername)
+        } else {
+            Ok(Self(user))
+        }
+    }
+}
+
 impl BeamlineContext {
-    pub fn new(instrument: impl Into<String>, visit: Visit) -> Self {
+    pub fn new(instrument: impl Into<String>, visit: Visit, user: User) -> Self {
         Self {
             instrument: Instrument(instrument.into()),
             visit,
+            user,
         }
     }
     pub fn instrument(&self) -> &Instrument {
