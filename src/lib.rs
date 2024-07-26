@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
@@ -12,18 +14,6 @@ pub struct Proposal {
 pub struct Visit {
     pub proposal: Proposal,
     pub session: usize,
-}
-impl Visit {
-    fn display(&self) -> String {
-        format!(
-            "{}{}-{}",
-            self.proposal.code, self.proposal.number, self.session
-        )
-    }
-
-    fn proposal(&self) -> String {
-        format!("{}{}", self.proposal.code, self.proposal.number)
-    }
 }
 
 #[derive(Debug)]
@@ -49,5 +39,17 @@ impl BeamlineContext {
     }
     pub fn instrument(&self) -> &Instrument {
         &self.instrument
+    }
+}
+
+impl Display for Proposal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}{}", self.code, self.number)
+    }
+}
+
+impl Display for Visit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}-{}", self.proposal, self.session)
     }
 }
