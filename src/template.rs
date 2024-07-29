@@ -1,3 +1,5 @@
+use std::path::{Component, PathBuf};
+
 pub trait FieldSource<F> {
     type Err;
     // TODO: don't expose the whole buf to the field source
@@ -12,6 +14,32 @@ enum Part<Field> {
 #[derive(Debug)]
 pub struct Template<Field> {
     parts: Vec<Part<Field>>,
+}
+
+#[derive(Debug)]
+pub struct PathTemplate<Field> {
+    parts: Vec<Template<Field>>,
+    kind: PathType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PathType {
+    Absolute,
+    Relative,
+}
+impl PathType {
+    fn init(&self) -> PathBuf {
+        match self {
+            PathType::Absolute => PathBuf::from("/"),
+            PathType::Relative => PathBuf::new(),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum PathTemplateError<F> {
+    InvalidPath,
+    TemplateError(TemplateError<F>),
 }
 
 #[derive(Debug)]
@@ -135,6 +163,41 @@ impl<F: TryFrom<String>> Template<F> {
     }
 }
 
+impl<F: TryFrom<String>> PathTemplate<F> {
+    pub fn new<S: AsRef<str>>(
+        template: S,
+    ) -> Result<Self, PathTemplateError<<F as TryFrom<String>>::Error>> {
+        let path = PathBuf::from(template.as_ref());
+        let mut parts = Vec::new();
+        let mut kind = PathType::Relative;
+        for comp in path.components() {
+            match comp {
+                Component::Normal(seg) => match seg.to_str() {
+                    Some(seg) => parts
+                        .push(Template::new(seg).map_err(|e| PathTemplateError::TemplateError(e))?),
+                    None => return Err(PathTemplateError::InvalidPath),
+                },
+                Component::RootDir => kind = PathType::Absolute,
+                Component::CurDir => continue,
+                _ => return Err(PathTemplateError::InvalidPath),
+            }
+        }
+        Ok(Self { parts, kind })
+    }
+
+    pub fn render<Src: FieldSource<F> + Copy>(&self, src: Src) -> Result<PathBuf, Src::Err> {
+        let mut path = self.kind.init();
+        for part in &self.parts {
+            path.push(part.render(src)?);
+        }
+        Ok(path)
+    }
+
+    pub fn is_absolute(&self) -> bool {
+        self.kind == PathType::Absolute
+    }
+}
+
 #[cfg(test)]
 mod parser_tests {
     use super::Part::*;
@@ -255,12 +318,14 @@ mod parser_tests {
 }
 
 #[cfg(test)]
-mod template_tests {
+mod string_templates {
     use super::*;
-    type StrTemplate = Template<String>;
+    pub type StrTemplate = Template<String>;
 
-    struct EchoSource;
-    impl FieldSource<String> for EchoSource {
+    /// FieldSource that replaces every key with the uppercase version of itself
+    pub struct EchoSource;
+
+    impl FieldSource<String> for &EchoSource {
         type Err = ();
 
         fn write_to(&self, buf: &mut String, field: &String) -> Result<(), Self::Err> {
@@ -269,11 +334,38 @@ mod template_tests {
         }
     }
 
+    /// Field Source that replaces every key with the empty string
+    pub struct NullSource;
+    impl FieldSource<String> for &NullSource {
+        type Err = ();
+
+        fn write_to(&self, _: &mut String, _: &String) -> Result<(), Self::Err> {
+            Ok(())
+        }
+    }
+
+    /// FieldSource that returns an error for all keys
+    pub struct ErrorSource;
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct RenderFailed(pub String);
+    impl FieldSource<String> for &ErrorSource {
+        type Err = RenderFailed;
+
+        fn write_to(&self, _: &mut String, key: &String) -> Result<(), Self::Err> {
+            Err(RenderFailed(key.to_owned()))
+        }
+    }
+}
+
+#[cfg(test)]
+mod template_tests {
+    use super::string_templates::*;
+
     #[test]
     fn literal_template() {
         let text = StrTemplate::new("all literal")
             .unwrap()
-            .render(EchoSource)
+            .render(&EchoSource)
             .unwrap();
         assert_eq!(text, "all literal");
     }
@@ -282,8 +374,91 @@ mod template_tests {
     fn mixed() {
         let text = StrTemplate::new("/tmp/{instrument}/data/{year}/{visit}/")
             .unwrap()
-            .render(EchoSource)
+            .render(&EchoSource)
             .unwrap();
         assert_eq!(text, "/tmp/INSTRUMENT/data/YEAR/VISIT/");
+    }
+}
+
+#[cfg(test)]
+mod path_template_tests {
+    use super::string_templates::*;
+    use super::*;
+
+    fn from_template<E, F>(fmt: &'static str, src: F) -> PathBuf
+    where
+        F: FieldSource<String, Err = E> + Copy,
+        E: std::fmt::Debug,
+    {
+        PathTemplate::new(fmt).unwrap().render(src).unwrap()
+    }
+
+    #[test]
+    fn literal_absolute_path() {
+        let path = from_template("/absolute/literal/path", &EchoSource);
+        assert_eq!(path, PathBuf::from("/absolute/literal/path"))
+    }
+
+    #[test]
+    fn templated_absolute_path() {
+        let path = from_template("/path/{with}/mixed_{fields}/", &EchoSource);
+        assert_eq!(path, PathBuf::from("/path/WITH/mixed_FIELDS/"))
+    }
+
+    #[test]
+    fn absolute_empty_segment() {
+        let path = from_template("/with/{optional}/parts", &NullSource);
+        assert_eq!(path, PathBuf::from("/with/parts"))
+    }
+
+    #[test]
+    fn literal_relative() {
+        let path = from_template("relative/literal/path", &EchoSource);
+        assert_eq!(path, PathBuf::from("relative/literal/path"));
+
+        let path = from_template("./relative/literal/path", &EchoSource);
+        assert_eq!(path, PathBuf::from("relative/literal/path"));
+    }
+
+    #[test]
+    fn dynamic_relative() {
+        let path = from_template("relative/{literal}/path", &EchoSource);
+        assert_eq!(path, PathBuf::from("relative/LITERAL/path"));
+
+        let path = from_template("{opening}_dynamic/path", &EchoSource);
+        assert_eq!(path, PathBuf::from("OPENING_dynamic/path"));
+    }
+
+    #[test]
+    fn missing_relative_opener() {
+        let path = from_template("{optional}/relative/opener", &NullSource);
+        assert_eq!(path, PathBuf::from("relative/opener"))
+    }
+
+    #[test]
+    fn partial_opener() {
+        let path = from_template("{optional}_part/of/relative", &NullSource);
+        assert_eq!(path, PathBuf::from("_part/of/relative"))
+    }
+
+    #[test]
+    fn invalid_path() {
+        fn assert_invalid(fmt: &'static str) {
+            assert_eq!(
+                PathTemplate::<String>::new(fmt).unwrap_err(),
+                PathTemplateError::InvalidPath
+            )
+        }
+        assert_invalid("../empty/{segment}");
+        assert_invalid("/../empty/{segment}");
+    }
+
+    #[test]
+    fn failed_rendering() {
+        let path = PathTemplate::new("/fail/to/{render}").unwrap();
+        assert_eq!(
+            path.render(&ErrorSource),
+            Err(RenderFailed("render".into()))
+        )
     }
 }
