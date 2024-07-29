@@ -96,6 +96,12 @@ impl<E> TemplateError<E> {
     }
 }
 
+impl<E> From<TemplateError<E>> for PathTemplateError<E> {
+    fn from(value: TemplateError<E>) -> Self {
+        Self::TemplateError(value)
+    }
+}
+
 impl<F: TryFrom<String>> Template<F> {
     pub fn new<S: AsRef<str>>(template: S) -> Result<Self, TemplateError<F::Error>> {
         let mut parts = vec![];
@@ -173,8 +179,7 @@ impl<F: TryFrom<String>> PathTemplate<F> {
         for comp in path.components() {
             match comp {
                 Component::Normal(seg) => match seg.to_str() {
-                    Some(seg) => parts
-                        .push(Template::new(seg).map_err(|e| PathTemplateError::TemplateError(e))?),
+                    Some(seg) => parts.push(Template::new(seg)?),
                     None => return Err(PathTemplateError::InvalidPath),
                 },
                 Component::RootDir => kind = PathType::Absolute,
