@@ -107,7 +107,7 @@ impl Default for GdaNumTracker {
     ///
     /// Equivalent to
     /// ```rust
-    /// # use numtracker::gda::GdaNumTracker;
+    /// # use numtracker::numtracker::GdaNumTracker;
     /// GdaNumTracker::new("/tmp/");
     /// ```
     fn default() -> Self {
