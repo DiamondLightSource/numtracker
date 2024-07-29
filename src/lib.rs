@@ -29,6 +29,34 @@ impl AsRef<str> for Instrument {
 #[derive(Debug)]
 pub struct User(String);
 
+#[derive(Debug)]
+pub struct Detector(String);
+impl Detector {
+    const INVALID: fn(char) -> bool = |c| !c.is_ascii_alphanumeric();
+}
+
+impl From<String> for Detector {
+    fn from(value: String) -> Self {
+        if value.contains(Self::INVALID) {
+            value.as_str().into()
+        } else {
+            Self(value)
+        }
+    }
+}
+
+impl From<&str> for Detector {
+    fn from(value: &str) -> Self {
+        Self(value.replace(Self::INVALID, "_"))
+    }
+}
+
+impl AsRef<str> for Detector {
+    fn as_ref(&self) -> &str {
+        self.0.as_ref()
+    }
+}
+
 // Derived Default is OK without validation as empty path is a valid subdirectory
 #[derive(Debug, Default)]
 pub struct Subdirectory(PathBuf);
@@ -206,5 +234,26 @@ mod visit_tests {
             "cm12345-abc".parse::<Visit>().unwrap_err(),
             InvalidVisit::InvalidSession
         )
+    }
+}
+
+#[cfg(test)]
+mod detector_tests {
+    use super::Detector;
+
+    #[test]
+    fn valid() {
+        assert_eq!("valid_detector", Detector::from("valid_detector").as_ref());
+    }
+
+    #[test]
+    fn invalid() {
+        assert_eq!(
+            Detector::from("spaced detector").as_ref(),
+            "spaced_detector",
+        );
+        assert_eq!(Detector::from("..").as_ref(), "__");
+        assert_eq!(Detector::from("foo.bar").as_ref(), "foo_bar");
+        assert_eq!(Detector::from("foo/bar").as_ref(), "foo_bar");
     }
 }
