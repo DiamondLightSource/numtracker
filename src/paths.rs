@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use chrono::{Datelike, Local};
 
-use crate::template::{FieldSource, Template, TemplateError};
+use crate::template::{FieldSource, PathTemplate, PathTemplateError};
 use crate::BeamlineContext;
 
 pub trait PathConstructor {
@@ -13,7 +13,7 @@ pub trait PathConstructor {
 }
 
 pub struct TemplatePathConstructor {
-    visit_directory: Template<BeamlineField>,
+    visit_directory: PathTemplate<BeamlineField>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -58,9 +58,9 @@ impl FieldSource<BeamlineField> for &BeamlineContext {
 }
 
 impl TemplatePathConstructor {
-    pub fn new(template: impl AsRef<str>) -> Result<Self, TemplateError<InvalidKey>> {
+    pub fn new(template: impl AsRef<str>) -> Result<Self, PathTemplateError<InvalidKey>> {
         Ok(Self {
-            visit_directory: Template::new(template)?,
+            visit_directory: PathTemplate::new(template)?,
         })
     }
 }
