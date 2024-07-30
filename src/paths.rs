@@ -138,7 +138,7 @@ impl PathConstructor for TemplatePathConstructor {
     type Err = InvalidKey;
 
     fn visit_directory(&self, ctx: &BeamlineContext) -> Result<PathBuf, Self::Err> {
-        Ok(PathBuf::from(&self.visit_directory.render(ctx)?).join(&ctx.subdirectory))
+        Ok(PathBuf::from(&self.visit_directory.render(ctx)?))
     }
 
     fn scan_file(&self, ctx: &ScanContext) -> Result<PathBuf, Self::Err> {

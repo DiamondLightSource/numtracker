@@ -9,12 +9,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let dir = "/tmp/";
     let bl = env::args().nth(1).unwrap_or("i22".into());
 
-    let ctx = BeamlineContext::new(
-        bl,
-        "cm12345-3".parse().unwrap(),
-        User::new("qan22331").unwrap(),
-    )
-    .with_subdirectory(Subdirectory::new("some/subdirectory").unwrap());
+    let ctx = BeamlineContext::new(bl, "cm12345-3".parse().unwrap());
 
     let mut num = GdaNumTracker::new(dir);
     println!("{}", num.increment_and_get(&ctx)?);

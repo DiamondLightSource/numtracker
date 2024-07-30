@@ -64,8 +64,6 @@ pub struct Subdirectory(PathBuf);
 pub struct BeamlineContext {
     instrument: Instrument,
     visit: Visit,
-    user: User,
-    subdirectory: Subdirectory,
 }
 
 pub struct ScanContext<'a> {
@@ -171,12 +169,10 @@ impl AsRef<Path> for Subdirectory {
 }
 
 impl BeamlineContext {
-    pub fn new(instrument: impl Into<String>, visit: Visit, user: User) -> Self {
+    pub fn new(instrument: impl Into<String>, visit: Visit) -> Self {
         Self {
             instrument: Instrument(instrument.into()),
             visit,
-            user,
-            subdirectory: Subdirectory(PathBuf::new()),
         }
     }
     pub fn instrument(&self) -> &Instrument {
@@ -184,10 +180,6 @@ impl BeamlineContext {
     }
     pub fn visit(&self) -> &Visit {
         &self.visit
-    }
-    pub fn with_subdirectory(mut self, subdir: Subdirectory) -> Self {
-        self.subdirectory = subdir;
-        self
     }
 }
 
