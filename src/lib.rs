@@ -27,9 +27,6 @@ impl AsRef<str> for Instrument {
 }
 
 #[derive(Debug)]
-pub struct User(String);
-
-#[derive(Debug)]
 pub struct Detector(String);
 impl Detector {
     const INVALID: fn(char) -> bool = |c| !c.is_ascii_alphanumeric();
@@ -130,17 +127,6 @@ impl FromStr for Visit {
             .parse()
             .map_err(|_| InvalidVisit::InvalidProposal)?;
         Self::new(code, proposal, session)
-    }
-}
-
-impl User {
-    pub fn new(user: impl Into<String>) -> Result<Self, EmptyUsername> {
-        let user = user.into();
-        if user.is_empty() {
-            Err(EmptyUsername)
-        } else {
-            Ok(Self(user))
-        }
     }
 }
 

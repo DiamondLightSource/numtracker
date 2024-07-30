@@ -3,7 +3,7 @@ use std::error::Error;
 
 use numtracker::numtracker::{GdaNumTracker, NumTracker as _};
 use numtracker::paths::{PathConstructor as _, TemplatePathConstructor};
-use numtracker::{BeamlineContext, Subdirectory, User};
+use numtracker::BeamlineContext;
 
 fn main() -> Result<(), Box<dyn Error>> {
     let dir = "/tmp/";
