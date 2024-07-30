@@ -13,7 +13,7 @@ pub trait PathConstructor {
 }
 
 pub struct TemplatePathConstructor {
-    template: Template<BeamlineField>,
+    visit_directory: Template<BeamlineField>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -60,7 +60,7 @@ impl FieldSource<BeamlineField> for &BeamlineContext {
 impl TemplatePathConstructor {
     pub fn new(template: impl AsRef<str>) -> Result<Self, TemplateError<InvalidKey>> {
         Ok(Self {
-            template: Template::new(template)?,
+            visit_directory: Template::new(template)?,
         })
     }
 }
@@ -69,6 +69,6 @@ impl PathConstructor for TemplatePathConstructor {
     type Err = InvalidKey;
 
     fn visit_directory(&self, ctx: &BeamlineContext) -> Result<PathBuf, Self::Err> {
-        Ok(PathBuf::from(&self.template.render(ctx)?).join(&ctx.subdirectory))
+        Ok(PathBuf::from(&self.visit_directory.render(ctx)?).join(&ctx.subdirectory))
     }
 }
