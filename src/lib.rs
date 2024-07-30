@@ -2,6 +2,8 @@ use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
+use numtracker::NumTracker;
+
 pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
@@ -166,6 +168,26 @@ impl BeamlineContext {
     }
     pub fn visit(&self) -> &Visit {
         &self.visit
+    }
+    pub fn next_scan(&self) -> ScanContext<'_> {
+        ScanContext {
+            subdirectory: Subdirectory::default(),
+            // TODO: source numtracker from somewhere?
+            scan_number: numtracker::GdaNumTracker::new("/tmp")
+                .increment_and_get(self)
+                // TODO: Handle errors
+                .unwrap(),
+            beamline: self,
+        }
+    }
+}
+
+impl ScanContext<'_> {
+    pub fn with_subdirectory(self, sub: Subdirectory) -> Self {
+        Self {
+            subdirectory: sub,
+            ..self
+        }
     }
 }
 
