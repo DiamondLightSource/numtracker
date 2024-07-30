@@ -68,6 +68,17 @@ pub struct BeamlineContext {
     subdirectory: Subdirectory,
 }
 
+pub struct ScanContext<'a> {
+    subdirectory: Subdirectory,
+    scan_number: usize,
+    beamline: &'a BeamlineContext,
+}
+
+pub struct DetectorContext<'a> {
+    detector: Detector,
+    scan: &'a ScanContext<'a>,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum InvalidVisit {
     NonAsciiCode,

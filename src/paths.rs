@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use chrono::{Datelike, Local};
 
 use crate::template::{FieldSource, PathTemplate, PathTemplateError};
-use crate::BeamlineContext;
+use crate::{BeamlineContext, DetectorContext, ScanContext};
 
 pub trait PathConstructor {
     type Err;
@@ -26,6 +26,19 @@ enum BeamlineField {
 }
 
 #[derive(Debug)]
+enum ScanField {
+    Subdirectory,
+    ScanNumber,
+    Beamline(BeamlineField),
+}
+
+#[derive(Debug)]
+enum DetectorField {
+    Detector,
+    Scan(ScanField),
+}
+
+#[derive(Debug)]
 pub struct InvalidKey(String);
 
 impl TryFrom<String> for BeamlineField {
@@ -41,6 +54,27 @@ impl TryFrom<String> for BeamlineField {
     }
 }
 
+impl TryFrom<String> for ScanField {
+    type Error = InvalidKey;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "scan_number" => Ok(ScanField::ScanNumber),
+            "subdirectory" => Ok(ScanField::Subdirectory),
+            _ => Ok(ScanField::Beamline(BeamlineField::try_from(value)?)),
+        }
+    }
+}
+
+impl TryFrom<String> for DetectorField {
+    type Error = InvalidKey;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        match value.as_str() {
+            "detector" => Ok(DetectorField::Detector),
+            _ => Ok(DetectorField::Scan(ScanField::try_from(value)?)),
+        }
+    }
+}
+
 impl FieldSource<BeamlineField> for &BeamlineContext {
     type Err = InvalidKey;
 
@@ -52,6 +86,31 @@ impl FieldSource<BeamlineField> for &BeamlineContext {
             BeamlineField::Proposal => write!(buf, "{}", self.visit.proposal),
             BeamlineField::Instrument => buf.write_str(self.instrument.as_ref()),
             BeamlineField::Custom(_) => todo!(),
+        };
+        Ok(())
+    }
+}
+
+impl<'a> FieldSource<ScanField> for &ScanContext<'a> {
+    type Err = InvalidKey;
+
+    fn write_to(&self, buf: &mut String, field: &ScanField) -> Result<(), Self::Err> {
+        _ = match field {
+            ScanField::Subdirectory => write!(buf, "{}", self.subdirectory),
+            ScanField::ScanNumber => write!(buf, "{}", self.scan_number),
+            ScanField::Beamline(bf) => Ok(self.beamline.write_to(buf, bf)?),
+        };
+        Ok(())
+    }
+}
+
+impl<'a> FieldSource<DetectorField> for &DetectorContext<'a> {
+    type Err = InvalidKey;
+
+    fn write_to(&self, buf: &mut String, field: &DetectorField) -> Result<(), Self::Err> {
+        _ = match field {
+            DetectorField::Detector => buf.write_str(self.detector.as_ref()),
+            DetectorField::Scan(sf) => Ok(self.scan.write_to(buf, sf)?),
         };
         Ok(())
     }
