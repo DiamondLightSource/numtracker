@@ -200,6 +200,13 @@ impl ScanContext<'_> {
             ..self
         }
     }
+
+    fn for_detector(&self, det: &str) -> DetectorContext {
+        DetectorContext {
+            scan: self,
+            detector: det.into(),
+        }
+    }
 }
 
 impl Display for Proposal {
