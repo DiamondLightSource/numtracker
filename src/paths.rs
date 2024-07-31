@@ -91,7 +91,7 @@ impl FieldSource<BeamlineField> for &BeamlineContext {
             BeamlineField::Visit => write!(buf, "{}", self.visit()),
             BeamlineField::Proposal => write!(buf, "{}", self.visit.proposal),
             BeamlineField::Instrument => buf.write_str(self.instrument.as_ref()),
-            BeamlineField::Custom(_) => todo!(),
+            BeamlineField::Custom(key) => return Err(InvalidKey(key.clone())),
         };
         Ok(())
     }
