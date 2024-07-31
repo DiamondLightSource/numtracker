@@ -1,24 +1,20 @@
 use std::env;
 use std::error::Error;
 
-use numtracker::paths::{PathConstructor as _, TemplatePathConstructor};
-use numtracker::{BeamlineContext, Subdirectory};
+use numtracker::controller::{Controller, ScanRequest, VisitRequest};
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let bl = env::args().nth(1).unwrap_or("i22".into());
+    let mut args = env::args().skip(1);
+    let bl = args.next().unwrap_or("i22".into());
+    let visit = args.next().unwrap_or("cm12345-3".into());
+    let sub = args.next();
+    let dets = args.collect();
 
-    let ctx = BeamlineContext::new(bl, "cm12345-3".parse().unwrap());
-
-    let pc = TemplatePathConstructor::new("/tmp/{instrument}/data/{year}/{visit}").unwrap();
-
-    let dir = pc.visit_directory(&ctx);
-    println!("Visit: {dir:?}");
-
-    let scan = ctx
-        .next_scan()
-        .with_subdirectory(Subdirectory::new("demo/subdir").unwrap());
-
-    println!("Scan File: {:?}", pc.scan_file(&scan));
+    let cont = Controller::default();
+    let bl_ctx = VisitRequest::new(bl.clone(), visit.clone());
+    let scan_ctx = ScanRequest::new(bl, visit, sub, dets);
+    println!("i22: {:?}", cont.visit_directory(bl_ctx));
+    println!("scan: {:#?}", cont.scan_spec(scan_ctx));
 
     Ok(())
 }
