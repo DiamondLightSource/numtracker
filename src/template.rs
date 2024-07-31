@@ -63,36 +63,27 @@ pub struct TemplateError<E> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ErrorKind<E> {
-    NestedKey,
-    EmptyKey,
-    IncompleteKey,
-    UnrecognisedKey(E),
+    Nested,
+    Empty,
+    Incomplete,
+    Unrecognised(E),
 }
 
 impl<E> TemplateError<E> {
+    fn new(position: usize, kind: ErrorKind<E>) -> Self {
+        Self { position, kind }
+    }
     fn nested(position: usize) -> Self {
-        Self {
-            position,
-            kind: ErrorKind::NestedKey,
-        }
+        Self::new(position, ErrorKind::Nested)
     }
     fn incomplete(position: usize) -> Self {
-        Self {
-            position,
-            kind: ErrorKind::IncompleteKey,
-        }
+        Self::new(position, ErrorKind::Incomplete)
     }
     fn empty(position: usize) -> Self {
-        Self {
-            position,
-            kind: ErrorKind::EmptyKey,
-        }
+        Self::new(position, ErrorKind::Empty)
     }
     fn unknown(position: usize, err: E) -> Self {
-        Self {
-            position,
-            kind: ErrorKind::UnrecognisedKey(err),
-        }
+        Self::new(position, ErrorKind::Unrecognised(err))
     }
 }
 
@@ -285,10 +276,10 @@ mod parser_tests {
     #[test]
     fn empty_key() {
         let temp = StrTemplate::new("missing {} key").unwrap_err();
-        assert_eq!(temp, error!(9, EmptyKey));
+        assert_eq!(temp, error!(9, Empty));
 
         let temp = StrTemplate::new("whitespace {  } key").unwrap_err();
-        assert_eq!(temp, error!(14, EmptyKey));
+        assert_eq!(temp, error!(14, Empty));
     }
 
     #[test]
@@ -309,16 +300,16 @@ mod parser_tests {
     #[test]
     fn nested_keys() {
         let temp = StrTemplate::new("{nested{keys}}").unwrap_err();
-        assert_eq!(temp, error!(7, NestedKey))
+        assert_eq!(temp, error!(7, Nested))
     }
 
     #[test]
     fn incomplete_key() {
         let temp = StrTemplate::new("incomplete {key").unwrap_err();
-        assert_eq!(temp, error!(15, IncompleteKey));
+        assert_eq!(temp, error!(15, Incomplete));
 
         let temp = StrTemplate::new("incomplete {").unwrap_err();
-        assert_eq!(temp, error!(12, IncompleteKey));
+        assert_eq!(temp, error!(12, Incomplete));
     }
 }
 
