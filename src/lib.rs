@@ -90,6 +90,7 @@ pub struct EmptyUsername;
 #[derive(Debug)]
 pub enum InvalidSubdirectory {
     InvalidComponent(usize),
+    AbsolutePath,
 }
 
 impl Visit {
@@ -135,12 +136,22 @@ impl FromStr for Visit {
 impl Subdirectory {
     pub fn new(sub: impl Into<PathBuf>) -> Result<Self, InvalidSubdirectory> {
         let sub = sub.into();
+        let mut new_sub = PathBuf::new();
         for (i, comp) in sub.components().enumerate() {
-            let Component::Normal(_) = comp else {
-                return Err(InvalidSubdirectory::InvalidComponent(i));
+            let err = match comp {
+                Component::CurDir => continue,
+                Component::Normal(seg) => {
+                    new_sub.push(seg);
+                    continue;
+                }
+                Component::RootDir => InvalidSubdirectory::AbsolutePath,
+                Component::Prefix(_) | Component::ParentDir => {
+                    InvalidSubdirectory::InvalidComponent(i)
+                }
             };
+            return Err(err);
         }
-        Ok(Self(sub))
+        Ok(Self(new_sub))
     }
 }
 
