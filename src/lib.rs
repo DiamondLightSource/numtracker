@@ -11,14 +11,14 @@ pub(crate) mod template;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Proposal {
-    pub code: String,
-    pub number: usize,
+    code: String,
+    number: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Visit {
-    pub proposal: Proposal,
-    pub session: usize,
+    proposal: Proposal,
+    session: usize,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
