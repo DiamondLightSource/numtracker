@@ -20,7 +20,7 @@ pub struct Visit {
     pub session: usize,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Instrument(String);
 impl AsRef<str> for Instrument {
     fn as_ref(&self) -> &str {
