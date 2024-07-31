@@ -27,6 +27,16 @@ impl AsRef<str> for Instrument {
         &self.0
     }
 }
+impl TryFrom<&str> for Instrument {
+    type Error = InvalidInstrument;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        if value.is_empty() || value.contains(char::is_whitespace) {
+            return Err(InvalidInstrument);
+        }
+        Ok(Self(value.into()))
+    }
+}
 
 #[derive(Debug)]
 pub struct Detector(String);
@@ -92,6 +102,9 @@ pub enum InvalidSubdirectory {
     InvalidComponent(usize),
     AbsolutePath,
 }
+
+#[derive(Debug)]
+pub struct InvalidInstrument;
 
 impl Visit {
     pub fn new<C: Into<String>>(
