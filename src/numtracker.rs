@@ -12,7 +12,7 @@ pub trait NumTracker {
     ///
     /// If a call fails, the next successful call may or may not reflect that there were
     /// unsuccessful attempts since the last value returned.
-    fn increment_and_get(&mut self, ctx: &BeamlineContext) -> Result<usize, Self::Err>;
+    fn increment_and_get(&self, ctx: &BeamlineContext) -> Result<usize, Self::Err>;
 }
 
 #[derive(Debug)]
@@ -118,7 +118,7 @@ impl Default for GdaNumTracker {
 impl NumTracker for GdaNumTracker {
     type Err = std::io::Error;
 
-    fn increment_and_get(&mut self, ctx: &BeamlineContext) -> Result<usize, Self::Err> {
+    fn increment_and_get(&self, ctx: &BeamlineContext) -> Result<usize, Self::Err> {
         let ext = ctx.instrument().as_ref();
         let mut _lock = self.file_lock(ext)?;
         let _f = _lock.try_write()?;
