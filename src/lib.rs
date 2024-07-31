@@ -4,6 +4,7 @@ use std::str::FromStr;
 
 use numtracker::NumTracker;
 
+pub mod controller;
 pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
