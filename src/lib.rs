@@ -9,6 +9,39 @@ pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
 
+pub trait ScanPathService {
+    type Err;
+    fn visit_directory(req: VisitRequest) -> Result<PathBuf, Self::Err>;
+    fn scan_spec(req: ScanRequest) -> Result<ScanSpec, Self::Err>;
+}
+
+#[derive(Debug)]
+pub struct VisitRequest {
+    instrument: String,
+    visit: String,
+}
+
+#[derive(Debug)]
+pub struct ScanRequest {
+    instrument: String,
+    visit: String,
+    subdirectory: Option<String>,
+    detectors: Vec<String>,
+}
+
+#[derive(Debug)]
+pub struct ScanSpec {
+    beamline: Instrument,
+    visit: Visit,
+    visit_directory: PathBuf,
+    scan_number: usize,
+    scan_file: PathBuf,
+    detector_files: Vec<DetectorPath>,
+}
+
+#[derive(Debug)]
+pub struct DetectorPath(String, PathBuf);
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct Proposal {
     code: String,

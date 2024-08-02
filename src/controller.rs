@@ -3,39 +3,14 @@ use std::path::PathBuf;
 
 use crate::numtracker::{GdaNumTracker, NumTracker};
 use crate::paths::{PathConstructor, TemplatePathConstructor};
-use crate::{BeamlineContext, Instrument, ScanContext, Subdirectory, Visit};
+use crate::{
+    BeamlineContext, Instrument, ScanContext, ScanRequest, Subdirectory, Visit, VisitRequest,
+};
 
 pub struct Controller {
     default: TemplatePathConstructor,
     beamlines: HashMap<Instrument, TemplatePathConstructor>,
     scan_numbers: GdaNumTracker,
-}
-
-#[derive(Debug)]
-pub struct VisitRequest {
-    instrument: String,
-    visit: String,
-}
-
-#[derive(Debug)]
-pub struct ScanRequest {
-    instrument: String,
-    visit: String,
-    subdirectory: Option<String>,
-    detectors: Vec<String>,
-}
-
-#[derive(Debug)]
-pub struct DetectorPath(String, PathBuf);
-
-#[derive(Debug)]
-pub struct ScanSpec {
-    beamline: Instrument,
-    visit: Visit,
-    visit_directory: PathBuf,
-    scan_number: usize,
-    scan_file: PathBuf,
-    detector_files: Vec<DetectorPath>,
 }
 
 impl VisitRequest {
