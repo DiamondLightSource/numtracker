@@ -40,9 +40,12 @@ CREATE TABLE beamline_detector (
 -- View to simplify access to templates for a given beamline
 CREATE VIEW beamline_template (beamline, visit, scan, detector) AS SELECT DISTINCT
     beamline.name AS beamline,
-    last_value(visit_template.template) OVER (PARTITION BY beamline_visit.beamline) AS visit,
-    last_value(scan_template.template) OVER (PARTITION BY beamline_scan.beamline) AS scan,
-    last_value(detector_template.template) OVER (PARTITION BY beamline_detector.beamline) AS detector
+    CAST (last_value(visit_template.template) OVER (PARTITION BY beamline_visit.beamline) AS TEXT)
+        AS visit,
+    CAST (last_value(scan_template.template) OVER (PARTITION BY beamline_scan.beamline) AS TEXT)
+        AS scan,
+    CAST (last_value(detector_template.template) OVER (PARTITION BY beamline_detector.beamline) AS TEXT)
+        AS detector
 from beamline
 join beamline_visit ON beamline.id = beamline_visit.beamline
 join visit_template ON visit_template.id = beamline_visit.visit
@@ -54,7 +57,8 @@ join detector_template ON detector_template.id = beamline_detector.detector;
 -- Simpler view to only access the visit directory
 CREATE VIEW beamline_visit_template (beamline, template) AS SELECT DISTINCT
     beamline.name AS beamline,
-    last_value(visit_template.template) OVER (PARTITION BY beamline_visit.beamline) AS template
+    cast (last_value(visit_template.template) OVER (PARTITION BY beamline_visit.beamline) as TEXT)
+        AS template
 FROM beamline
 JOIN beamline_visit ON beamline.id = beamline_visit.beamline
 JOIN visit_template ON visit_template.id = beamline_visit.visit;
