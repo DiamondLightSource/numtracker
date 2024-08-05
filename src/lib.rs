@@ -1,18 +1,23 @@
 use std::fmt::Display;
+use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 use std::str::FromStr;
 
 use numtracker::NumTracker;
 
 pub mod controller;
+pub mod db_service;
 pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
 
 pub trait ScanPathService {
     type Err;
-    fn visit_directory(req: VisitRequest) -> Result<PathBuf, Self::Err>;
-    fn scan_spec(req: ScanRequest) -> Result<ScanSpec, Self::Err>;
+    fn visit_directory(
+        &self,
+        req: VisitRequest,
+    ) -> impl Future<Output = Result<PathBuf, Self::Err>>;
+    fn scan_spec(&self, req: ScanRequest) -> impl Future<Output = Result<ScanSpec, Self::Err>>;
 }
 
 #[derive(Debug)]

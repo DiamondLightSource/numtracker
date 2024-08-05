@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use crate::numtracker::{GdaNumTracker, NumTracker};
 use crate::paths::{PathConstructor, TemplatePathConstructor};
 use crate::{
-    BeamlineContext, Instrument, ScanContext, ScanRequest, Subdirectory, Visit, VisitRequest,
+    BeamlineContext, DetectorPath, Instrument, ScanContext, ScanRequest, ScanSpec, Subdirectory,
+    Visit, VisitRequest,
 };
 
 pub struct Controller {

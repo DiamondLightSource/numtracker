@@ -6,3 +6,5 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.38"
 fd-lock = "4.0.2"
+sqlx = { version = "0.8.0", features = ["runtime-tokio", "sqlite"] }
+tokio = { version = "1.39.2", features = ["full"] }
