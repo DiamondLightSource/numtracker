@@ -7,7 +7,7 @@ use sqlx::SqlitePool;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let pool = SqlitePool::connect("sqlite:///tmp/demo.db").await.unwrap();
+    let pool = SqlitePool::connect("sqlite://./demo.db").await.unwrap();
     sqlx::migrate!().run(&pool).await.unwrap();
     let serv = SqliteScanPathService { pool };
     let visit = serv
