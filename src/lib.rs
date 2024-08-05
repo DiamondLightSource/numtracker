@@ -232,6 +232,13 @@ impl BeamlineContext {
     pub fn visit(&self) -> &Visit {
         &self.visit
     }
+    pub fn for_scan(&self, scan_number: usize) -> ScanContext<'_> {
+        ScanContext {
+            subdirectory: Subdirectory::default(),
+            scan_number,
+            beamline: self,
+        }
+    }
     pub fn next_scan(&self) -> ScanContext<'_> {
         ScanContext {
             subdirectory: Subdirectory::default(),
