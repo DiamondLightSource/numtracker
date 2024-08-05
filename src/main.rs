@@ -11,16 +11,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     sqlx::migrate!().run(&pool).await.unwrap();
     let serv = SqliteScanPathService { pool };
     let visit = serv
-        .visit_directory(VisitRequest::new("i22".into(), "cm12345-3".into()))
+        .visit_directory(VisitRequest::new("i22", "cm12345-3"))
         .await
         .unwrap();
 
     let scan_1 = serv
         .scan_spec(ScanRequest::new(
-            "i22".into(),
-            "cm12345-3".into(),
-            None,
-            vec!["pilatus_SAXS".into(), "I0".into()],
+            "i22",
+            "cm12345-3",
+            Option::<String>::None,
+            vec!["pilatus_SAXS", "I0"],
         ))
         .await
         .unwrap();
@@ -28,10 +28,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     println!("Scan 1: {scan_1:#?}");
     let scan_2 = serv
         .scan_spec(ScanRequest::new(
-            "i22".into(),
-            "cm12345-3".into(),
-            None,
-            vec!["pilatus_SAXS".into(), "I0".into()],
+            "i22",
+            "cm12345-3",
+            Option::<String>::None,
+            vec!["pilatus_SAXS", "I0"],
         ))
         .await
         .unwrap();

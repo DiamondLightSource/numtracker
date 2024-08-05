@@ -15,22 +15,25 @@ pub struct Controller {
 }
 
 impl VisitRequest {
-    pub fn new(instrument: String, visit: String) -> Self {
-        Self { instrument, visit }
+    pub fn new(instrument: impl Into<String>, visit: impl Into<String>) -> Self {
+        Self {
+            instrument: instrument.into(),
+            visit: visit.into(),
+        }
     }
 }
 impl ScanRequest {
     pub fn new(
-        instrument: String,
-        visit: String,
-        subdirectory: Option<String>,
-        detectors: Vec<String>,
+        instrument: impl Into<String>,
+        visit: impl Into<String>,
+        subdirectory: Option<impl Into<String>>,
+        detectors: Vec<impl Into<String>>,
     ) -> Self {
         Self {
-            instrument,
-            visit,
-            subdirectory,
-            detectors,
+            instrument: instrument.into(),
+            visit: visit.into(),
+            subdirectory: subdirectory.map(|s| s.into()),
+            detectors: detectors.into_iter().map(|d| d.into()).collect(),
         }
     }
 }
