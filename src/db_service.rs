@@ -6,7 +6,8 @@ use sqlx::{query_as, query_scalar, FromRow, Pool, Sqlite};
 use crate::paths::{PathConstructor, TemplatePathConstructor};
 use crate::template::PathTemplate;
 use crate::{
-    BeamlineContext, Instrument, ScanPathService, ScanRequest, ScanSpec, Visit, VisitRequest,
+    BeamlineContext, DetectorPath, Instrument, ScanPathService, ScanRequest, ScanSpec, Visit,
+    VisitRequest,
 };
 
 pub struct SqliteScanPathService {
@@ -19,6 +20,13 @@ pub struct SqliteScanPathService {
 //     template: String,
 // }
 
+#[derive(Debug, FromRow)]
+struct ScanTemplates {
+    visit: String,
+    scan: String,
+    detector: String,
+}
+
 impl ScanPathService for SqliteScanPathService {
     type Err = SqliteError;
 
@@ -29,7 +37,6 @@ impl ScanPathService for SqliteScanPathService {
         )
         .fetch_one(&self.pool)
         .await;
-        println!("{template:?}");
         let visit: Visit = req.visit.parse().unwrap();
         let beamline: Instrument = Instrument::try_from(req.instrument.as_str()).unwrap();
         let template = TemplatePathConstructor::new(template.unwrap()).unwrap();
@@ -39,6 +46,41 @@ impl ScanPathService for SqliteScanPathService {
     }
 
     async fn scan_spec(&self, req: ScanRequest) -> Result<ScanSpec, Self::Err> {
-        todo!()
+        let templates: ScanTemplates = query_as!(
+            ScanTemplates,
+            "SELECT visit, scan, detector FROM beamline_template WHERE beamline = ?",
+            req.instrument
+        )
+        .fetch_one(&self.pool)
+        .await
+        .unwrap();
+        let visit = req.visit.parse().unwrap();
+        let beamline = req.instrument.as_str().try_into().unwrap();
+        let template = TemplatePathConstructor::new(templates.visit).unwrap();
+        let ctx = BeamlineContext::new(req.instrument, visit);
+        let visit_directory = template.visit_directory(&ctx).unwrap();
+        let scan_ctx = ctx.next_scan();
+        let scan = template.scan_file(&scan_ctx).unwrap();
+        let detectors = req
+            .detectors
+            .into_iter()
+            .map(|det| {
+                let file = template
+                    .detector_file(&scan_ctx.for_detector(&det))
+                    .unwrap();
+                DetectorPath(det, file)
+            })
+            .collect();
+        let spec = ScanSpec {
+            beamline,
+            visit: scan_ctx.beamline.visit.clone(),
+            visit_directory,
+
+            scan_number: scan_ctx.scan_number,
+            scan_file: scan,
+            detector_files: detectors,
+        };
+
+        Ok(spec)
     }
 }

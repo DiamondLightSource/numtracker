@@ -2,7 +2,7 @@ use std::env;
 use std::error::Error;
 
 use numtracker::db_service::SqliteScanPathService;
-use numtracker::{ScanPathService, VisitRequest};
+use numtracker::{ScanPathService, ScanRequest, VisitRequest};
 use sqlx::SqlitePool;
 
 #[tokio::main]
@@ -14,6 +14,29 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .visit_directory(VisitRequest::new("i22".into(), "cm12345-3".into()))
         .await
         .unwrap();
+
+    let scan_1 = serv
+        .scan_spec(ScanRequest::new(
+            "i22".into(),
+            "cm12345-3".into(),
+            None,
+            vec!["pilatus_SAXS".into(), "I0".into()],
+        ))
+        .await
+        .unwrap();
+
+    println!("Scan 1: {scan_1:#?}");
+    let scan_2 = serv
+        .scan_spec(ScanRequest::new(
+            "i22".into(),
+            "cm12345-3".into(),
+            None,
+            vec!["pilatus_SAXS".into(), "I0".into()],
+        ))
+        .await
+        .unwrap();
+
+    println!("Scan 2: {scan_2:#?}");
 
     println!("{visit:?}");
     // let mut args = env::args().skip(1);

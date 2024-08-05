@@ -47,13 +47,13 @@ pub struct ScanSpec {
 #[derive(Debug)]
 pub struct DetectorPath(String, PathBuf);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Proposal {
     code: String,
     number: usize,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Visit {
     proposal: Proposal,
     session: usize,
