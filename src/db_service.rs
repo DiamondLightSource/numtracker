@@ -28,7 +28,8 @@ struct ScanTemplates {
 
 impl SqliteScanPathService {
     async fn next_scan_number(&self, beamline: &str) -> Result<usize, sqlx::Error> {
-        Ok(query_scalar!(r#"
+        let mut db = self.pool.begin().await?;
+        let next = query_scalar!(r#"
             UPDATE scan_number
             SET last_number = number + 1
             FROM (
@@ -41,8 +42,10 @@ impl SqliteScanPathService {
             RETURNING last_number
             "#,
             beamline
-        ).fetch_one(&self.pool)
-        .await? as usize)
+        ).fetch_one(&mut *db)
+            .await? as usize;
+        db.commit().await?;
+        Ok(next)
     }
 
     async fn vist_template(&self, beamline: &str) -> Result<VisitTemplate, sqlx::Error> {
