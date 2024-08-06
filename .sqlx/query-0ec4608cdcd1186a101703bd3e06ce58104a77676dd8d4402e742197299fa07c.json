@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT beamline, visit, scan, detector FROM beamline_template WHERE beamline = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "beamline",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "visit",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "scan",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "detector",
+        "ordinal": 3,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0ec4608cdcd1186a101703bd3e06ce58104a77676dd8d4402e742197299fa07c"
+}
