@@ -75,22 +75,31 @@ impl ScanPathService for SqliteScanPathService {
 
     async fn visit_directory(&self, req: VisitRequest) -> Result<PathBuf, Self::Err> {
         let template = self.vist_template(&req.instrument).await?;
+        // TODO: invalid visit in request
         let visit: Visit = req.visit.parse().unwrap();
+        // TODO: invalid template in db
         let template = paths::visit_path(&template).unwrap();
+        // TODO: check instrument here?
         Ok(template.render(&BeamlineContext::new(req.instrument, visit)))
     }
 
     async fn scan_spec(&self, req: ScanRequest) -> Result<ScanSpec, Self::Err> {
         let templates = self.scan_templates(&req.instrument).await?;
+        // TODO: invalid visit in request
         let visit = req.visit.parse().unwrap();
+        // TODO: invalid instrument in request
         let beamline = req.instrument.as_str().try_into().unwrap();
         let ctx = BeamlineContext::new(&req.instrument, visit);
+        // TODO: invalid visit template in db
         let visit_directory = paths::visit_path(&templates.visit).unwrap().render(&ctx);
         let mut scan_ctx = ctx.for_scan(self.next_scan_number(&req.instrument).await?);
         if let Some(sub) = req.subdirectory {
+            // TODO: invalid subdirectory in request
             scan_ctx = scan_ctx.with_subdirectory(Subdirectory::new(sub).unwrap());
         }
+        // TODO: invalid scan template in db
         let scan = paths::scan_path(&templates.scan).unwrap().render(&scan_ctx);
+        // TODO: invalid detector template in db
         let det_temp = paths::detector_path(&templates.detector).unwrap();
         let detectors = req
             .detectors
