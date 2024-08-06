@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::path::PathBuf;
 
 use sqlx::{query_as, query_scalar, FromRow, Pool, Sqlite};
@@ -7,6 +8,7 @@ use crate::{
     Visit, VisitRequest,
 };
 
+#[derive(Clone)]
 pub struct SqliteScanPathService {
     pub pool: Pool<Sqlite>,
 }
@@ -16,6 +18,14 @@ struct ScanTemplates {
     visit: String,
     scan: String,
     detector: String,
+}
+
+impl Debug for SqliteScanPathService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SqliteScanPathService")
+            .field("db", &self.pool.connect_options().get_filename())
+            .finish()
+    }
 }
 
 impl SqliteScanPathService {
