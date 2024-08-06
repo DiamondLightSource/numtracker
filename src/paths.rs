@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use chrono::{Datelike, Local};
 
-use crate::template::{FieldSource, PathTemplate, PathTemplateError, TemplateError};
+use crate::template::{FieldSource, PathTemplate, PathTemplateError};
 use crate::{BeamlineContext, DetectorContext, ScanContext};
 
 pub trait PathConstructor {

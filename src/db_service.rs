@@ -2,10 +2,9 @@ use std::path::PathBuf;
 
 use sqlx::{query_as, query_scalar, FromRow, Pool, Sqlite};
 
-use crate::paths::{self, PathConstructor, TemplatePathConstructor, VisitPathTemplate};
 use crate::{
-    BeamlineContext, DetectorPath, Instrument, ScanPathService, ScanRequest, ScanSpec,
-    Subdirectory, Visit, VisitRequest,
+    paths, BeamlineContext, DetectorPath, ScanPathService, ScanRequest, ScanSpec, Subdirectory,
+    Visit, VisitRequest,
 };
 
 pub struct SqliteScanPathService {
@@ -13,14 +12,7 @@ pub struct SqliteScanPathService {
 }
 
 #[derive(Debug, FromRow)]
-pub struct VisitTemplate {
-    beamline: String,
-    template: String,
-}
-
-#[derive(Debug, FromRow)]
 struct ScanTemplates {
-    beamline: String,
     visit: String,
     scan: String,
     detector: String,
@@ -48,10 +40,9 @@ impl SqliteScanPathService {
         Ok(next)
     }
 
-    async fn vist_template(&self, beamline: &str) -> Result<VisitTemplate, sqlx::Error> {
-        query_as!(
-            VisitTemplate,
-            "SELECT beamline, template FROM beamline_visit_template WHERE beamline = ?",
+    async fn vist_template(&self, beamline: &str) -> Result<String, sqlx::Error> {
+        query_scalar!(
+            "SELECT template FROM beamline_visit_template WHERE beamline = ?",
             beamline
         )
         .fetch_one(&self.pool)
@@ -61,7 +52,7 @@ impl SqliteScanPathService {
     async fn scan_templates(&self, beamline: &str) -> Result<ScanTemplates, sqlx::Error> {
         query_as!(
             ScanTemplates,
-            "SELECT beamline, visit, scan, detector FROM beamline_template WHERE beamline = ?",
+            "SELECT visit, scan, detector FROM beamline_template WHERE beamline = ?",
             beamline
         )
         .fetch_one(&self.pool)
@@ -75,7 +66,7 @@ impl ScanPathService for SqliteScanPathService {
     async fn visit_directory(&self, req: VisitRequest) -> Result<PathBuf, Self::Err> {
         let template = self.vist_template(&req.instrument).await?;
         let visit: Visit = req.visit.parse().unwrap();
-        let template = paths::visit_path(&template.template).unwrap();
+        let template = paths::visit_path(&template).unwrap();
         Ok(template.render(&BeamlineContext::new(req.instrument, visit)))
     }
 
