@@ -118,7 +118,7 @@ impl TryFrom<String> for DetectorField {
 impl FieldSource<BeamlineField> for &BeamlineContext {
     type Err = InvalidKey;
 
-    fn write_to(&self, buf: &mut String, field: &BeamlineField) -> Result<(), Self::Err> {
+    fn write_to(&self, mut buf: impl Write, field: &BeamlineField) -> Result<(), Self::Err> {
         _ = match field {
             // Should be year of visit?
             BeamlineField::Year => buf.write_fmt(format_args!("{}", Local::now().year())),
@@ -134,7 +134,7 @@ impl FieldSource<BeamlineField> for &BeamlineContext {
 impl<'a> FieldSource<ScanField> for &ScanContext<'a> {
     type Err = InvalidKey;
 
-    fn write_to(&self, buf: &mut String, field: &ScanField) -> Result<(), Self::Err> {
+    fn write_to(&self, mut buf: impl Write, field: &ScanField) -> Result<(), Self::Err> {
         _ = match field {
             ScanField::Subdirectory => write!(buf, "{}", self.subdirectory),
             ScanField::ScanNumber => write!(buf, "{}", self.scan_number),
@@ -147,7 +147,7 @@ impl<'a> FieldSource<ScanField> for &ScanContext<'a> {
 impl<'a> FieldSource<DetectorField> for &DetectorContext<'a> {
     type Err = InvalidKey;
 
-    fn write_to(&self, buf: &mut String, field: &DetectorField) -> Result<(), Self::Err> {
+    fn write_to(&self, mut buf: impl Write, field: &DetectorField) -> Result<(), Self::Err> {
         _ = match field {
             DetectorField::Detector => buf.write_str(self.detector.as_ref()),
             DetectorField::Scan(sf) => Ok(self.scan.write_to(buf, sf)?),

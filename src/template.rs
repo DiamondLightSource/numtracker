@@ -1,9 +1,9 @@
+use std::fmt::Write;
 use std::path::{Component, PathBuf};
 
 pub trait FieldSource<F> {
     type Err;
-    // TODO: don't expose the whole buf to the field source
-    fn write_to(&self, buf: &mut String, field: &F) -> Result<(), Self::Err>;
+    fn write_to(&self, buf: impl Write, field: &F) -> Result<(), Self::Err>;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -315,6 +315,9 @@ mod parser_tests {
 
 #[cfg(test)]
 mod string_templates {
+    use std::convert::Infallible;
+    use std::fmt::Error;
+
     use super::*;
     pub type StrTemplate = Template<String>;
 
@@ -322,20 +325,19 @@ mod string_templates {
     pub struct EchoSource;
 
     impl FieldSource<String> for &EchoSource {
-        type Err = ();
+        type Err = Error;
 
-        fn write_to(&self, buf: &mut String, field: &String) -> Result<(), Self::Err> {
-            buf.push_str(&field.to_uppercase());
-            Ok(())
+        fn write_to(&self, mut buf: impl Write, field: &String) -> Result<(), Self::Err> {
+            write!(buf, "{}", field.to_uppercase())
         }
     }
 
     /// Field Source that replaces every key with the empty string
     pub struct NullSource;
     impl FieldSource<String> for &NullSource {
-        type Err = ();
+        type Err = Infallible;
 
-        fn write_to(&self, _: &mut String, _: &String) -> Result<(), Self::Err> {
+        fn write_to(&self, _: impl Write, _: &String) -> Result<(), Self::Err> {
             Ok(())
         }
     }
@@ -347,7 +349,7 @@ mod string_templates {
     impl FieldSource<String> for &ErrorSource {
         type Err = RenderFailed;
 
-        fn write_to(&self, _: &mut String, key: &String) -> Result<(), Self::Err> {
+        fn write_to(&self, _: impl Write, key: &String) -> Result<(), Self::Err> {
             Err(RenderFailed(key.to_owned()))
         }
     }
