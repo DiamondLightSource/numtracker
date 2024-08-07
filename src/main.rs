@@ -36,6 +36,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         )
         .await;
     println!("{:#?}", res.data);
+    let res = schema
+        .execute(
+            r#"
+            {
+                paths(beamline: "i22", visit: {code: "cm", prop: 1234, session: 2}) {
+                    directory
+                    beamline
+                    visit {
+                        name
+                    }
+                }
+            }"#,
+        )
+        .await;
+    println!("{:#?}", res.data);
 
     Ok(())
 }
