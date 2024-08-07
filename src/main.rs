@@ -4,15 +4,14 @@ use std::fmt::Display;
 use async_graphql::{
     ComplexObject, Context, EmptySubscription, InputObject, Object, Schema, SimpleObject,
 };
-use numtracker::db_service::SqliteScanPathService;
+use numtracker::db_service::{ScanTemplates, SqliteScanPathService};
 use numtracker::{paths, BeamlineContext};
-use sqlx::SqlitePool;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let pool = SqlitePool::connect("sqlite://./demo.db").await.unwrap();
-    sqlx::migrate!().run(&pool).await.unwrap();
-    let serv = SqliteScanPathService { pool };
+    let serv = SqliteScanPathService::connect("sqlite://./demo.db")
+        .await
+        .unwrap();
     let schema = Schema::build(Query, Mutation, EmptySubscription)
         .data(serv)
         .finish();

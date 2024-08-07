@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 
-use sqlx::{query_as, query_scalar, FromRow, Pool, Sqlite};
-
+use sqlx::{query_as, query_scalar, FromRow, Pool, Sqlite, SqlitePool};
 
 #[derive(Clone)]
 pub struct SqliteScanPathService {
@@ -24,6 +23,11 @@ impl Debug for SqliteScanPathService {
 }
 
 impl SqliteScanPathService {
+    pub async fn connect(host: &str) -> Result<Self, sqlx::Error> {
+        let pool = SqlitePool::connect(host).await?;
+        sqlx::migrate!().run(&pool).await?;
+        Ok(Self { pool })
+    }
     pub async fn next_scan_number(&self, beamline: &str) -> Result<usize, sqlx::Error> {
         let mut db = self.pool.begin().await?;
         let next = query_scalar!(r#"
