@@ -181,7 +181,10 @@ impl<F: TryFrom<String>> PathTemplate<F> {
         Ok(Self { parts, kind })
     }
 
-    pub fn render<Src: FieldSource<F> + Copy>(&self, src: Src) -> Result<PathBuf, Src::Err> {
+    pub fn render<'a, Src, E>(&self, src: &'a Src) -> Result<PathBuf, E>
+    where
+        &'a Src: FieldSource<F, Err = E>,
+    {
         let mut path = self.kind.init();
         for part in &self.parts {
             path.push(part.render(src)?);
@@ -383,9 +386,9 @@ mod path_template_tests {
     use super::string_templates::*;
     use super::*;
 
-    fn from_template<E, F>(fmt: &'static str, src: F) -> PathBuf
+    fn from_template<'a, E, Src>(fmt: &'static str, src: &'a Src) -> PathBuf
     where
-        F: FieldSource<String, Err = E> + Copy,
+        &'a Src: FieldSource<String, Err = E>,
         E: std::fmt::Debug,
     {
         PathTemplate::new(fmt).unwrap().render(src).unwrap()
