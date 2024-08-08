@@ -1,4 +1,5 @@
-use std::fmt::Write;
+use std::error::Error;
+use std::fmt::{Display, Write};
 use std::path::PathBuf;
 
 use chrono::{Datelike, Local};
@@ -80,6 +81,14 @@ enum DetectorField {
 
 #[derive(Debug)]
 pub struct InvalidKey(String);
+
+impl Display for InvalidKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Unrecognised key: {}", self.0)
+    }
+}
+
+impl Error for InvalidKey {}
 
 impl TryFrom<String> for BeamlineField {
     type Error = InvalidKey;
