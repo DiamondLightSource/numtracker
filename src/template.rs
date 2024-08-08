@@ -1,10 +1,14 @@
-use std::fmt::Write;
+use std::error::Error;
+use std::fmt::{Display, Write};
 use std::path::{Component, PathBuf};
 
 pub trait FieldSource<F> {
     type Err;
     fn write_to(&self, buf: impl Write, field: &F) -> Result<(), Self::Err>;
 }
+
+pub type PathTemplateResult<T> =
+    Result<PathTemplate<T>, PathTemplateError<<T as TryFrom<String>>::Error>>;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Part<Field> {
@@ -42,6 +46,24 @@ pub enum PathTemplateError<F> {
     TemplateError(TemplateError<F>),
 }
 
+impl<F: Display> Display for PathTemplateError<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PathTemplateError::InvalidPath => f.write_str("Path is not valid"),
+            PathTemplateError::TemplateError(e) => write!(f, "{e}"),
+        }
+    }
+}
+
+impl<F: Error + 'static> Error for PathTemplateError<F> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            PathTemplateError::InvalidPath => None,
+            PathTemplateError::TemplateError(e) => Some(e),
+        }
+    }
+}
+
 #[derive(Debug)]
 enum ParseState {
     /// We haven't started parsing anything yet
@@ -61,12 +83,42 @@ pub struct TemplateError<E> {
     kind: ErrorKind<E>,
 }
 
+impl<F: Display> Display for TemplateError<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Error parsing template: {} at {}",
+            self.kind, self.position
+        )
+    }
+}
+
+impl<F: Error + 'static> Error for TemplateError<F> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match &self.kind {
+            ErrorKind::Unrecognised(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ErrorKind<E> {
     Nested,
     Empty,
     Incomplete,
     Unrecognised(E),
+}
+
+impl<E: Display> Display for ErrorKind<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ErrorKind::Nested => f.write_str("Nested placeholder"),
+            ErrorKind::Empty => f.write_str("Empty placeholder"),
+            ErrorKind::Incomplete => f.write_str("Unclosed placeholder"),
+            ErrorKind::Unrecognised(e) => write!(f, "Invalid placeholder: {e}"),
+        }
+    }
 }
 
 impl<E> TemplateError<E> {
