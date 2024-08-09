@@ -7,22 +7,6 @@ use chrono::{Datelike, Local};
 use crate::template::{FieldSource, PathTemplate, PathTemplateError};
 use crate::{BeamlineContext, DetectorContext, ScanContext};
 
-pub trait PathConstructor {
-    type Err;
-    /// Get the root data directory for the given visit
-    fn visit_directory(&self, ctx: &BeamlineContext) -> Result<PathBuf, Self::Err>;
-    /// Get the file path for a given scan
-    fn scan_file(&self, ctx: &ScanContext) -> Result<PathBuf, Self::Err>;
-    /// Get the path for the file of a specific detector
-    fn detector_file(&self, ctx: &DetectorContext) -> Result<PathBuf, Self::Err>;
-}
-
-pub struct TemplatePathConstructor {
-    visit_directory: PathTemplate<BeamlineField>,
-    scan_file: PathTemplate<ScanField>,
-    detector_file: PathTemplate<DetectorField>,
-}
-
 pub struct VisitPathTemplate(PathTemplate<BeamlineField>);
 pub struct ScanPathTemplate(PathTemplate<ScanField>);
 pub struct DetectorPathTemplate(PathTemplate<DetectorField>);
@@ -169,37 +153,5 @@ impl<'a> FieldSource<DetectorField> for &DetectorContext<'a> {
             DetectorField::Scan(sf) => Ok(self.scan.write_to(buf, sf)?),
         };
         Ok(())
-    }
-}
-
-impl TemplatePathConstructor {
-    pub fn new(template: impl AsRef<str>) -> Result<Self, PathTemplateError<InvalidKey>> {
-        Ok(Self {
-            visit_directory: PathTemplate::new(template)?,
-            scan_file: PathTemplate::new("{subdirectory}/{instrument}-{scan_number}")?,
-            detector_file: PathTemplate::new(
-                "{subdirectory}/{instrument}-{scan_number}-{detector}",
-            )?,
-        })
-    }
-}
-
-impl PathConstructor for TemplatePathConstructor {
-    type Err = InvalidKey;
-
-    fn visit_directory(&self, ctx: &BeamlineContext) -> Result<PathBuf, Self::Err> {
-        Ok(PathBuf::from(&self.visit_directory.render(ctx)?))
-    }
-
-    fn scan_file(&self, ctx: &ScanContext) -> Result<PathBuf, Self::Err> {
-        Ok(self
-            .visit_directory(ctx.beamline)?
-            .join(self.scan_file.render(ctx)?))
-    }
-
-    fn detector_file(&self, ctx: &DetectorContext) -> Result<PathBuf, Self::Err> {
-        Ok(self
-            .visit_directory(ctx.scan.beamline)?
-            .join(self.detector_file.render(ctx)?))
     }
 }
