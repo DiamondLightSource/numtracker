@@ -109,7 +109,7 @@ impl TryFrom<String> for DetectorField {
     }
 }
 
-impl FieldSource<BeamlineField> for BeamlineContext {
+impl<'bl> FieldSource<BeamlineField> for BeamlineContext<'bl> {
     type Err = InvalidKey;
 
     fn resolve(&self, field: &BeamlineField) -> Result<Cow<'_, str>, Self::Err> {
@@ -129,7 +129,7 @@ impl FieldSource<BeamlineField> for BeamlineContext {
     }
 }
 
-impl<'a> FieldSource<ScanField> for ScanContext<'a> {
+impl<'bl> FieldSource<ScanField> for ScanContext<'bl> {
     type Err = InvalidKey;
 
     fn resolve(&self, field: &ScanField) -> Result<Cow<'_, str>, Self::Err> {

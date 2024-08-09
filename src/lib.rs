@@ -6,20 +6,21 @@ pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
 
-pub struct BeamlineContext {
-    instrument: String,
-    visit: String,
+#[derive(Clone)]
+pub struct BeamlineContext<'bl> {
+    instrument: &'bl str,
+    visit: &'bl str,
 }
 
-pub struct ScanContext<'a> {
+pub struct ScanContext<'bl> {
     subdirectory: Subdirectory,
     scan_number: usize,
-    beamline: &'a BeamlineContext,
+    beamline: BeamlineContext<'bl>,
 }
 
-pub struct DetectorContext<'a> {
+pub struct DetectorContext<'bl> {
     detector: Detector,
-    scan: &'a ScanContext<'a>,
+    scan: &'bl ScanContext<'bl>,
 }
 
 #[derive(Debug)]
@@ -97,12 +98,9 @@ impl AsRef<Path> for Subdirectory {
     }
 }
 
-impl BeamlineContext {
-    pub fn new(instrument: impl Into<String>, visit: String) -> Self {
-        Self {
-            instrument: instrument.into(),
-            visit,
-        }
+impl<'bl> BeamlineContext<'bl> {
+    pub fn new(instrument: &'bl str, visit: &'bl str) -> Self {
+        Self { instrument, visit }
     }
     pub fn instrument(&self) -> &str {
         &self.instrument
@@ -110,11 +108,11 @@ impl BeamlineContext {
     pub fn visit(&self) -> &str {
         &self.visit
     }
-    pub fn for_scan(&self, scan_number: usize) -> ScanContext<'_> {
+    pub fn for_scan(&self, scan_number: usize, subdirectory: Subdirectory) -> ScanContext<'_> {
         ScanContext {
-            subdirectory: Subdirectory::default(),
+            subdirectory,
             scan_number,
-            beamline: self,
+            beamline: self.clone(),
         }
     }
 }

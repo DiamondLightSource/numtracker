@@ -96,7 +96,7 @@ impl VisitPath {
             .unwrap()
             .render(&BeamlineContext::new(
                 &self.beamline,
-                self.visit.to_string(),
+                &self.visit.to_string(),
             ))
             .to_string_lossy()
             .into())
