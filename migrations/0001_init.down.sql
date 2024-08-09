@@ -8,6 +8,3 @@ DROP TABLE scan_template;
 DROP TABLE detector_template;
 
 DROP TABLE beamline;
-
-DROP VIEW beamline_template;
-DROP VIEW beamline_visit_template;

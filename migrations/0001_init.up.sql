@@ -37,33 +37,6 @@ CREATE TABLE beamline_detector (
     modified INTEGER DEFAULT (unixepoch())
 );
 
--- View to simplify access to templates for a given beamline
-CREATE VIEW beamline_template (beamline, visit, scan, detector) AS SELECT DISTINCT
-    beamline.name AS beamline,
-    CAST (last_value(visit_template.template) OVER (PARTITION BY beamline_visit.beamline) AS TEXT)
-        AS visit,
-    CAST (last_value(scan_template.template) OVER (PARTITION BY beamline_scan.beamline) AS TEXT)
-        AS scan,
-    CAST (last_value(detector_template.template) OVER (PARTITION BY beamline_detector.beamline) AS TEXT)
-        AS detector
-from beamline
-join beamline_visit ON beamline.id = beamline_visit.beamline
-join visit_template ON visit_template.id = beamline_visit.visit
-join beamline_scan ON beamline.id = beamline_scan.beamline
-join scan_template ON beamline_scan.scan = scan_template.id
-join beamline_detector ON beamline.id = beamline_detector.beamline
-join detector_template ON detector_template.id = beamline_detector.detector;
-
--- Simpler view to only access the visit directory
-CREATE VIEW beamline_visit_template (beamline, template) AS SELECT DISTINCT
-    beamline.name AS beamline,
-    cast (last_value(visit_template.template) OVER (PARTITION BY beamline_visit.beamline) as TEXT)
-        AS template
-FROM beamline
-JOIN beamline_visit ON beamline.id = beamline_visit.beamline
-JOIN visit_template ON visit_template.id = beamline_visit.visit;
-
-
 -- dummy testing data
 INSERT INTO beamline (name) VALUES ('i22'),('b21'),('i11'),('i11-1');
 

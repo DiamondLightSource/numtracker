@@ -43,7 +43,7 @@ impl DetectorPathTemplate {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-enum BeamlineField {
+pub enum BeamlineField {
     Year,
     Visit,
     Proposal,
@@ -52,14 +52,14 @@ enum BeamlineField {
 }
 
 #[derive(Debug)]
-enum ScanField {
+pub enum ScanField {
     Subdirectory,
     ScanNumber,
     Beamline(BeamlineField),
 }
 
 #[derive(Debug)]
-enum DetectorField {
+pub enum DetectorField {
     Detector,
     Scan(ScanField),
 }

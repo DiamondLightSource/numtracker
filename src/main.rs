@@ -4,8 +4,8 @@ use std::fmt::Display;
 use async_graphql::{
     ComplexObject, Context, EmptySubscription, InputObject, Object, Schema, SimpleObject,
 };
-use numtracker::db_service::{ScanTemplates, SqliteScanPathService};
-use numtracker::{paths, BeamlineContext};
+use numtracker::db_service::SqliteScanPathService;
+use numtracker::BeamlineContext;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -91,13 +91,12 @@ impl VisitPath {
     async fn directory(&self, ctx: &Context<'_>) -> async_graphql::Result<String> {
         println!("directory");
         let db = ctx.data::<SqliteScanPathService>()?;
-        let temp = db.visit_template(&self.beamline).await.unwrap();
-        Ok(paths::visit_path(&temp)
-            .unwrap()
+        let temp = db.visit_template(&self.beamline).await?;
+        Ok(temp
             .render(&BeamlineContext::new(
                 &self.beamline,
                 &self.visit.to_string(),
-            ))
+            ))?
             .to_string_lossy()
             .into())
     }
