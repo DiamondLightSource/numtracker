@@ -132,7 +132,14 @@ impl FieldSource<BeamlineField> for &BeamlineContext {
             // Should be year of visit?
             BeamlineField::Year => buf.write_fmt(format_args!("{}", Local::now().year())),
             BeamlineField::Visit => write!(buf, "{}", self.visit()),
-            BeamlineField::Proposal => write!(buf, "{}", self.visit.proposal),
+            BeamlineField::Proposal => write!(
+                buf,
+                "{}",
+                self.visit
+                    .split('-')
+                    .next()
+                    .expect("There is always one section for a split")
+            ),
             BeamlineField::Instrument => buf.write_str(self.instrument.as_ref()),
             BeamlineField::Custom(key) => return Err(InvalidKey(key.clone())),
         };
