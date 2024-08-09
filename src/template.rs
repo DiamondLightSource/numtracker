@@ -1,10 +1,11 @@
+use std::borrow::Cow;
 use std::error::Error;
-use std::fmt::{Display, Write};
+use std::fmt::Display;
 use std::path::{Component, PathBuf};
 
 pub trait FieldSource<F> {
     type Err;
-    fn write_to(&self, buf: impl Write, field: &F) -> Result<(), Self::Err>;
+    fn resolve(&self, field: &F) -> Result<Cow<'_, str>, Self::Err>;
 }
 
 pub type PathTemplateResult<T> =
@@ -205,7 +206,7 @@ impl<F: TryFrom<String>> Template<F> {
         for part in &self.parts {
             match part {
                 Part::Literal(text) => buf.push_str(text),
-                Part::Field(f) => src.write_to(&mut buf, f)?,
+                Part::Field(f) => buf.push_str(&src.resolve(f)?),
             }
         }
         Ok(buf)
@@ -382,8 +383,8 @@ mod string_templates {
     impl FieldSource<String> for &EchoSource {
         type Err = Error;
 
-        fn write_to(&self, mut buf: impl Write, field: &String) -> Result<(), Self::Err> {
-            write!(buf, "{}", field.to_uppercase())
+        fn resolve(&self, field: &String) -> Result<Cow<'_, str>, Self::Err> {
+            Ok(field.to_uppercase().into())
         }
     }
 
@@ -392,8 +393,8 @@ mod string_templates {
     impl FieldSource<String> for &NullSource {
         type Err = Infallible;
 
-        fn write_to(&self, _: impl Write, _: &String) -> Result<(), Self::Err> {
-            Ok(())
+        fn resolve(&self, _: &String) -> Result<Cow<'_, str>, Self::Err> {
+            Ok(Cow::Owned(String::new()))
         }
     }
 
@@ -404,7 +405,7 @@ mod string_templates {
     impl FieldSource<String> for &ErrorSource {
         type Err = RenderFailed;
 
-        fn write_to(&self, _: impl Write, key: &String) -> Result<(), Self::Err> {
+        fn resolve(&self, key: &String) -> Result<Cow<'_, str>, Self::Err> {
             Err(RenderFailed(key.to_owned()))
         }
     }
