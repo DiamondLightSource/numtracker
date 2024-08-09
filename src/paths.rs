@@ -1,46 +1,11 @@
 use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::Display;
-use std::path::PathBuf;
 
 use chrono::{Datelike, Local};
 
-use crate::template::{FieldSource, PathTemplate, PathTemplateError};
+use crate::template::FieldSource;
 use crate::{BeamlineContext, DetectorContext, ScanContext};
-
-pub struct VisitPathTemplate(PathTemplate<BeamlineField>);
-pub struct ScanPathTemplate(PathTemplate<ScanField>);
-pub struct DetectorPathTemplate(PathTemplate<DetectorField>);
-
-pub fn visit_path(template: &str) -> Result<VisitPathTemplate, PathTemplateError<InvalidKey>> {
-    Ok(VisitPathTemplate(PathTemplate::new(template)?))
-}
-
-pub fn scan_path(template: &str) -> Result<ScanPathTemplate, PathTemplateError<InvalidKey>> {
-    Ok(ScanPathTemplate(PathTemplate::new(template)?))
-}
-
-pub fn detector_path(
-    template: &str,
-) -> Result<DetectorPathTemplate, PathTemplateError<InvalidKey>> {
-    Ok(DetectorPathTemplate(PathTemplate::new(template)?))
-}
-
-impl VisitPathTemplate {
-    pub fn render(&self, ctx: &BeamlineContext) -> PathBuf {
-        self.0.render(ctx).unwrap()
-    }
-}
-impl ScanPathTemplate {
-    pub fn render(&self, ctx: &ScanContext) -> PathBuf {
-        self.0.render(ctx).unwrap()
-    }
-}
-impl DetectorPathTemplate {
-    pub fn render(&self, ctx: &DetectorContext) -> PathBuf {
-        self.0.render(ctx).unwrap()
-    }
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum BeamlineField {

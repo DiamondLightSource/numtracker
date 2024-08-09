@@ -8,9 +8,6 @@ pub trait FieldSource<F> {
     fn resolve(&self, field: &F) -> Result<Cow<'_, str>, Self::Err>;
 }
 
-pub type PathTemplateResult<T> =
-    Result<PathTemplate<T>, PathTemplateError<<T as TryFrom<String>>::Error>>;
-
 #[derive(Debug, PartialEq, Eq)]
 enum Part<Field> {
     Literal(String),
