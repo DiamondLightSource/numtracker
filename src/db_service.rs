@@ -8,7 +8,7 @@ pub use self::error::SqliteTemplateError;
 use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
 use crate::template::PathTemplate;
 
-type SqliteTemplateResult<F> = Result<PathTemplate<F>, SqliteTemplateError<InvalidKey>>;
+type SqliteTemplateResult<F> = Result<PathTemplate<F>, SqliteTemplateError>;
 
 #[derive(Clone)]
 pub struct SqliteScanPathService {
@@ -68,22 +68,23 @@ mod error {
     use std::error::Error;
     use std::fmt::{self, Display};
 
+    use crate::paths::InvalidKey;
     use crate::template::PathTemplateError;
 
     /// Something that went wrong in the chain of querying the database for a template and
     /// converting it into a usable template.
     #[derive(Debug)]
-    pub enum SqliteTemplateError<E> {
+    pub enum SqliteTemplateError {
         /// It wasn't possible to get the requested template from the database.
         /// It may not be present or there may have been a connection problem accessing the
         /// database.
         Unavailable(sqlx::Error),
         /// The template was present in the database but it could not be parsed into a valid
         /// [`PathTemplate`].
-        Invalid(PathTemplateError<E>),
+        Invalid(PathTemplateError<InvalidKey>),
     }
 
-    impl<E: Display> Display for SqliteTemplateError<E> {
+    impl Display for SqliteTemplateError {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 Self::Unavailable(e) => write!(f, "Could not retrieve template: {e}"),
@@ -92,16 +93,16 @@ mod error {
         }
     }
 
-    impl<E: Error> Error for SqliteTemplateError<E> {}
+    impl Error for SqliteTemplateError {}
 
-    impl<E> From<sqlx::Error> for SqliteTemplateError<E> {
+    impl From<sqlx::Error> for SqliteTemplateError {
         fn from(sql: sqlx::Error) -> Self {
             Self::Unavailable(sql)
         }
     }
 
-    impl<E> From<PathTemplateError<E>> for SqliteTemplateError<E> {
-        fn from(err: PathTemplateError<E>) -> Self {
+    impl From<PathTemplateError<InvalidKey>> for SqliteTemplateError {
+        fn from(err: PathTemplateError<InvalidKey>) -> Self {
             Self::Invalid(err)
         }
     }
