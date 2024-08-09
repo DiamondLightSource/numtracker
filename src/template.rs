@@ -201,7 +201,7 @@ impl<F: TryFrom<String>> Template<F> {
         Ok(Self { parts })
     }
 
-    pub fn render<Src: FieldSource<F>>(&self, src: Src) -> Result<String, Src::Err> {
+    pub fn render<Src: FieldSource<F>>(&self, src: &Src) -> Result<String, Src::Err> {
         let mut buf = String::new();
         for part in &self.parts {
             match part {
@@ -236,7 +236,7 @@ impl<F: TryFrom<String>> PathTemplate<F> {
 
     pub fn render<'a, Src, E>(&self, src: &'a Src) -> Result<PathBuf, E>
     where
-        &'a Src: FieldSource<F, Err = E>,
+        Src: FieldSource<F, Err = E>,
     {
         let mut path = self.kind.init();
         for part in &self.parts {
@@ -380,7 +380,7 @@ mod string_templates {
     /// FieldSource that replaces every key with the uppercase version of itself
     pub struct EchoSource;
 
-    impl FieldSource<String> for &EchoSource {
+    impl FieldSource<String> for EchoSource {
         type Err = Error;
 
         fn resolve(&self, field: &String) -> Result<Cow<'_, str>, Self::Err> {
@@ -390,7 +390,7 @@ mod string_templates {
 
     /// Field Source that replaces every key with the empty string
     pub struct NullSource;
-    impl FieldSource<String> for &NullSource {
+    impl FieldSource<String> for NullSource {
         type Err = Infallible;
 
         fn resolve(&self, _: &String) -> Result<Cow<'_, str>, Self::Err> {
@@ -402,7 +402,7 @@ mod string_templates {
     pub struct ErrorSource;
     #[derive(Debug, PartialEq, Eq)]
     pub struct RenderFailed(pub String);
-    impl FieldSource<String> for &ErrorSource {
+    impl FieldSource<String> for ErrorSource {
         type Err = RenderFailed;
 
         fn resolve(&self, key: &String) -> Result<Cow<'_, str>, Self::Err> {
@@ -441,7 +441,7 @@ mod path_template_tests {
 
     fn from_template<'a, E, Src>(fmt: &'static str, src: &'a Src) -> PathBuf
     where
-        &'a Src: FieldSource<String, Err = E>,
+        Src: FieldSource<String, Err = E>,
         E: std::fmt::Debug,
     {
         PathTemplate::new(fmt).unwrap().render(src).unwrap()
