@@ -1,8 +1,6 @@
 use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
 
-use numtracker::NumTracker;
-
 pub mod db_service;
 pub mod numtracker;
 pub mod paths;
@@ -116,17 +114,6 @@ impl BeamlineContext {
         ScanContext {
             subdirectory: Subdirectory::default(),
             scan_number,
-            beamline: self,
-        }
-    }
-    pub fn next_scan(&self) -> ScanContext<'_> {
-        ScanContext {
-            subdirectory: Subdirectory::default(),
-            // TODO: source numtracker from somewhere?
-            scan_number: numtracker::GdaNumTracker::new("/tmp")
-                .increment_and_get(self)
-                // TODO: Handle errors
-                .unwrap(),
             beamline: self,
         }
     }
