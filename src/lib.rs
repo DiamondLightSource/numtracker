@@ -8,6 +8,22 @@ pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
 
+pub struct BeamlineContext {
+    instrument: String,
+    visit: String,
+}
+
+pub struct ScanContext<'a> {
+    subdirectory: Subdirectory,
+    scan_number: usize,
+    beamline: &'a BeamlineContext,
+}
+
+pub struct DetectorContext<'a> {
+    detector: Detector,
+    scan: &'a ScanContext<'a>,
+}
+
 #[derive(Debug)]
 pub struct Detector(String);
 impl Detector {
@@ -39,22 +55,6 @@ impl AsRef<str> for Detector {
 // Derived Default is OK without validation as empty path is a valid subdirectory
 #[derive(Debug, Default)]
 pub struct Subdirectory(PathBuf);
-
-pub struct BeamlineContext {
-    instrument: String,
-    visit: String,
-}
-
-pub struct ScanContext<'a> {
-    subdirectory: Subdirectory,
-    scan_number: usize,
-    beamline: &'a BeamlineContext,
-}
-
-pub struct DetectorContext<'a> {
-    detector: Detector,
-    scan: &'a ScanContext<'a>,
-}
 
 #[derive(Debug)]
 pub struct EmptyUsername;
