@@ -13,7 +13,6 @@ pub enum BeamlineField {
     Visit,
     Proposal,
     Instrument,
-    Custom(String),
 }
 
 #[derive(Debug)]
@@ -48,7 +47,7 @@ impl TryFrom<String> for BeamlineField {
             "visit" => Ok(BeamlineField::Visit),
             "proposal" => Ok(BeamlineField::Proposal),
             "instrument" => Ok(BeamlineField::Instrument),
-            _ => Ok(BeamlineField::Custom(value)),
+            _ => Err(InvalidKey(value)),
         }
     }
 }
@@ -75,10 +74,8 @@ impl TryFrom<String> for DetectorField {
 }
 
 impl<'bl> FieldSource<BeamlineField> for BeamlineContext<'bl> {
-    type Err = InvalidKey;
-
-    fn resolve(&self, field: &BeamlineField) -> Result<Cow<'_, str>, Self::Err> {
-        Ok(match field {
+    fn resolve(&self, field: &BeamlineField) -> Cow<'_, str> {
+        match field {
             // Should be year of visit?
             BeamlineField::Year => Local::now().year().to_string().into(),
             BeamlineField::Visit => self.visit().into(),
@@ -89,30 +86,25 @@ impl<'bl> FieldSource<BeamlineField> for BeamlineContext<'bl> {
                 .expect("There is always one section for a split")
                 .into(),
             BeamlineField::Instrument => AsRef::<str>::as_ref(&self.instrument).into(),
-            BeamlineField::Custom(key) => return Err(InvalidKey(key.clone())),
-        })
+        }
     }
 }
 
 impl<'bl> FieldSource<ScanField> for ScanContext<'bl> {
-    type Err = InvalidKey;
-
-    fn resolve(&self, field: &ScanField) -> Result<Cow<'_, str>, Self::Err> {
-        Ok(match field {
+    fn resolve(&self, field: &ScanField) -> Cow<'_, str> {
+        match field {
             ScanField::Subdirectory => self.subdirectory.as_ref().to_string_lossy(),
             ScanField::ScanNumber => self.scan_number.to_string().into(),
-            ScanField::Beamline(bf) => self.beamline.resolve(bf)?,
-        })
+            ScanField::Beamline(bf) => self.beamline.resolve(bf),
+        }
     }
 }
 
 impl<'a> FieldSource<DetectorField> for DetectorContext<'a> {
-    type Err = InvalidKey;
-
-    fn resolve(&self, field: &DetectorField) -> Result<Cow<'_, str>, Self::Err> {
-        Ok(match field {
+    fn resolve(&self, field: &DetectorField) -> Cow<'_, str> {
+        match field {
             DetectorField::Detector => self.detector.as_ref().into(),
-            DetectorField::Scan(sf) => self.scan.resolve(sf)?,
-        })
+            DetectorField::Scan(sf) => self.scan.resolve(sf),
+        }
     }
 }

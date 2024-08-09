@@ -4,8 +4,7 @@ use std::fmt::Display;
 use std::path::{Component, PathBuf};
 
 pub trait FieldSource<F> {
-    type Err;
-    fn resolve(&self, field: &F) -> Result<Cow<'_, str>, Self::Err>;
+    fn resolve(&self, field: &F) -> Cow<'_, str>;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -198,15 +197,15 @@ impl<F: TryFrom<String>> Template<F> {
         Ok(Self { parts })
     }
 
-    pub fn render<Src: FieldSource<F>>(&self, src: &Src) -> Result<String, Src::Err> {
+    pub fn render<Src: FieldSource<F>>(&self, src: &Src) -> String {
         let mut buf = String::new();
         for part in &self.parts {
             match part {
                 Part::Literal(text) => buf.push_str(text),
-                Part::Field(f) => buf.push_str(&src.resolve(f)?),
+                Part::Field(f) => buf.push_str(&src.resolve(f)),
             }
         }
-        Ok(buf)
+        buf
     }
 }
 
@@ -231,15 +230,15 @@ impl<F: TryFrom<String>> PathTemplate<F> {
         Ok(Self { parts, kind })
     }
 
-    pub fn render<'a, Src, E>(&self, src: &'a Src) -> Result<PathBuf, E>
+    pub fn render<'a, Src>(&self, src: &'a Src) -> PathBuf
     where
-        Src: FieldSource<F, Err = E>,
+        Src: FieldSource<F>,
     {
         let mut path = self.kind.init();
         for part in &self.parts {
-            path.push(part.render(src)?);
+            path.push(part.render(src));
         }
-        Ok(path)
+        path
     }
 
     pub fn is_absolute(&self) -> bool {
@@ -368,9 +367,6 @@ mod parser_tests {
 
 #[cfg(test)]
 mod string_templates {
-    use std::convert::Infallible;
-    use std::fmt::Error;
-
     use super::*;
     pub type StrTemplate = Template<String>;
 
@@ -378,32 +374,16 @@ mod string_templates {
     pub struct EchoSource;
 
     impl FieldSource<String> for EchoSource {
-        type Err = Error;
-
-        fn resolve(&self, field: &String) -> Result<Cow<'_, str>, Self::Err> {
-            Ok(field.to_uppercase().into())
+        fn resolve(&self, field: &String) -> Cow<'_, str> {
+            field.to_uppercase().into()
         }
     }
 
     /// Field Source that replaces every key with the empty string
     pub struct NullSource;
     impl FieldSource<String> for NullSource {
-        type Err = Infallible;
-
-        fn resolve(&self, _: &String) -> Result<Cow<'_, str>, Self::Err> {
-            Ok(Cow::Owned(String::new()))
-        }
-    }
-
-    /// FieldSource that returns an error for all keys
-    pub struct ErrorSource;
-    #[derive(Debug, PartialEq, Eq)]
-    pub struct RenderFailed(pub String);
-    impl FieldSource<String> for ErrorSource {
-        type Err = RenderFailed;
-
-        fn resolve(&self, key: &String) -> Result<Cow<'_, str>, Self::Err> {
-            Err(RenderFailed(key.to_owned()))
+        fn resolve(&self, _: &String) -> Cow<'_, str> {
+            Cow::Owned(String::new())
         }
     }
 }
@@ -414,10 +394,7 @@ mod template_tests {
 
     #[test]
     fn literal_template() {
-        let text = StrTemplate::new("all literal")
-            .unwrap()
-            .render(&EchoSource)
-            .unwrap();
+        let text = StrTemplate::new("all literal").unwrap().render(&EchoSource);
         assert_eq!(text, "all literal");
     }
 
@@ -425,8 +402,7 @@ mod template_tests {
     fn mixed() {
         let text = StrTemplate::new("/tmp/{instrument}/data/{year}/{visit}/")
             .unwrap()
-            .render(&EchoSource)
-            .unwrap();
+            .render(&EchoSource);
         assert_eq!(text, "/tmp/INSTRUMENT/data/YEAR/VISIT/");
     }
 }
@@ -436,12 +412,8 @@ mod path_template_tests {
     use super::string_templates::*;
     use super::*;
 
-    fn from_template<'a, E, Src>(fmt: &'static str, src: &'a Src) -> PathBuf
-    where
-        Src: FieldSource<String, Err = E>,
-        E: std::fmt::Debug,
-    {
-        PathTemplate::new(fmt).unwrap().render(src).unwrap()
+    fn from_template<'a, Src: FieldSource<String>>(fmt: &'static str, src: &'a Src) -> PathBuf {
+        PathTemplate::new(fmt).unwrap().render(src)
     }
 
     #[test]
@@ -502,14 +474,5 @@ mod path_template_tests {
         }
         assert_invalid("../empty/{segment}");
         assert_invalid("/../empty/{segment}");
-    }
-
-    #[test]
-    fn failed_rendering() {
-        let path = PathTemplate::new("/fail/to/{render}").unwrap();
-        assert_eq!(
-            path.render(&ErrorSource),
-            Err(RenderFailed("render".into()))
-        )
     }
 }
