@@ -1,5 +1,7 @@
 use std::error::Error;
+use std::fmt::Display;
 use std::marker::PhantomData;
+use std::path::PathBuf;
 
 use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject};
 use numtracker::db_service::SqliteScanPathService;
@@ -81,6 +83,27 @@ struct ScanPaths<B> {
     service: ScanService<B>,
 }
 
+#[derive(Debug)]
+struct NonUnicodePath;
+
+impl NonUnicodePath {
+    /// Try and convert a path to a string (via OsString), returning a NonUnicodePath
+    /// error if not possible
+    fn check(path: PathBuf) -> Result<String, NonUnicodePath> {
+        path.into_os_string()
+            .into_string()
+            .map_err(|_| NonUnicodePath)
+    }
+}
+
+impl Display for NonUnicodePath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Path contains non-unicode characters")
+    }
+}
+
+impl Error for NonUnicodePath {}
+
 #[Object]
 impl<B: VisitServiceBackend> VisitPath<B> {
     async fn visit(&self) -> &str {
@@ -91,7 +114,7 @@ impl<B: VisitServiceBackend> VisitPath<B> {
     }
     async fn directory(&self) -> async_graphql::Result<String> {
         let visit_directory = self.service.visit_directory().await?;
-        Ok(visit_directory.to_string_lossy().to_string())
+        Ok(NonUnicodePath::check(visit_directory)?)
     }
 }
 
@@ -101,12 +124,7 @@ impl<B: VisitServiceBackend> ScanPaths<B> {
         self.service.visit()
     }
     async fn scan_file(&self) -> async_graphql::Result<String> {
-        Ok(self
-            .service
-            .scan_file()
-            .await?
-            .to_string_lossy()
-            .to_string())
+        Ok(NonUnicodePath::check(self.service.scan_file().await?)?)
     }
     async fn scan_number(&self) -> usize {
         self.service.scan_number()
@@ -115,12 +133,9 @@ impl<B: VisitServiceBackend> ScanPaths<B> {
         self.service.beamline()
     }
     async fn directory(&self) -> async_graphql::Result<String> {
-        Ok(self
-            .service
-            .visit_directory()
-            .await?
-            .to_string_lossy()
-            .to_string())
+        Ok(NonUnicodePath::check(
+            self.service.visit_directory().await?,
+        )?)
     }
     async fn detectors(&self, names: Vec<String>) -> async_graphql::Result<Vec<DetectorPath>> {
         Ok(self
@@ -128,11 +143,13 @@ impl<B: VisitServiceBackend> ScanPaths<B> {
             .detector_files(&names)
             .await?
             .into_iter()
-            .map(|(det, path)| DetectorPath {
-                name: det.into(),
-                path: path.to_string_lossy().into(),
+            .map(|(det, path)| {
+                NonUnicodePath::check(path).map(|path| DetectorPath {
+                    name: det.into(),
+                    path,
+                })
             })
-            .collect())
+            .collect::<Result<_, _>>()?)
     }
 }
 
