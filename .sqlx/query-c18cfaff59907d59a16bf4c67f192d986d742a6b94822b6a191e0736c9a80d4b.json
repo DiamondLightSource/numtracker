@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE scan_number\nSET last_number = previous + 1\nFROM (\n    SELECT beamline.id AS bl_id, scan_number.last_number AS previous\n    FROM scan_number\n        JOIN beamline ON scan_number.beamline = beamline.id\n    WHERE beamline.name=?\n)\nWHERE beamline = bl_id\nRETURNING last_number\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "last_number",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c18cfaff59907d59a16bf4c67f192d986d742a6b94822b6a191e0736c9a80d4b"
+}
