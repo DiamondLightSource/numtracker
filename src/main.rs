@@ -9,9 +9,7 @@ use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService, Visit
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let backend = SqliteScanPathService::connect("sqlite://./demo.db")
-        .await
-        .unwrap();
+    let backend = SqliteScanPathService::connect("./demo.db").await.unwrap();
     let schema = Schema::build(
         Query::<SqliteScanPathService>::default(),
         Mutation::<SqliteScanPathService>::default(),

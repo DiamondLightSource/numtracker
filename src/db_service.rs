@@ -1,7 +1,7 @@
 use std::fmt;
 
 use sqlx::query::QueryScalar;
-use sqlx::sqlite::SqliteArguments;
+use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
 use sqlx::{query_file_scalar, Sqlite, SqlitePool};
 
 pub use self::error::SqliteTemplateError;
@@ -17,8 +17,11 @@ pub struct SqliteScanPathService {
 }
 
 impl SqliteScanPathService {
-    pub async fn connect(host: &str) -> Result<Self, sqlx::Error> {
-        let pool = SqlitePool::connect(host).await?;
+    pub async fn connect(filename: &str) -> Result<Self, sqlx::Error> {
+        let opts = SqliteConnectOptions::new()
+            .create_if_missing(true)
+            .filename(filename);
+        let pool = SqlitePool::connect_with(opts).await?;
         sqlx::migrate!().run(&pool).await?;
         Ok(Self { pool })
     }
