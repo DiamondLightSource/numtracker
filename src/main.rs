@@ -55,6 +55,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Read-only API for GraphQL
+///
+/// Generic type is only required so the type of service to be retrieved from the context can be
+/// accessed.
 struct Query<B>(PhantomData<B>);
 impl<B> Default for Query<B> {
     fn default() -> Self {
@@ -62,6 +66,10 @@ impl<B> Default for Query<B> {
     }
 }
 
+/// Read-write API for GraphQL
+///
+/// Generic type is only required so the type of service to be retrieved from the context can be
+/// accessed.
 struct Mutation<B>(PhantomData<B>);
 impl<B> Default for Mutation<B> {
     fn default() -> Self {
@@ -69,16 +77,19 @@ impl<B> Default for Mutation<B> {
     }
 }
 
+/// GraphQL type to mimic a key-value pair from the map type that GraphQL doesn't have
 #[derive(SimpleObject)]
 struct DetectorPath {
     name: String,
     path: String,
 }
 
+/// GraphQL type to provide path data for a specific visit
 struct VisitPath<B: VisitServiceBackend> {
     service: VisitService<B>,
 }
 
+/// GraphQL type to provide path data for the next scan for a given visit
 struct ScanPaths<B> {
     service: ScanService<B>,
 }
@@ -120,23 +131,47 @@ impl<B: VisitServiceBackend> VisitPath<B> {
 
 #[Object]
 impl<B: VisitServiceBackend> ScanPaths<B> {
+    /// The visit used to generate this scan information
+    /// Should be the same as the visit passed in
     async fn visit(&self) -> &str {
         self.service.visit()
     }
+
+    /// The root scan file for this scan. The path has no extension so that the format can be
+    /// chosen by the client.
     async fn scan_file(&self) -> async_graphql::Result<String> {
         Ok(NonUnicodePath::check(self.service.scan_file().await?)?)
     }
+
+    /// The scan number for this scan. This should be unique for the requested beamline.
     async fn scan_number(&self) -> usize {
         self.service.scan_number()
     }
+
+    /// The beamline used to generate this scan information
+    /// Should be the same as the beamline passed in.
     async fn beamline(&self) -> &str {
         self.service.beamline()
     }
+
+    /// The root visit directory for the given visit/beamline.
+    ///
+    /// This is not necessarily the directory where data should be written if subdirectories are
+    /// being used, or if detectors should be writing their files to a new directory for each scan.
+    /// Use `scan_file` and `detectors` to determine where specific files should be written.
     async fn directory(&self) -> async_graphql::Result<String> {
         Ok(NonUnicodePath::check(
             self.service.visit_directory().await?,
         )?)
     }
+
+    /// The paths where the given detectors should write their files.
+    ///
+    /// Detector names are normalised before being used in file names by replacing any
+    /// non-alphanumeric characters with '_'. If there are duplicate names in the list
+    /// of detectors after this normalisation, there will be duplicate paths in the
+    /// results.
+    // TODO: The docs here reference the implementation specific behaviour in the normalisation
     async fn detectors(&self, names: Vec<String>) -> async_graphql::Result<Vec<DetectorPath>> {
         Ok(self
             .service
