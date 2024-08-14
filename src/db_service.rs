@@ -7,6 +7,7 @@ use sqlx::{query_file_scalar, Sqlite, SqlitePool};
 pub use self::error::SqliteTemplateError;
 use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
 use crate::template::PathTemplate;
+use crate::VisitServiceBackend;
 
 type SqliteTemplateResult<F> = Result<PathTemplate<F>, SqliteTemplateError>;
 
@@ -22,8 +23,20 @@ impl SqliteScanPathService {
         Ok(Self { pool })
     }
 
+    /// Execute a prepared query and parse the returned string into a [`PathTemplate`]
+    async fn template_from<'bl, F: TryFrom<String, Error = InvalidKey>>(
+        &self,
+        query: QueryScalar<'bl, Sqlite, String, SqliteArguments<'bl>>,
+    ) -> SqliteTemplateResult<F> {
+        Ok(PathTemplate::new(query.fetch_one(&self.pool).await?)?)
+    }
+}
+
+impl VisitServiceBackend for SqliteScanPathService {
+    type NumberError = sqlx::Error;
+    type TemplateErr = SqliteTemplateError;
     /// Increment and return the latest scan number for the given beamline
-    pub async fn next_scan_number(&self, beamline: &str) -> Result<usize, sqlx::Error> {
+    async fn next_scan_number(&self, beamline: &str) -> Result<usize, sqlx::Error> {
         let mut db = self.pool.begin().await?;
         let next = query_file_scalar!("queries/increment_scan_number.sql", beamline)
             .fetch_one(&mut *db)
@@ -32,25 +45,17 @@ impl SqliteScanPathService {
         Ok(next)
     }
 
-    pub async fn visit_template(&self, bl: &str) -> SqliteTemplateResult<BeamlineField> {
+    async fn visit_directory_template(&self, bl: &str) -> SqliteTemplateResult<BeamlineField> {
         self.template_from(query_file_scalar!("queries/visit_template.sql", bl))
             .await
     }
-    pub async fn scan_template(&self, bl: &str) -> SqliteTemplateResult<ScanField> {
+    async fn scan_file_template(&self, bl: &str) -> SqliteTemplateResult<ScanField> {
         self.template_from(query_file_scalar!("queries/scan_template.sql", bl))
             .await
     }
-    pub async fn detector_template(&self, bl: &str) -> SqliteTemplateResult<DetectorField> {
+    async fn detector_file_template(&self, bl: &str) -> SqliteTemplateResult<DetectorField> {
         self.template_from(query_file_scalar!("queries/detector_template.sql", bl))
             .await
-    }
-
-    /// Execute a prepared query and parse the returned string into a [`PathTemplate`]
-    async fn template_from<'bl, F: TryFrom<String, Error = InvalidKey>>(
-        &self,
-        query: QueryScalar<'bl, Sqlite, String, SqliteArguments<'bl>>,
-    ) -> SqliteTemplateResult<F> {
-        Ok(PathTemplate::new(query.fetch_one(&self.pool).await?)?)
     }
 }
 

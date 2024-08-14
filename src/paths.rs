@@ -4,8 +4,12 @@ use std::fmt::Display;
 
 use chrono::{Datelike, Local};
 
-use crate::template::FieldSource;
+use crate::template::{FieldSource, PathTemplate};
 use crate::{BeamlineContext, DetectorContext, ScanContext};
+
+pub type VisitTemplate = PathTemplate<BeamlineField>;
+pub type ScanTemplate = PathTemplate<ScanField>;
+pub type DetectorTemplate = PathTemplate<DetectorField>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum BeamlineField {
@@ -73,7 +77,7 @@ impl TryFrom<String> for DetectorField {
     }
 }
 
-impl<'bl> FieldSource<BeamlineField> for BeamlineContext<'bl> {
+impl FieldSource<BeamlineField> for BeamlineContext {
     fn resolve(&self, field: &BeamlineField) -> Cow<'_, str> {
         match field {
             // Should be year of visit?
@@ -90,7 +94,7 @@ impl<'bl> FieldSource<BeamlineField> for BeamlineContext<'bl> {
     }
 }
 
-impl<'bl> FieldSource<ScanField> for ScanContext<'bl> {
+impl FieldSource<ScanField> for ScanContext {
     fn resolve(&self, field: &ScanField) -> Cow<'_, str> {
         match field {
             ScanField::Subdirectory => self.subdirectory.as_ref().to_string_lossy(),

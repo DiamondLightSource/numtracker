@@ -1,26 +1,152 @@
+use std::error::Error;
 use std::fmt::Display;
+use std::future::Future;
 use std::path::{Component, Path, PathBuf};
+
+use paths::{DetectorTemplate, ScanTemplate, VisitTemplate};
 
 pub mod db_service;
 pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
 
-#[derive(Clone)]
-pub struct BeamlineContext<'bl> {
-    instrument: &'bl str,
-    visit: &'bl str,
+pub trait VisitServiceBackend: Clone + Sync + Send {
+    type NumberError: Error + Send + Sync;
+    type TemplateErr: Error + Send + Sync;
+    fn next_scan_number(
+        &self,
+        beamline: &str,
+    ) -> impl Future<Output = Result<usize, Self::NumberError>> + Send;
+    fn visit_directory_template(
+        &self,
+        beamline: &str,
+    ) -> impl Future<Output = Result<VisitTemplate, Self::TemplateErr>> + Send;
+    fn scan_file_template(
+        &self,
+        beamline: &str,
+    ) -> impl Future<Output = Result<ScanTemplate, Self::TemplateErr>> + Send;
+    fn detector_file_template(
+        &self,
+        bl: &str,
+    ) -> impl Future<Output = Result<DetectorTemplate, Self::TemplateErr>> + Send;
 }
 
-pub struct ScanContext<'bl> {
+pub struct VisitService<Backend> {
+    db: Backend,
+    ctx: BeamlineContext,
+}
+
+pub struct ScanService<Backend> {
+    db: Backend,
+    ctx: ScanContext,
+}
+
+#[derive(Clone)]
+pub struct BeamlineContext {
+    instrument: String,
+    visit: String,
+}
+
+pub struct ScanContext {
     subdirectory: Subdirectory,
     scan_number: usize,
-    beamline: BeamlineContext<'bl>,
+    beamline: BeamlineContext,
 }
 
 pub struct DetectorContext<'bl> {
     detector: Detector,
-    scan: &'bl ScanContext<'bl>,
+    scan: &'bl ScanContext,
+}
+
+impl<'bl, Backend> VisitService<Backend> {
+    pub fn new(backend: Backend, ctx: BeamlineContext) -> Self {
+        Self { db: backend, ctx }
+    }
+    pub fn beamline(&self) -> &str {
+        &self.ctx.instrument
+    }
+    pub fn visit(&self) -> &str {
+        &self.ctx.visit
+    }
+}
+
+impl<'bl, Backend> VisitService<Backend>
+where
+    Backend: VisitServiceBackend,
+{
+    pub async fn new_scan(
+        &self,
+        subdirectory: Subdirectory,
+    ) -> Result<ScanService<Backend>, Backend::NumberError> {
+        let number = self.db.next_scan_number(&self.ctx.instrument).await?;
+        Ok(ScanService {
+            db: self.db.clone(),
+            ctx: self.ctx.for_scan(number, subdirectory),
+        })
+    }
+
+    // async fn beamline(&self) -> &str {
+    //     &self.ctx.instrument
+    // }
+
+    pub async fn visit_directory(&self) -> Result<PathBuf, Backend::TemplateErr> {
+        Ok(self
+            .db
+            .visit_directory_template(&self.ctx.instrument)
+            .await?
+            .render(&self.ctx))
+    }
+}
+
+impl<Backend> ScanService<Backend>
+where
+    Backend: VisitServiceBackend,
+{
+    pub fn scan_number(&self) -> usize {
+        self.ctx.scan_number
+    }
+    pub fn beamline(&self) -> &str {
+        &self.ctx.beamline.instrument
+    }
+    pub fn visit(&self) -> &str {
+        &self.ctx.beamline.visit
+    }
+
+    pub async fn visit_directory(&self) -> Result<PathBuf, Backend::TemplateErr> {
+        Ok(self
+            .db
+            .visit_directory_template(&self.beamline())
+            .await?
+            .render(&self.ctx.beamline))
+    }
+
+    pub async fn scan_file(&self) -> Result<PathBuf, Backend::TemplateErr> {
+        Ok(self
+            .db
+            .scan_file_template(&self.ctx.beamline.instrument)
+            .await?
+            .render(&self.ctx))
+    }
+
+    pub async fn detector_files<'det>(
+        &self,
+        detectors: &'det [String],
+    ) -> Result<Vec<(&'det String, PathBuf)>, Backend::TemplateErr> {
+        if detectors.is_empty() {
+            return Ok(vec![]);
+        }
+        let template = self
+            .db
+            .detector_file_template(&self.ctx.beamline.instrument)
+            .await?;
+        Ok(detectors
+            .iter()
+            .map(|det| {
+                let path = template.render(&self.ctx.for_detector(det));
+                (det, path)
+            })
+            .collect())
+    }
 }
 
 #[derive(Debug)]
@@ -64,6 +190,19 @@ pub enum InvalidSubdirectory {
     AbsolutePath,
 }
 
+impl Display for InvalidSubdirectory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            InvalidSubdirectory::InvalidComponent(s) => {
+                write!(f, "Segment {s} of path is not valid for a subdirectory")
+            }
+            InvalidSubdirectory::AbsolutePath => f.write_str("Subdirectory cannot be absolute"),
+        }
+    }
+}
+
+impl Error for InvalidSubdirectory {}
+
 impl Subdirectory {
     pub fn new(sub: impl Into<PathBuf>) -> Result<Self, InvalidSubdirectory> {
         let sub = sub.into();
@@ -98,8 +237,8 @@ impl AsRef<Path> for Subdirectory {
     }
 }
 
-impl<'bl> BeamlineContext<'bl> {
-    pub fn new(instrument: &'bl str, visit: &'bl str) -> Self {
+impl BeamlineContext {
+    pub fn new(instrument: String, visit: String) -> Self {
         Self { instrument, visit }
     }
     pub fn instrument(&self) -> &str {
@@ -108,7 +247,7 @@ impl<'bl> BeamlineContext<'bl> {
     pub fn visit(&self) -> &str {
         &self.visit
     }
-    pub fn for_scan(&self, scan_number: usize, subdirectory: Subdirectory) -> ScanContext<'_> {
+    pub fn for_scan(&self, scan_number: usize, subdirectory: Subdirectory) -> ScanContext {
         ScanContext {
             subdirectory,
             scan_number,
@@ -117,7 +256,7 @@ impl<'bl> BeamlineContext<'bl> {
     }
 }
 
-impl ScanContext<'_> {
+impl ScanContext {
     pub fn with_subdirectory(self, sub: Subdirectory) -> Self {
         Self {
             subdirectory: sub,
