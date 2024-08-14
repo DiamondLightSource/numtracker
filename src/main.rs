@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::marker::PhantomData;
 
 use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject};
 use numtracker::db_service::SqliteScanPathService;
@@ -9,9 +10,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let backend = SqliteScanPathService::connect("sqlite://./demo.db")
         .await
         .unwrap();
-    let schema = Schema::build(Query, Mutation, EmptySubscription)
-        .data(backend)
-        .finish();
+    let schema = Schema::build(
+        Query::<SqliteScanPathService>::default(),
+        Mutation::<SqliteScanPathService>::default(),
+        EmptySubscription,
+    )
+    .data(backend)
+    .finish();
     let res = schema
         .execute(
             r#"
@@ -48,9 +53,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-struct Query;
+struct Query<B>(PhantomData<B>);
+impl<B> Default for Query<B> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 
-struct Mutation;
+struct Mutation<B>(PhantomData<B>);
+impl<B> Default for Mutation<B> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
 
 #[derive(SimpleObject)]
 struct DetectorPath {
@@ -122,32 +137,32 @@ impl<B: VisitServiceBackend> ScanPaths<B> {
 }
 
 #[Object]
-impl Query {
+impl<B: VisitServiceBackend + 'static> Query<B> {
     async fn paths(
         &self,
         ctx: &Context<'_>,
         beamline: String,
         visit: String,
-    ) -> async_graphql::Result<VisitPath<SqliteScanPathService>> {
-        let db = ctx.data::<SqliteScanPathService>()?;
+    ) -> async_graphql::Result<VisitPath<B>> {
+        let db = ctx.data::<B>()?;
         let service = VisitService::new(db.clone(), BeamlineContext::new(beamline, visit));
         Ok(VisitPath { service })
     }
 }
 
 #[Object]
-impl Mutation {
+impl<B: VisitServiceBackend + 'static> Mutation<B> {
     async fn scan<'ctx>(
         &self,
         ctx: &Context<'ctx>,
         beamline: String,
         visit: String,
         sub: Option<String>,
-    ) -> async_graphql::Result<ScanPaths<SqliteScanPathService>> {
-        let db = ctx.data::<SqliteScanPathService>()?;
+    ) -> async_graphql::Result<ScanPaths<B>> {
+        let db = ctx.data::<B>()?;
         let service = VisitService::new(db.clone(), BeamlineContext::new(beamline, visit));
         let sub = Subdirectory::new(sub.unwrap_or_default())?;
-        let new_scan = service.new_scan(sub).await?;
-        Ok(ScanPaths { service: new_scan })
+        let service = service.new_scan(sub).await?;
+        Ok(ScanPaths { service })
     }
 }
