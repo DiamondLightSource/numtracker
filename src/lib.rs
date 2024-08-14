@@ -10,13 +10,15 @@ pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
 
-pub trait VisitServiceBackend: Clone + Sync + Send {
+pub trait ScanNumberBackend: Clone + Sync + Send {
     type NumberError: Error + Send + Sync;
-    type TemplateErr: Error + Send + Sync;
     fn next_scan_number(
         &self,
         beamline: &str,
     ) -> impl Future<Output = Result<usize, Self::NumberError>> + Send;
+}
+pub trait PathTemplateBackend: Clone + Sync + Send {
+    type TemplateErr: Error + Send + Sync;
     fn visit_directory_template(
         &self,
         beamline: &str,
@@ -72,7 +74,7 @@ impl<'bl, Backend> VisitService<Backend> {
 
 impl<'bl, Backend> VisitService<Backend>
 where
-    Backend: VisitServiceBackend,
+    Backend: ScanNumberBackend,
 {
     pub async fn new_scan(
         &self,
@@ -84,11 +86,12 @@ where
             ctx: self.ctx.for_scan(number, subdirectory),
         })
     }
+}
 
-    // async fn beamline(&self) -> &str {
-    //     &self.ctx.instrument
-    // }
-
+impl<'bl, Backend> VisitService<Backend>
+where
+    Backend: PathTemplateBackend,
+{
     pub async fn visit_directory(&self) -> Result<PathBuf, Backend::TemplateErr> {
         Ok(self
             .db
@@ -100,7 +103,7 @@ where
 
 impl<Backend> ScanService<Backend>
 where
-    Backend: VisitServiceBackend,
+    Backend: PathTemplateBackend,
 {
     pub fn scan_number(&self) -> usize {
         self.ctx.scan_number

@@ -5,7 +5,10 @@ use std::path::PathBuf;
 
 use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject};
 use numtracker::db_service::SqliteScanPathService;
-use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService, VisitServiceBackend};
+use numtracker::{
+    BeamlineContext, PathTemplateBackend, ScanNumberBackend, ScanService, Subdirectory,
+    VisitService,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -83,7 +86,7 @@ struct DetectorPath {
 }
 
 /// GraphQL type to provide path data for a specific visit
-struct VisitPath<B: VisitServiceBackend> {
+struct VisitPath<B: PathTemplateBackend> {
     service: VisitService<B>,
 }
 
@@ -114,7 +117,7 @@ impl Display for NonUnicodePath {
 impl Error for NonUnicodePath {}
 
 #[Object]
-impl<B: VisitServiceBackend> VisitPath<B> {
+impl<B: PathTemplateBackend> VisitPath<B> {
     async fn visit(&self) -> &str {
         self.service.visit()
     }
@@ -128,7 +131,7 @@ impl<B: VisitServiceBackend> VisitPath<B> {
 }
 
 #[Object]
-impl<B: VisitServiceBackend> ScanPaths<B> {
+impl<B: PathTemplateBackend> ScanPaths<B> {
     /// The visit used to generate this scan information
     /// Should be the same as the visit passed in
     async fn visit(&self) -> &str {
@@ -187,7 +190,7 @@ impl<B: VisitServiceBackend> ScanPaths<B> {
 }
 
 #[Object]
-impl<B: VisitServiceBackend + 'static> Query<B> {
+impl<B: PathTemplateBackend + 'static> Query<B> {
     async fn paths(
         &self,
         ctx: &Context<'_>,
@@ -201,7 +204,7 @@ impl<B: VisitServiceBackend + 'static> Query<B> {
 }
 
 #[Object]
-impl<B: VisitServiceBackend + 'static> Mutation<B> {
+impl<B: PathTemplateBackend + ScanNumberBackend + 'static> Mutation<B> {
     async fn scan<'ctx>(
         &self,
         ctx: &Context<'ctx>,

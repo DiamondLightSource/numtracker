@@ -7,7 +7,7 @@ use sqlx::{query_file_scalar, Sqlite, SqlitePool};
 pub use self::error::SqliteTemplateError;
 use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
 use crate::template::PathTemplate;
-use crate::VisitServiceBackend;
+use crate::{PathTemplateBackend, ScanNumberBackend};
 
 type SqliteTemplateResult<F> = Result<PathTemplate<F>, SqliteTemplateError>;
 
@@ -35,9 +35,8 @@ impl SqliteScanPathService {
     }
 }
 
-impl VisitServiceBackend for SqliteScanPathService {
+impl ScanNumberBackend for SqliteScanPathService {
     type NumberError = sqlx::Error;
-    type TemplateErr = SqliteTemplateError;
     /// Increment and return the latest scan number for the given beamline
     async fn next_scan_number(&self, beamline: &str) -> Result<usize, sqlx::Error> {
         let mut db = self.pool.begin().await?;
@@ -47,7 +46,10 @@ impl VisitServiceBackend for SqliteScanPathService {
         db.commit().await?;
         Ok(next)
     }
+}
 
+impl PathTemplateBackend for SqliteScanPathService {
+    type TemplateErr = SqliteTemplateError;
     async fn visit_directory_template(&self, bl: &str) -> SqliteTemplateResult<BeamlineField> {
         self.template_from(query_file_scalar!("queries/visit_template.sql", bl))
             .await
