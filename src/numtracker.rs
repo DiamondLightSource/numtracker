@@ -1,14 +1,36 @@
-use std::fs::{self, OpenOptions};
-use std::os::fd::AsFd;
+use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 
-use fd_lock::RwLock;
+use fd_lock::{RwLock, RwLockWriteGuard};
 
 use crate::ScanNumberBackend;
 
 #[derive(Debug, Clone)]
 pub struct GdaNumTracker {
     directory: PathBuf,
+}
+
+/// Wrapper around file lock that creates, locks and then deletes the file
+struct TempFileLock(PathBuf, RwLock<File>);
+
+impl TempFileLock {
+    fn new(path: PathBuf) -> Result<Self, std::io::Error> {
+        let lock = OpenOptions::new()
+            .create_new(true)
+            .truncate(true)
+            .write(true)
+            .open(&path)?;
+        Ok(Self(path, RwLock::new(lock)))
+    }
+    fn lock(&mut self) -> Result<RwLockWriteGuard<'_, File>, std::io::Error> {
+        self.1.try_write()
+    }
+}
+
+impl Drop for TempFileLock {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.0);
+    }
 }
 
 impl GdaNumTracker {
@@ -19,31 +41,26 @@ impl GdaNumTracker {
         Self { directory }
     }
 
-    /// Create a [RwLock] for this tracker's directory lock file
+    /// Create a [TempFileLock] for the given extension in this tracker's directory
     ///
-    /// The returned lock should locked for writing prior to modifying anything in this tracker's
-    /// directory.
+    /// The returned lock should locked prior to reading or modifying anything in this tracker's
+    /// directory related to the given extension.
     /// ```ignore
     /// let _lock = self.file_lock()?;
-    /// let _lock = _lock.write()?;
+    /// let _lock = _lock.lock()?;
     /// // ... rest of method
-    /// // lock will be release when dropped
+    /// // lock will be released and file deleted when dropped
     /// ```
     /// # Notes
     /// This is an advisory lock only and will only prevent concurrent access by other applications
     /// that are aware of and opt in to respecting this lock. It does not prevent access to the
     /// directory from other uses/processes that don't check.
-    fn file_lock(&self, ext: &str) -> Result<RwLock<impl AsFd>, std::io::Error> {
-        let lock = OpenOptions::new()
-            .create(true)
-            .truncate(true)
-            .write(true)
-            .open(
-                self.directory
-                    .join(format!("{}.{}", Self::LOCK_FILE_NAME, ext)),
-            )?;
-        let _lock = RwLock::new(lock);
-        Ok(_lock)
+    fn file_lock(&self, ext: &str) -> Result<TempFileLock, std::io::Error> {
+        TempFileLock::new(
+            self.directory
+                .join(Self::LOCK_FILE_NAME)
+                .with_extension(ext),
+        )
     }
 
     /// Build the path of the file that would correspond to the given number
@@ -112,7 +129,7 @@ impl ScanNumberBackend for GdaNumTracker {
     async fn next_scan_number(&self, ext: &str) -> Result<usize, Self::NumberError> {
         // Nothing here is async but the trait expects an async method
         let mut _lock = self.file_lock(ext)?;
-        let _f = _lock.try_write()?;
+        let _f = _lock.lock()?;
         let next = self.high_file(ext)? + 1;
         self.create_num_file(next, ext)?;
         Ok(next)
