@@ -3,7 +3,10 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
-use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject};
+use async_graphql::{Context, EmptySubscription, Object, ObjectType, Schema, SimpleObject};
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
+use axum::routing::post;
+use axum::{Extension, Router};
 use numtracker::db_service::SqliteScanPathService;
 use numtracker::fallback::FallbackScanNumbering;
 use numtracker::numtracker::GdaNumTracker;
@@ -11,13 +14,16 @@ use numtracker::{
     BeamlineContext, PathTemplateBackend, ScanNumberBackend, ScanService, Subdirectory,
     VisitService,
 };
+use tokio::net::TcpListener;
+
+type SqliteGda = FallbackScanNumbering<SqliteScanPathService, GdaNumTracker>;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let backend = SqliteScanPathService::connect("./demo.db").await.unwrap();
     let schema = Schema::build(
-        Query::<FallbackScanNumbering<SqliteScanPathService, GdaNumTracker>>::default(),
-        Mutation::<FallbackScanNumbering<SqliteScanPathService, GdaNumTracker>>::default(),
+        Query::<SqliteGda>::default(),
+        Mutation::<SqliteGda>::default(),
         EmptySubscription,
     )
     .data(FallbackScanNumbering {
@@ -25,40 +31,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
         secondary: GdaNumTracker::new("trackers"),
     })
     .finish();
-    let res = schema
-        .execute(
-            r#"
-            mutation {
-                scan(beamline: "i22", visit: "cm1234-3", sub: "foo/bar") {
-                    directory
-                    beamline
-                    visit
-                    scanFile
-                    scanNumber
-                    detectors(names: ["one", "two"]) {
-                        name
-                        path
-                    }
-                }
-            }"#,
-        )
-        .await;
-    println!("{}", res.data);
-    let res = schema
-        .execute(
-            r#"
-            {
-                paths(beamline: "i22", visit: "cm1234-2") {
-                    directory
-                    beamline
-                    visit
-                }
-            }"#,
-        )
-        .await;
-    println!("{}", res.data);
 
+    let app = Router::new()
+        .route("/graphql", post(graphql_handler::<SqliteGda, SqliteGda>))
+        .layer(Extension(schema));
+
+    let listener = TcpListener::bind("127.0.0.1:8000").await.unwrap();
+    axum::serve(listener, app).await.unwrap();
     Ok(())
+}
+
+async fn graphql_handler<Q, M>(
+    schema: Extension<Schema<Query<Q>, Mutation<M>, EmptySubscription>>,
+    req: GraphQLRequest,
+) -> GraphQLResponse
+where
+    Q: 'static,
+    M: 'static,
+    Query<Q>: ObjectType,
+    Mutation<M>: ObjectType,
+{
+    schema.execute(req.into_inner()).await.into()
 }
 
 /// Read-only API for GraphQL
