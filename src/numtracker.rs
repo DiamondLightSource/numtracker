@@ -4,18 +4,9 @@ use std::path::{Path, PathBuf};
 
 use fd_lock::RwLock;
 
-use crate::BeamlineContext;
+use crate::ScanNumberBackend;
 
-pub trait NumTracker {
-    type Err;
-    /// Get the next value from this tracker - every call should result in a new number
-    ///
-    /// If a call fails, the next successful call may or may not reflect that there were
-    /// unsuccessful attempts since the last value returned.
-    fn increment_and_get(&self, ctx: &BeamlineContext) -> Result<usize, Self::Err>;
-}
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GdaNumTracker {
     directory: PathBuf,
 }
@@ -115,11 +106,11 @@ impl Default for GdaNumTracker {
     }
 }
 
-impl NumTracker for GdaNumTracker {
-    type Err = std::io::Error;
+impl ScanNumberBackend for GdaNumTracker {
+    type NumberError = std::io::Error;
 
-    fn increment_and_get(&self, ctx: &BeamlineContext) -> Result<usize, Self::Err> {
-        let ext = ctx.instrument().as_ref();
+    async fn next_scan_number(&self, ext: &str) -> Result<usize, Self::NumberError> {
+        // Nothing here is async but the trait expects an async method
         let mut _lock = self.file_lock(ext)?;
         let _f = _lock.try_write()?;
         let next = self.high_file(ext)? + 1;
