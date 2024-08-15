@@ -5,6 +5,8 @@ use std::path::PathBuf;
 
 use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject};
 use numtracker::db_service::SqliteScanPathService;
+use numtracker::fallback::FallbackScanNumbering;
+use numtracker::numtracker::GdaNumTracker;
 use numtracker::{
     BeamlineContext, PathTemplateBackend, ScanNumberBackend, ScanService, Subdirectory,
     VisitService,
@@ -14,11 +16,14 @@ use numtracker::{
 async fn main() -> Result<(), Box<dyn Error>> {
     let backend = SqliteScanPathService::connect("./demo.db").await.unwrap();
     let schema = Schema::build(
-        Query::<SqliteScanPathService>::default(),
-        Mutation::<SqliteScanPathService>::default(),
+        Query::<FallbackScanNumbering<SqliteScanPathService, GdaNumTracker>>::default(),
+        Mutation::<FallbackScanNumbering<SqliteScanPathService, GdaNumTracker>>::default(),
         EmptySubscription,
     )
-    .data(backend)
+    .data(FallbackScanNumbering {
+        primary: backend,
+        secondary: GdaNumTracker::new("trackers"),
+    })
     .finish();
     let res = schema
         .execute(
