@@ -11,10 +11,22 @@ use numtracker::{
     BeamlineContext, PathTemplateBackend, ScanNumberBackend, ScanService, Subdirectory,
     VisitService,
 };
+use tracing::level_filters::LevelFilter;
+use tracing::{debug, instrument};
+use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
+        .init();
     let backend = SqliteScanPathService::connect("./demo.db").await.unwrap();
+    debug!("Using backend: {backend:?}");
+
     let schema = Schema::build(
         Query::<FallbackScanNumbering<SqliteScanPathService, GdaNumTracker>>::default(),
         Mutation::<FallbackScanNumbering<SqliteScanPathService, GdaNumTracker>>::default(),
@@ -123,12 +135,15 @@ impl Error for NonUnicodePath {}
 
 #[Object]
 impl<B: PathTemplateBackend> VisitPath<B> {
+    #[instrument(skip(self))]
     async fn visit(&self) -> &str {
         self.service.visit()
     }
+    #[instrument(skip(self))]
     async fn beamline(&self) -> &str {
         self.service.beamline()
     }
+    #[instrument(skip(self))]
     async fn directory(&self) -> async_graphql::Result<String> {
         let visit_directory = self.service.visit_directory().await?;
         Ok(NonUnicodePath::check(visit_directory)?)
@@ -139,23 +154,27 @@ impl<B: PathTemplateBackend> VisitPath<B> {
 impl<B: PathTemplateBackend> ScanPaths<B> {
     /// The visit used to generate this scan information
     /// Should be the same as the visit passed in
+    #[instrument(skip(self))]
     async fn visit(&self) -> &str {
         self.service.visit()
     }
 
     /// The root scan file for this scan. The path has no extension so that the format can be
     /// chosen by the client.
+    #[instrument(skip(self))]
     async fn scan_file(&self) -> async_graphql::Result<String> {
         Ok(NonUnicodePath::check(self.service.scan_file().await?)?)
     }
 
     /// The scan number for this scan. This should be unique for the requested beamline.
+    #[instrument(skip(self))]
     async fn scan_number(&self) -> usize {
         self.service.scan_number()
     }
 
     /// The beamline used to generate this scan information
     /// Should be the same as the beamline passed in.
+    #[instrument(skip(self))]
     async fn beamline(&self) -> &str {
         self.service.beamline()
     }
@@ -165,6 +184,7 @@ impl<B: PathTemplateBackend> ScanPaths<B> {
     /// This is not necessarily the directory where data should be written if subdirectories are
     /// being used, or if detectors should be writing their files to a new directory for each scan.
     /// Use `scan_file` and `detectors` to determine where specific files should be written.
+    #[instrument(skip(self))]
     async fn directory(&self) -> async_graphql::Result<String> {
         Ok(NonUnicodePath::check(
             self.service.visit_directory().await?,
@@ -178,6 +198,7 @@ impl<B: PathTemplateBackend> ScanPaths<B> {
     /// of detectors after this normalisation, there will be duplicate paths in the
     /// results.
     // TODO: The docs here reference the implementation specific behaviour in the normalisation
+    #[instrument(skip(self))]
     async fn detectors(&self, names: Vec<String>) -> async_graphql::Result<Vec<DetectorPath>> {
         Ok(self
             .service
@@ -196,6 +217,7 @@ impl<B: PathTemplateBackend> ScanPaths<B> {
 
 #[Object]
 impl<B: PathTemplateBackend + 'static> Query<B> {
+    #[instrument(skip(self, ctx))]
     async fn paths(
         &self,
         ctx: &Context<'_>,
@@ -210,6 +232,7 @@ impl<B: PathTemplateBackend + 'static> Query<B> {
 
 #[Object]
 impl<B: PathTemplateBackend + ScanNumberBackend + 'static> Mutation<B> {
+    #[instrument(skip(self, ctx))]
     async fn scan<'ctx>(
         &self,
         ctx: &Context<'ctx>,
