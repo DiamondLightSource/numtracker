@@ -6,6 +6,7 @@ use std::path::{Component, Path, PathBuf};
 use paths::{DetectorTemplate, ScanTemplate, VisitTemplate};
 
 pub mod db_service;
+pub mod fallback;
 pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
