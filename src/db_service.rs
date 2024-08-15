@@ -3,6 +3,7 @@ use std::fmt;
 use sqlx::query::QueryScalar;
 use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
 use sqlx::{query_file_scalar, Sqlite, SqlitePool};
+use tracing::{debug, info, instrument};
 
 pub use self::error::SqliteTemplateError;
 use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
@@ -17,7 +18,9 @@ pub struct SqliteScanPathService {
 }
 
 impl SqliteScanPathService {
+    #[instrument]
     pub async fn connect(filename: &str) -> Result<Self, sqlx::Error> {
+        info!("Connecting to SQLite DB");
         let opts = SqliteConnectOptions::new()
             .create_if_missing(true)
             .filename(filename);
@@ -31,18 +34,22 @@ impl SqliteScanPathService {
         &self,
         query: QueryScalar<'bl, Sqlite, String, SqliteArguments<'bl>>,
     ) -> SqliteTemplateResult<F> {
-        Ok(PathTemplate::new(query.fetch_one(&self.pool).await?)?)
+        let template = query.fetch_one(&self.pool).await?;
+        debug!("Template from DB: {template}");
+        Ok(PathTemplate::new(template)?)
     }
 }
 
 impl ScanNumberBackend for SqliteScanPathService {
     type NumberError = sqlx::Error;
     /// Increment and return the latest scan number for the given beamline
+    // #[instrument]
     async fn next_scan_number(&self, beamline: &str) -> Result<usize, sqlx::Error> {
         let mut db = self.pool.begin().await?;
         let next = query_file_scalar!("queries/increment_scan_number.sql", beamline)
             .fetch_one(&mut *db)
             .await? as usize;
+        debug!("Next scan number: {next}");
         db.commit().await?;
         Ok(next)
     }
@@ -50,17 +57,26 @@ impl ScanNumberBackend for SqliteScanPathService {
 
 impl PathTemplateBackend for SqliteScanPathService {
     type TemplateErr = SqliteTemplateError;
-    async fn visit_directory_template(&self, bl: &str) -> SqliteTemplateResult<BeamlineField> {
-        self.template_from(query_file_scalar!("queries/visit_template.sql", bl))
+    #[instrument]
+    async fn visit_directory_template(
+        &self,
+        beamline: &str,
+    ) -> SqliteTemplateResult<BeamlineField> {
+        self.template_from(query_file_scalar!("queries/visit_template.sql", beamline))
             .await
     }
-    async fn scan_file_template(&self, bl: &str) -> SqliteTemplateResult<ScanField> {
-        self.template_from(query_file_scalar!("queries/scan_template.sql", bl))
+    #[instrument]
+    async fn scan_file_template(&self, beamline: &str) -> SqliteTemplateResult<ScanField> {
+        self.template_from(query_file_scalar!("queries/scan_template.sql", beamline))
             .await
     }
-    async fn detector_file_template(&self, bl: &str) -> SqliteTemplateResult<DetectorField> {
-        self.template_from(query_file_scalar!("queries/detector_template.sql", bl))
-            .await
+    #[instrument]
+    async fn detector_file_template(&self, beamline: &str) -> SqliteTemplateResult<DetectorField> {
+        self.template_from(query_file_scalar!(
+            "queries/detector_template.sql",
+            beamline
+        ))
+        .await
     }
 }
 

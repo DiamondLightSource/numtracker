@@ -2,6 +2,7 @@ use std::fs::{self, File, OpenOptions};
 use std::path::{Path, PathBuf};
 
 use fd_lock::{RwLock, RwLockWriteGuard};
+use tracing::{instrument, trace};
 
 use crate::ScanNumberBackend;
 
@@ -29,6 +30,7 @@ impl TempFileLock {
 
 impl Drop for TempFileLock {
     fn drop(&mut self) {
+        trace!("Removing temporary lock file: {:?}", self.0);
         let _ = std::fs::remove_file(&self.0);
     }
 }
@@ -55,7 +57,9 @@ impl GdaNumTracker {
     /// This is an advisory lock only and will only prevent concurrent access by other applications
     /// that are aware of and opt in to respecting this lock. It does not prevent access to the
     /// directory from other uses/processes that don't check.
+    // #[instrument]
     fn file_lock(&self, ext: &str) -> Result<TempFileLock, std::io::Error> {
+        trace!("Creating new file lock for ext: {ext:?}");
         TempFileLock::new(
             self.directory
                 .join(Self::LOCK_FILE_NAME)
@@ -66,12 +70,14 @@ impl GdaNumTracker {
     /// Build the path of the file that would correspond to the given number
     fn file_name(&self, num: usize, ext: &str) -> PathBuf {
         // TODO: protect against extension based path traversal, eg ext='i22/../../somewhere_else'
-        self.directory.join(format!("{num}.{ext}"))
+        self.directory.join(num.to_string()).with_extension(ext)
     }
 
     /// Create a file named for the given number and, if present, remove the file for the previous
     /// number.
+    // #[instrument]
     fn create_num_file(&self, num: usize, ext: &str) -> Result<(), std::io::Error> {
+        trace!("Creating new scan number file: {num}.{ext}");
         let next = self.file_name(num, ext);
         OpenOptions::new().create_new(true).write(true).open(next)?;
         if let Some(prev) = num.checked_sub(1) {
@@ -126,6 +132,7 @@ impl Default for GdaNumTracker {
 impl ScanNumberBackend for GdaNumTracker {
     type NumberError = std::io::Error;
 
+    #[instrument]
     async fn next_scan_number(&self, ext: &str) -> Result<usize, Self::NumberError> {
         // Nothing here is async but the trait expects an async method
         let mut _lock = self.file_lock(ext)?;
