@@ -140,6 +140,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+#[instrument(skip_all, fields(req.headers))]
 async fn graphql_handler<Q, M>(
     schema: Extension<Schema<Query<Q>, Mutation<M>, EmptySubscription>>,
     req: GraphQLRequest,
