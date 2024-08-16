@@ -1,3 +1,5 @@
+use tracing::warn;
+
 use crate::{PathTemplateBackend, ScanNumberBackend};
 
 #[derive(Clone)]
@@ -45,8 +47,8 @@ impl<Backend: ScanNumberBackend, Fallback: ScanNumberBackend> ScanNumberBackend
         let primary = self.primary.next_scan_number(beamline).await?;
         match self.secondary.next_scan_number(beamline).await {
             Ok(num) if num == primary => (), // numbers agree
-            Ok(num) => eprintln!("Fallback numbering mismatch: expected {primary}, found {num}"),
-            Err(e) => eprintln!("Couldn't increment fallback scan number: {e}"),
+            Ok(num) => warn!("Fallback numbering mismatch: expected {primary}, found {num}"),
+            Err(e) => warn!("Couldn't increment fallback scan number: {e}"),
         }
         Ok(primary)
     }
