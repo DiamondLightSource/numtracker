@@ -2,7 +2,6 @@ use std::error::Error;
 use std::fmt::Display;
 use std::marker::PhantomData;
 use std::path::PathBuf;
-use std::time::Duration;
 
 use async_graphql::{Context, EmptySubscription, Object, ObjectType, Schema, SimpleObject};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
@@ -17,8 +16,6 @@ use numtracker::{
 };
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::{global, KeyValue};
-use opentelemetry_sdk::metrics::reader::{DefaultAggregationSelector, DefaultTemporalitySelector};
-use opentelemetry_sdk::metrics::{MeterProviderBuilder, PeriodicReader, SdkMeterProvider};
 use opentelemetry_sdk::trace::{BatchConfig, RandomIdGenerator, Sampler, Tracer};
 use opentelemetry_sdk::{runtime, Resource};
 use opentelemetry_semantic_conventions::resource::{
@@ -27,7 +24,7 @@ use opentelemetry_semantic_conventions::resource::{
 use opentelemetry_semantic_conventions::SCHEMA_URL;
 use tokio::net::TcpListener;
 use tracing::{debug, instrument, Level};
-use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
+use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
@@ -42,32 +39,6 @@ fn resource() -> Resource {
         ],
         SCHEMA_URL,
     )
-}
-
-fn init_metrics() -> SdkMeterProvider {
-    let exporter = opentelemetry_otlp::new_exporter()
-        .tonic()
-        .build_metrics_exporter(
-            Box::new(DefaultAggregationSelector::new()),
-            Box::new(DefaultTemporalitySelector::new()),
-        )
-        .unwrap();
-    let reader = PeriodicReader::builder(exporter, runtime::Tokio)
-        .with_interval(Duration::from_secs(30))
-        .build();
-    let stdout_reader = PeriodicReader::builder(
-        opentelemetry_stdout::MetricsExporter::default(),
-        runtime::Tokio,
-    )
-    .build();
-
-    let meter_provider = MeterProviderBuilder::default()
-        .with_resource(resource())
-        .with_reader(reader)
-        .with_reader(stdout_reader)
-        .build();
-    global::set_meter_provider(meter_provider.clone());
-    meter_provider
 }
 
 fn init_tracer() -> Tracer {
@@ -91,25 +62,21 @@ fn init_tracer() -> Tracer {
 
 fn init_tracing_subscriber() -> OtelGuard {
     let tracer = init_tracer();
-    let metrics = init_metrics();
     tracing_subscriber::registry()
         .with(tracing_subscriber::filter::LevelFilter::from_level(
             Level::DEBUG,
         ))
         .with(tracing_subscriber::fmt::layer())
         .with(OpenTelemetryLayer::new(tracer))
-        .with(MetricsLayer::new(metrics.clone()))
         .init();
-    OtelGuard(metrics)
+    OtelGuard
 }
 
-struct OtelGuard(SdkMeterProvider);
+struct OtelGuard;
 
 impl Drop for OtelGuard {
     fn drop(&mut self) {
-        if let Err(err) = self.0.shutdown() {
-            eprintln!("{err:?}");
-        }
+        debug!("Shutting down tracing");
         opentelemetry::global::shutdown_tracer_provider();
     }
 }
