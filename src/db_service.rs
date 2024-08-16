@@ -35,7 +35,7 @@ impl SqliteScanPathService {
         query: QueryScalar<'bl, Sqlite, String, SqliteArguments<'bl>>,
     ) -> SqliteTemplateResult<F> {
         let template = query.fetch_one(&self.pool).await?;
-        debug!("Template from DB: {template}");
+        debug!(template = template, "Template from DB");
         Ok(PathTemplate::new(template)?)
     }
 }
