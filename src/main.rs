@@ -28,8 +28,6 @@ use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
-type SqliteGda = FallbackScanNumbering<SqliteScanPathService, GdaNumTracker>;
-
 fn resource() -> Resource {
     Resource::from_schema_url(
         [
@@ -87,24 +85,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let backend = SqliteScanPathService::connect("./demo.db").await.unwrap();
     debug!("Using backend: {backend:?}");
 
-    let schema = Schema::build(
-        Query::<SqliteGda>::default(),
-        Mutation::<SqliteGda>::default(),
-        EmptySubscription,
-    )
-    .data(FallbackScanNumbering {
+    serve_graphql(FallbackScanNumbering {
         primary: backend,
         secondary: GdaNumTracker::new("trackers"),
     })
+    .await;
+    Ok(())
+}
+
+async fn serve_graphql<B: PathTemplateBackend + ScanNumberBackend + 'static>(backend: B) {
+    let schema = Schema::build(
+        Query::<B>::default(),
+        Mutation::<B>::default(),
+        EmptySubscription,
+    )
+    .data(backend)
     .finish();
-
     let app = Router::new()
-        .route("/graphql", post(graphql_handler::<SqliteGda, SqliteGda>))
+        .route("/graphql", post(graphql_handler::<B, B>))
         .layer(Extension(schema));
-
     let listener = TcpListener::bind("127.0.0.1:8000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
-    Ok(())
 }
 
 #[instrument(skip_all, fields(req.headers))]
