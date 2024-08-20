@@ -2,7 +2,9 @@ CREATE TABLE number_file_directory (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     beamline INTEGER REFERENCES beamline(id) NOT NULL,
     directory TEXT NOT NULL,
-    extension TEXT NOT NULL
+    extension TEXT NOT NULL,
+    UNIQUE (beamline), -- only one entry per beamline
+    UNIQUE (directory, extension) -- avoid collisions between beamlines
 );
 
 CREATE VIEW beamline_number_file_directory (beamline, directory, extension) AS SELECT
