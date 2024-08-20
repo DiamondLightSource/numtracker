@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT directory, extension\nFROM beamline_number_file_directory\nWHERE beamline = ?;\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "directory",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "extension",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "692d517848fd2d821d144bb4c2f9237ffed350674cfddbc6509fd9f6e0bc2117"
+}

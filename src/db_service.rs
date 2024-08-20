@@ -1,8 +1,9 @@
 use std::fmt;
 
+use sqlx::prelude::FromRow;
 use sqlx::query::QueryScalar;
 use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
-use sqlx::{query_file_scalar, Sqlite, SqlitePool};
+use sqlx::{query_file_as, query_file_scalar, Sqlite, SqlitePool};
 use tracing::{debug, info, instrument};
 
 pub use self::error::SqliteTemplateError;
@@ -17,6 +18,12 @@ pub struct SqliteScanPathService {
     pub pool: SqlitePool,
 }
 
+#[derive(Debug, FromRow)]
+struct NumtrackerConfig {
+    directory: String,
+    extension: String,
+}
+
 impl SqliteScanPathService {
     #[instrument]
     pub async fn connect(filename: &str) -> Result<Self, sqlx::Error> {
@@ -27,6 +34,20 @@ impl SqliteScanPathService {
         let pool = SqlitePool::connect_with(opts).await?;
         sqlx::migrate!().run(&pool).await?;
         Ok(Self { pool })
+    }
+
+    async fn number_tracker_directory(
+        &self,
+        beamline: &str,
+    ) -> Result<Option<NumtrackerConfig>, sqlx::Error> {
+        debug!("Getting number_tracker_directory for {beamline}");
+        query_file_as!(
+            NumtrackerConfig,
+            "queries/number_file_directory.sql",
+            beamline
+        )
+        .fetch_optional(&self.pool)
+        .await
     }
 
     /// Execute a prepared query and parse the returned string into a [`PathTemplate`]
