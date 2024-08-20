@@ -6,15 +6,20 @@ use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
 use sqlx::{query_file_as, query_file_scalar, Sqlite, SqlitePool};
 use tracing::{debug, info, instrument};
 
-pub use self::error::SqliteTemplateError;
+pub use self::error::{SqliteNumberDirectoryError, SqliteTemplateError};
 use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
 use crate::template::PathTemplate;
-use crate::{PathTemplateBackend, ScanNumberBackend};
+use crate::{numtracker, PathTemplateBackend, ScanNumberBackend};
 
 type SqliteTemplateResult<F> = Result<PathTemplate<F>, SqliteTemplateError>;
 
 #[derive(Clone)]
 pub struct SqliteScanPathService {
+    pub pool: SqlitePool,
+}
+
+#[derive(Clone)]
+pub struct SqliteDirectoryNumtracker {
     pub pool: SqlitePool,
 }
 
@@ -34,20 +39,6 @@ impl SqliteScanPathService {
         let pool = SqlitePool::connect_with(opts).await?;
         sqlx::migrate!().run(&pool).await?;
         Ok(Self { pool })
-    }
-
-    async fn number_tracker_directory(
-        &self,
-        beamline: &str,
-    ) -> Result<Option<NumtrackerConfig>, sqlx::Error> {
-        debug!("Getting number_tracker_directory for {beamline}");
-        query_file_as!(
-            NumtrackerConfig,
-            "queries/number_file_directory.sql",
-            beamline
-        )
-        .fetch_optional(&self.pool)
-        .await
     }
 
     /// Execute a prepared query and parse the returned string into a [`PathTemplate`]
@@ -101,11 +92,50 @@ impl PathTemplateBackend for SqliteScanPathService {
     }
 }
 
+impl SqliteDirectoryNumtracker {
+    async fn number_tracker_directory(
+        &self,
+        beamline: &str,
+    ) -> Result<Option<NumtrackerConfig>, sqlx::Error> {
+        debug!("Getting number_tracker_directory for {beamline}");
+        query_file_as!(
+            NumtrackerConfig,
+            "queries/number_file_directory.sql",
+            beamline
+        )
+        .fetch_optional(&self.pool)
+        .await
+    }
+}
+
+impl ScanNumberBackend for SqliteDirectoryNumtracker {
+    type NumberError = SqliteNumberDirectoryError;
+
+    async fn next_scan_number(&self, beamline: &str) -> Result<usize, Self::NumberError> {
+        match self.number_tracker_directory(beamline).await? {
+            Some(nc) => Ok(numtracker::GdaNumTracker::new(nc.directory)
+                .next_scan_number(&nc.extension)
+                .await?),
+            None => Err(SqliteNumberDirectoryError::NotConfigured),
+        }
+    }
+}
+
 impl fmt::Debug for SqliteScanPathService {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // This is a bit misleading when the 'db' field doesn't exist but is the most useful
         // information when debugging the state of the service
         f.debug_struct("SqliteScanPathService")
+            .field("db", &self.pool.connect_options().get_filename())
+            .finish()
+    }
+}
+
+impl fmt::Debug for SqliteDirectoryNumtracker {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // This is a bit misleading when the 'db' field doesn't exist but is the most useful
+        // information when debugging the state of the service
+        f.debug_struct("SqliteDirectoryNumtracker")
             .field("db", &self.pool.connect_options().get_filename())
             .finish()
     }
@@ -151,6 +181,50 @@ mod error {
     impl From<PathTemplateError<InvalidKey>> for SqliteTemplateError {
         fn from(err: PathTemplateError<InvalidKey>) -> Self {
             Self::Invalid(err)
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum SqliteNumberDirectoryError {
+        /// There is no directory configured for the requested beamline
+        NotConfigured,
+        /// The DB could not be accessed or queried
+        NotAccessible(sqlx::Error),
+        /// The directory was not present or not readable
+        NotReabable(std::io::Error),
+    }
+
+    impl Display for SqliteNumberDirectoryError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::NotConfigured => {
+                    f.write_str("No directory configured for the given beamline")
+                }
+                Self::NotAccessible(e) => e.fmt(f),
+                Self::NotReabable(e) => e.fmt(f),
+            }
+        }
+    }
+
+    impl Error for SqliteNumberDirectoryError {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            match self {
+                Self::NotConfigured => None,
+                Self::NotAccessible(e) => Some(e),
+                Self::NotReabable(e) => Some(e),
+            }
+        }
+    }
+
+    impl From<std::io::Error> for SqliteNumberDirectoryError {
+        fn from(value: std::io::Error) -> Self {
+            Self::NotReabable(value)
+        }
+    }
+
+    impl From<sqlx::Error> for SqliteNumberDirectoryError {
+        fn from(value: sqlx::Error) -> Self {
+            Self::NotAccessible(value)
         }
     }
 }
