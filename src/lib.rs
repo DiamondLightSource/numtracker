@@ -200,9 +200,6 @@ impl AsRef<str> for Detector {
 pub struct Subdirectory(PathBuf);
 
 #[derive(Debug)]
-pub struct EmptyUsername;
-
-#[derive(Debug)]
 pub enum InvalidSubdirectory {
     InvalidComponent(usize),
     AbsolutePath,
