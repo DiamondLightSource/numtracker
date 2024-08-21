@@ -83,14 +83,10 @@ impl Drop for OtelGuard {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let _otel = init_tracing_subscriber();
-    let backend = SqliteScanPathService::connect("./demo.db").await.unwrap();
-    debug!("Using backend: {backend:?}");
-
-    serve_graphql(FallbackScanNumbering {
-        primary: backend.clone(),
-        secondary: SqliteDirectoryNumtracker { pool: backend.pool },
-    })
-    .await;
+    let primary = SqliteScanPathService::connect("./demo.db").await.unwrap();
+    let secondary = primary.create_directory_numtracker();
+    debug!("Using backend: {primary:?}");
+    serve_graphql(FallbackScanNumbering { primary, secondary }).await;
     Ok(())
 }
 

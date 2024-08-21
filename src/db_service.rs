@@ -15,12 +15,12 @@ type SqliteTemplateResult<F> = Result<PathTemplate<F>, SqliteTemplateError>;
 
 #[derive(Clone)]
 pub struct SqliteScanPathService {
-    pub pool: SqlitePool,
+    pool: SqlitePool,
 }
 
 #[derive(Clone)]
 pub struct SqliteDirectoryNumtracker {
-    pub pool: SqlitePool,
+    pool: SqlitePool,
 }
 
 #[derive(Debug, FromRow)]
@@ -49,6 +49,11 @@ impl SqliteScanPathService {
         let template = query.fetch_one(&self.pool).await?;
         debug!(template = template, "Template from DB");
         Ok(PathTemplate::new(template)?)
+    }
+    pub fn create_directory_numtracker(&self) -> SqliteDirectoryNumtracker {
+        SqliteDirectoryNumtracker {
+            pool: self.pool.clone(),
+        }
     }
 }
 
