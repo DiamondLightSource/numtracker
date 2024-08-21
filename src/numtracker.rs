@@ -12,6 +12,10 @@ pub struct GdaNumTracker {
     directory: PathBuf,
 }
 
+pub async fn increment_and_get<P: AsRef<Path>>(dir: P, ext: &str) -> Result<usize, std::io::Error> {
+    GdaNumTracker::new(dir.as_ref()).next_scan_number(ext).await
+}
+
 /// Wrapper around file lock that creates, locks and then deletes the file
 struct TempFileLock(PathBuf, RwLock<std_fs::File>);
 

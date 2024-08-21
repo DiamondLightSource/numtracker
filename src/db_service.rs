@@ -113,9 +113,7 @@ impl ScanNumberBackend for SqliteDirectoryNumtracker {
 
     async fn next_scan_number(&self, beamline: &str) -> Result<usize, Self::NumberError> {
         match self.number_tracker_directory(beamline).await? {
-            Some(nc) => Ok(numtracker::GdaNumTracker::new(nc.directory)
-                .next_scan_number(&nc.extension)
-                .await?),
+            Some(nc) => Ok(numtracker::increment_and_get(&nc.directory, &nc.extension).await?),
             None => Err(SqliteNumberDirectoryError::NotConfigured),
         }
     }
