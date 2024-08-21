@@ -1,47 +1,22 @@
 use std::error::Error;
 use std::fmt::Display;
-use std::future::Future;
 use std::path::{Component, Path, PathBuf};
 
-use paths::{DetectorTemplate, ScanTemplate, VisitTemplate};
+use db_service::{SqliteNumberError, SqliteScanPathService, SqliteTemplateError};
 use tracing::{debug, info, instrument};
 
 pub mod db_service;
-pub mod fallback;
 pub mod numtracker;
 pub mod paths;
 pub(crate) mod template;
 
-pub trait ScanNumberBackend: Clone + Sync + Send {
-    type NumberError: Error + Send + Sync;
-    fn next_scan_number(
-        &self,
-        beamline: &str,
-    ) -> impl Future<Output = Result<usize, Self::NumberError>> + Send;
-}
-pub trait PathTemplateBackend: Clone + Sync + Send {
-    type TemplateErr: Error + Send + Sync;
-    fn visit_directory_template(
-        &self,
-        beamline: &str,
-    ) -> impl Future<Output = Result<VisitTemplate, Self::TemplateErr>> + Send;
-    fn scan_file_template(
-        &self,
-        beamline: &str,
-    ) -> impl Future<Output = Result<ScanTemplate, Self::TemplateErr>> + Send;
-    fn detector_file_template(
-        &self,
-        bl: &str,
-    ) -> impl Future<Output = Result<DetectorTemplate, Self::TemplateErr>> + Send;
-}
-
-pub struct VisitService<Backend> {
-    db: Backend,
+pub struct VisitService {
+    db: SqliteScanPathService,
     ctx: BeamlineContext,
 }
 
-pub struct ScanService<Backend> {
-    db: Backend,
+pub struct ScanService {
+    db: SqliteScanPathService,
     ctx: ScanContext,
 }
 
@@ -62,8 +37,8 @@ struct DetectorContext<'bl> {
     scan: &'bl ScanContext,
 }
 
-impl<'bl, Backend> VisitService<Backend> {
-    pub fn new(backend: Backend, ctx: BeamlineContext) -> Self {
+impl<'bl> VisitService {
+    pub fn new(backend: SqliteScanPathService, ctx: BeamlineContext) -> Self {
         Self { db: backend, ctx }
     }
     pub fn beamline(&self) -> &str {
@@ -74,15 +49,12 @@ impl<'bl, Backend> VisitService<Backend> {
     }
 }
 
-impl<'bl, Backend> VisitService<Backend>
-where
-    Backend: ScanNumberBackend,
-{
+impl<'bl> VisitService {
     #[instrument(skip(self))]
     pub async fn new_scan(
         &self,
         subdirectory: Subdirectory,
-    ) -> Result<ScanService<Backend>, Backend::NumberError> {
+    ) -> Result<ScanService, SqliteNumberError> {
         let number = self.db.next_scan_number(&self.ctx.instrument).await?;
         info!("Next scan number for {}: {number}", self.ctx.instrument);
         Ok(ScanService {
@@ -92,12 +64,9 @@ where
     }
 }
 
-impl<'bl, Backend> VisitService<Backend>
-where
-    Backend: PathTemplateBackend,
-{
+impl<'bl> VisitService {
     #[instrument(skip(self))]
-    pub async fn visit_directory(&self) -> Result<PathBuf, Backend::TemplateErr> {
+    pub async fn visit_directory(&self) -> Result<PathBuf, SqliteTemplateError> {
         let template = self
             .db
             .visit_directory_template(&self.ctx.instrument)
@@ -107,10 +76,7 @@ where
     }
 }
 
-impl<Backend> ScanService<Backend>
-where
-    Backend: PathTemplateBackend,
-{
+impl ScanService {
     #[instrument(skip(self))]
     pub fn scan_number(&self) -> usize {
         self.ctx.scan_number
@@ -125,26 +91,27 @@ where
     }
 
     #[instrument(skip(self))]
-    pub async fn visit_directory(&self) -> Result<PathBuf, Backend::TemplateErr> {
+    pub async fn visit_directory(&self) -> Result<PathBuf, SqliteTemplateError> {
         let template = self.db.visit_directory_template(&self.beamline()).await?;
         info!("Visit template: {template:?}");
         Ok(template.render(&self.ctx.beamline))
     }
 
     #[instrument(skip(self))]
-    pub async fn scan_file(&self) -> Result<PathBuf, Backend::TemplateErr> {
-        Ok(self
+    pub async fn scan_file(&self) -> Result<PathBuf, SqliteTemplateError> {
+        let scan_file_template = self
             .db
             .scan_file_template(&self.ctx.beamline.instrument)
-            .await?
-            .render(&self.ctx))
+            .await?;
+        info!("Scan file template: {scan_file_template:?}");
+        Ok(scan_file_template.render(&self.ctx))
     }
 
     #[instrument(skip(self), fields(detectors))]
     pub async fn detector_files<'det>(
         &self,
         detectors: &'det [String],
-    ) -> Result<Vec<(&'det String, PathBuf)>, Backend::TemplateErr> {
+    ) -> Result<Vec<(&'det String, PathBuf)>, SqliteTemplateError> {
         if detectors.is_empty() {
             debug!("Detectors list is empty so skipping template lookup");
             return Ok(vec![]);
@@ -153,7 +120,7 @@ where
             .db
             .detector_file_template(&self.ctx.beamline.instrument)
             .await?;
-        debug!(
+        info!(
             "Detector template for {}: {:?}",
             self.ctx.beamline.instrument, template
         );

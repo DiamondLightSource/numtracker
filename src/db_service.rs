@@ -4,22 +4,17 @@ use sqlx::prelude::FromRow;
 use sqlx::query::QueryScalar;
 use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
 use sqlx::{query_file_as, query_file_scalar, Sqlite, SqlitePool};
-use tracing::{debug, info, instrument};
+use tracing::{debug, info, instrument, warn};
 
 pub use self::error::{SqliteNumberDirectoryError, SqliteNumberError, SqliteTemplateError};
+use crate::numtracker;
 use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
 use crate::template::PathTemplate;
-use crate::{numtracker, PathTemplateBackend, ScanNumberBackend};
 
 type SqliteTemplateResult<F> = Result<PathTemplate<F>, SqliteTemplateError>;
 
 #[derive(Clone)]
 pub struct SqliteScanPathService {
-    pool: SqlitePool,
-}
-
-#[derive(Clone)]
-pub struct SqliteDirectoryNumtracker {
     pool: SqlitePool,
 }
 
@@ -54,17 +49,20 @@ impl SqliteScanPathService {
 
         Ok(PathTemplate::new(template)?)
     }
-    pub fn create_directory_numtracker(&self) -> SqliteDirectoryNumtracker {
-        SqliteDirectoryNumtracker {
-            pool: self.pool.clone(),
+    pub async fn next_scan_number(&self, beamline: &str) -> Result<usize, SqliteNumberError> {
+        let next = self.db_scan_number(beamline).await?;
+        let fallback = self.directory_scan_number(beamline).await;
+        match fallback {
+            Ok(n) if n != next => {
+                warn!("Fallback numbering inconsistent. Expected: {next}, found {n}")
+            }
+            Err(e) => warn!("Error incrementing fallback directory number: {e}"),
+            Ok(_) => {}
         }
+        Ok(next)
     }
-}
-
-impl ScanNumberBackend for SqliteScanPathService {
-    type NumberError = SqliteNumberError;
     /// Increment and return the latest scan number for the given beamline
-    async fn next_scan_number(&self, beamline: &str) -> Result<usize, Self::NumberError> {
+    async fn db_scan_number(&self, beamline: &str) -> Result<usize, SqliteNumberError> {
         let mut db = self.pool.begin().await?;
         let next = query_file_scalar!("queries/increment_scan_number.sql", beamline)
             .fetch_optional(&mut *db)
@@ -77,12 +75,17 @@ impl ScanNumberBackend for SqliteScanPathService {
         db.commit().await?;
         Ok(next)
     }
-}
-
-impl PathTemplateBackend for SqliteScanPathService {
-    type TemplateErr = SqliteTemplateError;
+    async fn directory_scan_number(
+        &self,
+        beamline: &str,
+    ) -> Result<usize, SqliteNumberDirectoryError> {
+        match self.number_tracker_directory(beamline).await? {
+            Some(nc) => Ok(numtracker::increment_and_get(&nc.directory, &nc.extension).await?),
+            None => Err(SqliteNumberDirectoryError::NotConfigured),
+        }
+    }
     #[instrument]
-    async fn visit_directory_template(
+    pub async fn visit_directory_template(
         &self,
         beamline: &str,
     ) -> SqliteTemplateResult<BeamlineField> {
@@ -90,21 +93,21 @@ impl PathTemplateBackend for SqliteScanPathService {
             .await
     }
     #[instrument]
-    async fn scan_file_template(&self, beamline: &str) -> SqliteTemplateResult<ScanField> {
+    pub async fn scan_file_template(&self, beamline: &str) -> SqliteTemplateResult<ScanField> {
         self.template_from(query_file_scalar!("queries/scan_template.sql", beamline))
             .await
     }
     #[instrument]
-    async fn detector_file_template(&self, beamline: &str) -> SqliteTemplateResult<DetectorField> {
+    pub async fn detector_file_template(
+        &self,
+        beamline: &str,
+    ) -> SqliteTemplateResult<DetectorField> {
         self.template_from(query_file_scalar!(
             "queries/detector_template.sql",
             beamline
         ))
         .await
     }
-}
-
-impl SqliteDirectoryNumtracker {
     async fn number_tracker_directory(
         &self,
         beamline: &str,
@@ -120,32 +123,11 @@ impl SqliteDirectoryNumtracker {
     }
 }
 
-impl ScanNumberBackend for SqliteDirectoryNumtracker {
-    type NumberError = SqliteNumberDirectoryError;
-
-    async fn next_scan_number(&self, beamline: &str) -> Result<usize, Self::NumberError> {
-        match self.number_tracker_directory(beamline).await? {
-            Some(nc) => Ok(numtracker::increment_and_get(&nc.directory, &nc.extension).await?),
-            None => Err(SqliteNumberDirectoryError::NotConfigured),
-        }
-    }
-}
-
 impl fmt::Debug for SqliteScanPathService {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // This is a bit misleading when the 'db' field doesn't exist but is the most useful
         // information when debugging the state of the service
         f.debug_struct("SqliteScanPathService")
-            .field("db", &self.pool.connect_options().get_filename())
-            .finish()
-    }
-}
-
-impl fmt::Debug for SqliteDirectoryNumtracker {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // This is a bit misleading when the 'db' field doesn't exist but is the most useful
-        // information when debugging the state of the service
-        f.debug_struct("SqliteDirectoryNumtracker")
             .field("db", &self.pool.connect_options().get_filename())
             .finish()
     }

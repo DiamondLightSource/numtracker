@@ -5,8 +5,6 @@ use fd_lock::{RwLock, RwLockWriteGuard};
 use tokio::fs as async_fs;
 use tracing::{instrument, trace};
 
-use crate::ScanNumberBackend;
-
 #[derive(Debug, Clone)]
 pub struct GdaNumTracker {
     directory: PathBuf,
@@ -123,6 +121,14 @@ impl GdaNumTracker {
         }
         Ok(high)
     }
+    #[instrument]
+    pub async fn next_scan_number(&self, ext: &str) -> Result<usize, std::io::Error> {
+        let mut _lock = self.file_lock(ext)?;
+        let _f = _lock.lock()?;
+        let next = self.high_file(ext).await? + 1;
+        self.create_num_file(next, ext).await?;
+        Ok(next)
+    }
 }
 
 impl Default for GdaNumTracker {
@@ -135,18 +141,5 @@ impl Default for GdaNumTracker {
     /// ```
     fn default() -> Self {
         Self::new("/tmp/")
-    }
-}
-
-impl ScanNumberBackend for GdaNumTracker {
-    type NumberError = std::io::Error;
-
-    #[instrument]
-    async fn next_scan_number(&self, ext: &str) -> Result<usize, Self::NumberError> {
-        let mut _lock = self.file_lock(ext)?;
-        let _f = _lock.lock()?;
-        let next = self.high_file(ext).await? + 1;
-        self.create_num_file(next, ext).await?;
-        Ok(next)
     }
 }

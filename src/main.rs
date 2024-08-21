@@ -1,20 +1,15 @@
 use std::error::Error;
 use std::fmt::Display;
-use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use async_graphql::http::GraphiQLSource;
-use async_graphql::{Context, EmptySubscription, Object, ObjectType, Schema, SimpleObject};
+use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject};
 use async_graphql_axum::{GraphQL, GraphQLRequest, GraphQLResponse};
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
-use numtracker::db_service::{SqliteDirectoryNumtracker, SqliteScanPathService};
-use numtracker::fallback::FallbackScanNumbering;
-use numtracker::{
-    BeamlineContext, PathTemplateBackend, ScanNumberBackend, ScanService, Subdirectory,
-    VisitService,
-};
+use numtracker::db_service::SqliteScanPathService;
+use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService};
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::{global, KeyValue};
 use opentelemetry_sdk::trace::{BatchConfig, RandomIdGenerator, Sampler, Tracer};
@@ -83,23 +78,17 @@ impl Drop for OtelGuard {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let _otel = init_tracing_subscriber();
-    let primary = SqliteScanPathService::connect("./demo.db").await.unwrap();
-    let secondary = primary.create_directory_numtracker();
-    debug!("Using backend: {primary:?}");
-    serve_graphql(FallbackScanNumbering { primary, secondary }).await;
+    let db = SqliteScanPathService::connect("./demo.db").await.unwrap();
+    serve_graphql(db).await;
     Ok(())
 }
 
-async fn serve_graphql<B: PathTemplateBackend + ScanNumberBackend + 'static>(backend: B) {
-    let schema = Schema::build(
-        Query::<B>::default(),
-        Mutation::<B>::default(),
-        EmptySubscription,
-    )
-    .data(backend)
-    .finish();
+async fn serve_graphql(db: SqliteScanPathService) {
+    let schema = Schema::build(Query, Mutation, EmptySubscription)
+        .data(db)
+        .finish();
     let app = Router::new()
-        .route("/graphql", post(graphql_handler::<B, B>))
+        .route("/graphql", post(graphql_handler))
         .route(
             "/graphiql",
             get(graphiql).post_service(GraphQL::new(schema.clone())),
@@ -114,16 +103,10 @@ async fn graphiql() -> impl IntoResponse {
 }
 
 #[instrument(skip_all, fields(req.headers))]
-async fn graphql_handler<Q, M>(
-    schema: Extension<Schema<Query<Q>, Mutation<M>, EmptySubscription>>,
+async fn graphql_handler(
+    schema: Extension<Schema<Query, Mutation, EmptySubscription>>,
     req: GraphQLRequest,
-) -> GraphQLResponse
-where
-    Q: 'static,
-    M: 'static,
-    Query<Q>: ObjectType,
-    Mutation<M>: ObjectType,
-{
+) -> GraphQLResponse {
     schema.execute(req.into_inner()).await.into()
 }
 
@@ -131,23 +114,13 @@ where
 ///
 /// Generic type is only required so the type of service to be retrieved from the context can be
 /// accessed.
-struct Query<B>(PhantomData<B>);
-impl<B> Default for Query<B> {
-    fn default() -> Self {
-        Self(Default::default())
-    }
-}
+struct Query;
 
 /// Read-write API for GraphQL
 ///
 /// Generic type is only required so the type of service to be retrieved from the context can be
 /// accessed.
-struct Mutation<B>(PhantomData<B>);
-impl<B> Default for Mutation<B> {
-    fn default() -> Self {
-        Self(Default::default())
-    }
-}
+struct Mutation;
 
 /// GraphQL type to mimic a key-value pair from the map type that GraphQL doesn't have
 #[derive(SimpleObject)]
@@ -157,13 +130,13 @@ struct DetectorPath {
 }
 
 /// GraphQL type to provide path data for a specific visit
-struct VisitPath<B: PathTemplateBackend> {
-    service: VisitService<B>,
+struct VisitPath {
+    service: VisitService,
 }
 
 /// GraphQL type to provide path data for the next scan for a given visit
-struct ScanPaths<B> {
-    service: ScanService<B>,
+struct ScanPaths {
+    service: ScanService,
 }
 
 #[derive(Debug)]
@@ -188,7 +161,7 @@ impl Display for NonUnicodePath {
 impl Error for NonUnicodePath {}
 
 #[Object]
-impl<B: PathTemplateBackend> VisitPath<B> {
+impl VisitPath {
     #[instrument(skip(self))]
     async fn visit(&self) -> &str {
         self.service.visit()
@@ -205,7 +178,7 @@ impl<B: PathTemplateBackend> VisitPath<B> {
 }
 
 #[Object]
-impl<B: PathTemplateBackend> ScanPaths<B> {
+impl ScanPaths {
     /// The visit used to generate this scan information
     /// Should be the same as the visit passed in
     #[instrument(skip(self))]
@@ -270,22 +243,22 @@ impl<B: PathTemplateBackend> ScanPaths<B> {
 }
 
 #[Object]
-impl<B: PathTemplateBackend + 'static> Query<B> {
+impl Query {
     #[instrument(skip(self, ctx))]
     async fn paths(
         &self,
         ctx: &Context<'_>,
         beamline: String,
         visit: String,
-    ) -> async_graphql::Result<VisitPath<B>> {
-        let db = ctx.data::<B>()?;
+    ) -> async_graphql::Result<VisitPath> {
+        let db = ctx.data::<SqliteScanPathService>()?;
         let service = VisitService::new(db.clone(), BeamlineContext::new(beamline, visit));
         Ok(VisitPath { service })
     }
 }
 
 #[Object]
-impl<B: PathTemplateBackend + ScanNumberBackend + 'static> Mutation<B> {
+impl Mutation {
     #[instrument(skip(self, ctx))]
     async fn scan<'ctx>(
         &self,
@@ -293,8 +266,8 @@ impl<B: PathTemplateBackend + ScanNumberBackend + 'static> Mutation<B> {
         beamline: String,
         visit: String,
         sub: Option<String>,
-    ) -> async_graphql::Result<ScanPaths<B>> {
-        let db = ctx.data::<B>()?;
+    ) -> async_graphql::Result<ScanPaths> {
+        let db = ctx.data::<SqliteScanPathService>()?;
         let service = VisitService::new(db.clone(), BeamlineContext::new(beamline, visit));
         let sub = Subdirectory::new(sub.unwrap_or_default())?;
         let service = service.new_scan(sub).await?;
