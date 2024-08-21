@@ -1,7 +1,8 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs as std_fs;
 use std::path::{Path, PathBuf};
 
 use fd_lock::{RwLock, RwLockWriteGuard};
+use tokio::fs as async_fs;
 use tracing::{instrument, trace};
 
 use crate::ScanNumberBackend;
@@ -12,18 +13,18 @@ pub struct GdaNumTracker {
 }
 
 /// Wrapper around file lock that creates, locks and then deletes the file
-struct TempFileLock(PathBuf, RwLock<File>);
+struct TempFileLock(PathBuf, RwLock<std_fs::File>);
 
 impl TempFileLock {
     fn new(path: PathBuf) -> Result<Self, std::io::Error> {
-        let lock = OpenOptions::new()
+        let lock = std_fs::OpenOptions::new()
             .create_new(true)
             .truncate(true)
             .write(true)
             .open(&path)?;
         Ok(Self(path, RwLock::new(lock)))
     }
-    fn lock(&mut self) -> Result<RwLockWriteGuard<'_, File>, std::io::Error> {
+    fn lock(&mut self) -> Result<RwLockWriteGuard<'_, std_fs::File>, std::io::Error> {
         self.1.try_write()
     }
 }
@@ -31,7 +32,7 @@ impl TempFileLock {
 impl Drop for TempFileLock {
     fn drop(&mut self) {
         trace!("Removing temporary lock file: {:?}", self.0);
-        let _ = std::fs::remove_file(&self.0);
+        let _ = std_fs::remove_file(&self.0);
     }
 }
 
@@ -76,13 +77,17 @@ impl GdaNumTracker {
     /// Create a file named for the given number and, if present, remove the file for the previous
     /// number.
     // #[instrument]
-    fn create_num_file(&self, num: usize, ext: &str) -> Result<(), std::io::Error> {
+    async fn create_num_file(&self, num: usize, ext: &str) -> Result<(), std::io::Error> {
         trace!("Creating new scan number file: {num}.{ext}");
         let next = self.file_name(num, ext);
-        OpenOptions::new().create_new(true).write(true).open(next)?;
+        async_fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(next)
+            .await?;
         if let Some(prev) = num.checked_sub(1) {
             let prev = self.file_name(prev, ext);
-            let _ = fs::remove_file(prev);
+            let _ = async_fs::remove_file(prev).await;
         }
         Ok(())
     }
@@ -101,11 +106,11 @@ impl GdaNumTracker {
     }
 
     /// Find the highest number that has a corresponding number file in this tracker's directory
-    fn high_file(&self, ext: &str) -> Result<usize, std::io::Error> {
+    async fn high_file(&self, ext: &str) -> Result<usize, std::io::Error> {
         let mut high = 0;
-        for file in self.directory.read_dir()? {
-            let file = file?;
-            if !file.file_type()?.is_file() {
+        let mut dir = async_fs::read_dir(&self.directory).await?;
+        while let Some(file) = dir.next_entry().await? {
+            if !file.file_type().await?.is_file() {
                 continue;
             }
             if let Some(val) = self.file_num(&file.path(), ext) {
@@ -134,11 +139,10 @@ impl ScanNumberBackend for GdaNumTracker {
 
     #[instrument]
     async fn next_scan_number(&self, ext: &str) -> Result<usize, Self::NumberError> {
-        // Nothing here is async but the trait expects an async method
         let mut _lock = self.file_lock(ext)?;
         let _f = _lock.lock()?;
-        let next = self.high_file(ext)? + 1;
-        self.create_num_file(next, ext)?;
+        let next = self.high_file(ext).await? + 1;
+        self.create_num_file(next, ext).await?;
         Ok(next)
     }
 }
