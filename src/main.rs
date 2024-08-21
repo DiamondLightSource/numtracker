@@ -3,9 +3,11 @@ use std::fmt::Display;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
+use async_graphql::http::GraphiQLSource;
 use async_graphql::{Context, EmptySubscription, Object, ObjectType, Schema, SimpleObject};
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
-use axum::routing::post;
+use async_graphql_axum::{GraphQL, GraphQLRequest, GraphQLResponse};
+use axum::response::{Html, IntoResponse};
+use axum::routing::{get, post};
 use axum::{Extension, Router};
 use numtracker::db_service::{SqliteDirectoryNumtracker, SqliteScanPathService};
 use numtracker::fallback::FallbackScanNumbering;
@@ -102,9 +104,17 @@ async fn serve_graphql<B: PathTemplateBackend + ScanNumberBackend + 'static>(bac
     .finish();
     let app = Router::new()
         .route("/graphql", post(graphql_handler::<B, B>))
+        .route(
+            "/graphiql",
+            get(graphiql).post_service(GraphQL::new(schema.clone())),
+        )
         .layer(Extension(schema));
     let listener = TcpListener::bind("127.0.0.1:8000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn graphiql() -> impl IntoResponse {
+    Html(GraphiQLSource::build().endpoint("graphiql").finish())
 }
 
 #[instrument(skip_all, fields(req.headers))]
