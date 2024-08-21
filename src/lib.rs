@@ -57,7 +57,7 @@ pub struct ScanContext {
     beamline: BeamlineContext,
 }
 
-pub struct DetectorContext<'bl> {
+struct DetectorContext<'bl> {
     detector: Detector,
     scan: &'bl ScanContext,
 }
