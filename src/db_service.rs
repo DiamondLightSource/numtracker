@@ -6,7 +6,7 @@ use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
 use sqlx::{query_file_as, query_file_scalar, Sqlite, SqlitePool};
 use tracing::{debug, info, instrument};
 
-pub use self::error::{SqliteNumberDirectoryError, SqliteTemplateError};
+pub use self::error::{SqliteNumberDirectoryError, SqliteNumberError, SqliteTemplateError};
 use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
 use crate::template::PathTemplate;
 use crate::{numtracker, PathTemplateBackend, ScanNumberBackend};
@@ -46,8 +46,12 @@ impl SqliteScanPathService {
         &self,
         query: QueryScalar<'bl, Sqlite, String, SqliteArguments<'bl>>,
     ) -> SqliteTemplateResult<F> {
-        let template = query.fetch_one(&self.pool).await?;
+        let template = query
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(SqliteTemplateError::BeamlineNotFound)?;
         debug!(template = template, "Template from DB");
+
         Ok(PathTemplate::new(template)?)
     }
     pub fn create_directory_numtracker(&self) -> SqliteDirectoryNumtracker {
@@ -58,14 +62,17 @@ impl SqliteScanPathService {
 }
 
 impl ScanNumberBackend for SqliteScanPathService {
-    type NumberError = sqlx::Error;
+    type NumberError = SqliteNumberError;
     /// Increment and return the latest scan number for the given beamline
-    // #[instrument]
-    async fn next_scan_number(&self, beamline: &str) -> Result<usize, sqlx::Error> {
+    async fn next_scan_number(&self, beamline: &str) -> Result<usize, Self::NumberError> {
         let mut db = self.pool.begin().await?;
         let next = query_file_scalar!("queries/increment_scan_number.sql", beamline)
-            .fetch_one(&mut *db)
-            .await? as usize;
+            .fetch_optional(&mut *db)
+            .await?
+            .ok_or(SqliteNumberError::BeamlineNotFound)?;
+        let next = next
+            .try_into()
+            .map_err(|_| SqliteNumberError::InvalidValue(next))?;
         debug!("Next scan number: {next}");
         db.commit().await?;
         Ok(next)
@@ -156,9 +163,9 @@ mod error {
     #[derive(Debug)]
     pub enum SqliteTemplateError {
         /// It wasn't possible to get the requested template from the database.
-        /// It may not be present or there may have been a connection problem accessing the
-        /// database.
-        Unavailable(sqlx::Error),
+        ConnectionError(sqlx::Error),
+        /// There is no template available for the requested beamline
+        BeamlineNotFound,
         /// The template was present in the database but it could not be parsed into a valid
         /// [`PathTemplate`].
         Invalid(PathTemplateError<InvalidKey>),
@@ -167,7 +174,8 @@ mod error {
     impl Display for SqliteTemplateError {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                Self::Unavailable(e) => write!(f, "Could not retrieve template: {e}"),
+                Self::ConnectionError(e) => write!(f, "Could not access database: {e}"),
+                Self::BeamlineNotFound => f.write_str("No template found for beamline"),
                 Self::Invalid(e) => write!(f, "Template is not valid: {e}"),
             }
         }
@@ -177,13 +185,45 @@ mod error {
 
     impl From<sqlx::Error> for SqliteTemplateError {
         fn from(sql: sqlx::Error) -> Self {
-            Self::Unavailable(sql)
+            Self::ConnectionError(sql)
         }
     }
 
     impl From<PathTemplateError<InvalidKey>> for SqliteTemplateError {
         fn from(err: PathTemplateError<InvalidKey>) -> Self {
             Self::Invalid(err)
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum SqliteNumberError {
+        BeamlineNotFound,
+        ConnectionError(sqlx::Error),
+        InvalidValue(i64),
+    }
+
+    impl Display for SqliteNumberError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::BeamlineNotFound => f.write_str("No scan number configured for beamline"),
+                Self::ConnectionError(e) => write!(f, "Could not access DB: {e}"),
+                Self::InvalidValue(v) => write!(f, "Scan number {v} in DB is not valid"),
+            }
+        }
+    }
+
+    impl Error for SqliteNumberError {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            match self {
+                Self::BeamlineNotFound | Self::InvalidValue(_) => None,
+                Self::ConnectionError(e) => Some(e),
+            }
+        }
+    }
+
+    impl From<sqlx::Error> for SqliteNumberError {
+        fn from(value: sqlx::Error) -> Self {
+            Self::ConnectionError(value)
         }
     }
 
