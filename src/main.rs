@@ -7,9 +7,8 @@ use async_graphql::{Context, EmptySubscription, Object, ObjectType, Schema, Simp
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::routing::post;
 use axum::{Extension, Router};
-use numtracker::db_service::SqliteScanPathService;
+use numtracker::db_service::{SqliteDirectoryNumtracker, SqliteScanPathService};
 use numtracker::fallback::FallbackScanNumbering;
-use numtracker::numtracker::GdaNumTracker;
 use numtracker::{
     BeamlineContext, PathTemplateBackend, ScanNumberBackend, ScanService, Subdirectory,
     VisitService,
@@ -86,8 +85,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     debug!("Using backend: {backend:?}");
 
     serve_graphql(FallbackScanNumbering {
-        primary: backend,
-        secondary: GdaNumTracker::new("trackers"),
+        primary: backend.clone(),
+        secondary: SqliteDirectoryNumtracker { pool: backend.pool },
     })
     .await;
     Ok(())
