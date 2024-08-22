@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use async_graphql::http::GraphiQLSource;
 use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject};
-use async_graphql_axum::{GraphQL, GraphQLRequest, GraphQLResponse};
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
@@ -90,19 +90,17 @@ async fn serve_graphql(db: SqliteScanPathService) {
         .finish();
     let app = Router::new()
         .route("/graphql", post(graphql_handler))
-        .route(
-            "/graphiql",
-            get(graphiql).post_service(GraphQL::new(schema.clone())),
-        )
+        .route("/graphiql", get(graphiql))
         .layer(Extension(schema));
     let listener = TcpListener::bind("127.0.0.1:8000").await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
 async fn graphiql() -> impl IntoResponse {
-    Html(GraphiQLSource::build().endpoint("graphiql").finish())
+    Html(GraphiQLSource::build().endpoint("/graphql").finish())
 }
 
+#[instrument(skip_all)]
 async fn graphql_handler(
     schema: Extension<Schema<Query, Mutation, EmptySubscription>>,
     req: GraphQLRequest,
