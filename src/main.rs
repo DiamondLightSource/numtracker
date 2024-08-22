@@ -85,6 +85,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 async fn serve_graphql(db: SqliteScanPathService) {
     let schema = Schema::build(Query, Mutation, EmptySubscription)
+        .extension(async_graphql::extensions::Tracing)
         .data(db)
         .finish();
     let app = Router::new()
@@ -102,7 +103,6 @@ async fn graphiql() -> impl IntoResponse {
     Html(GraphiQLSource::build().endpoint("graphiql").finish())
 }
 
-#[instrument(skip_all, fields(req.headers))]
 async fn graphql_handler(
     schema: Extension<Schema<Query, Mutation, EmptySubscription>>,
     req: GraphQLRequest,
