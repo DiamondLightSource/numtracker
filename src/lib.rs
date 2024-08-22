@@ -47,9 +47,7 @@ impl<'bl> VisitService {
     pub fn visit(&self) -> &str {
         &self.ctx.visit
     }
-}
 
-impl<'bl> VisitService {
     #[instrument(skip(self))]
     pub async fn new_scan(
         &self,
@@ -62,9 +60,7 @@ impl<'bl> VisitService {
             ctx: self.ctx.for_scan(number, subdirectory),
         })
     }
-}
 
-impl<'bl> VisitService {
     #[instrument(skip(self))]
     pub async fn visit_directory(&self) -> Result<PathBuf, SqliteTemplateError> {
         let template = self
