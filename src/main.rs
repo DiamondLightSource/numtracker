@@ -19,8 +19,9 @@ use opentelemetry_semantic_conventions::resource::{
 };
 use opentelemetry_semantic_conventions::SCHEMA_URL;
 use tokio::net::TcpListener;
-use tracing::{debug, instrument, Level};
+use tracing::{instrument, Level};
 use tracing_opentelemetry::OpenTelemetryLayer;
+use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt as _;
 
@@ -54,30 +55,18 @@ fn init_tracer() -> Tracer {
     provider.tracer("visit-service")
 }
 
-fn init_tracing_subscriber() -> OtelGuard {
+fn init_tracing_subscriber() {
     let tracer = init_tracer();
     tracing_subscriber::registry()
-        .with(tracing_subscriber::filter::LevelFilter::from_level(
-            Level::DEBUG,
-        ))
+        .with(LevelFilter::from_level(Level::DEBUG))
         .with(tracing_subscriber::fmt::layer())
         .with(OpenTelemetryLayer::new(tracer))
         .init();
-    OtelGuard
-}
-
-struct OtelGuard;
-
-impl Drop for OtelGuard {
-    fn drop(&mut self) {
-        debug!("Shutting down tracing");
-        opentelemetry::global::shutdown_tracer_provider();
-    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let _otel = init_tracing_subscriber();
+    init_tracing_subscriber();
     let db = SqliteScanPathService::connect("./demo.db").await.unwrap();
     serve_graphql(db).await;
     Ok(())
