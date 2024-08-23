@@ -2,6 +2,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::path::PathBuf;
 
+use async_graphql::extensions::Tracing;
 use async_graphql::http::GraphiQLSource;
 use async_graphql::{Context, EmptySubscription, Object, Schema, SimpleObject};
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
@@ -10,63 +11,14 @@ use axum::routing::{get, post};
 use axum::{Extension, Router};
 use numtracker::db_service::SqliteScanPathService;
 use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService};
-use opentelemetry::trace::TracerProvider as _;
-use opentelemetry::{global, KeyValue};
-use opentelemetry_sdk::trace::{BatchConfig, RandomIdGenerator, Sampler, Tracer};
-use opentelemetry_sdk::{runtime, Resource};
-use opentelemetry_semantic_conventions::resource::{
-    DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, SERVICE_VERSION,
-};
-use opentelemetry_semantic_conventions::SCHEMA_URL;
 use tokio::net::TcpListener;
-use tracing::{instrument, Level};
-use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt as _;
+use tracing::instrument;
 
-fn resource() -> Resource {
-    Resource::from_schema_url(
-        [
-            KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
-            KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
-            KeyValue::new(DEPLOYMENT_ENVIRONMENT, "dev"),
-        ],
-        SCHEMA_URL,
-    )
-}
-
-fn init_tracer() -> Tracer {
-    let provider = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_trace_config(
-            opentelemetry_sdk::trace::Config::default()
-                .with_sampler(Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
-                    1.0,
-                ))))
-                .with_id_generator(RandomIdGenerator::default())
-                .with_resource(resource()),
-        )
-        .with_batch_config(BatchConfig::default())
-        .with_exporter(opentelemetry_otlp::new_exporter().tonic())
-        .install_batch(runtime::Tokio)
-        .unwrap();
-    global::set_tracer_provider(provider.clone());
-    provider.tracer("visit-service")
-}
-
-fn init_tracing_subscriber() {
-    let tracer = init_tracer();
-    tracing_subscriber::registry()
-        .with(LevelFilter::from_level(Level::DEBUG))
-        .with(tracing_subscriber::fmt::layer())
-        .with(OpenTelemetryLayer::new(tracer))
-        .init();
-}
+mod logging;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    init_tracing_subscriber();
+    logging::init_tracing();
     let db = SqliteScanPathService::connect("./demo.db").await.unwrap();
     serve_graphql(db).await;
     Ok(())
@@ -74,7 +26,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 async fn serve_graphql(db: SqliteScanPathService) {
     let schema = Schema::build(Query, Mutation, EmptySubscription)
-        .extension(async_graphql::extensions::Tracing)
+        .extension(Tracing)
         .data(db)
         .finish();
     let app = Router::new()
