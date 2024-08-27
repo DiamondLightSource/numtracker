@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{self, Debug, Display};
 
 use chrono::{Datelike, Local};
 
@@ -32,11 +32,41 @@ pub enum DetectorField {
     Scan(ScanField),
 }
 
+impl Display for BeamlineField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            BeamlineField::Year => f.write_str("year"),
+            BeamlineField::Visit => f.write_str("visit"),
+            BeamlineField::Proposal => f.write_str("proposal"),
+            BeamlineField::Instrument => f.write_str("instrument"),
+        }
+    }
+}
+
+impl Display for ScanField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ScanField::Subdirectory => f.write_str("subdirectory"),
+            ScanField::ScanNumber => f.write_str("scan_number"),
+            ScanField::Beamline(bl) => write!(f, "{bl}"),
+        }
+    }
+}
+
+impl Display for DetectorField {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DetectorField::Detector => f.write_str("detector"),
+            DetectorField::Scan(sc) => write!(f, "{sc}"),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct InvalidKey(String);
 
 impl Display for InvalidKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Unrecognised key: {}", self.0)
     }
 }

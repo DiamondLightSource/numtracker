@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 use std::error::Error;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::path::{Component, PathBuf};
 
 pub trait FieldSource<F> {
@@ -12,15 +12,45 @@ enum Part<Field> {
     Literal(String),
     Field(Field),
 }
+
 #[derive(Debug)]
 pub struct Template<Field> {
     parts: Vec<Part<Field>>,
+}
+
+impl<F: Display> Display for Template<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for p in &self.parts {
+            match p {
+                Part::Literal(lit) => f.write_str(lit.as_str())?,
+                Part::Field(fld) => write!(f, "{{{fld}}}")?,
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
 pub struct PathTemplate<Field> {
     parts: Vec<Template<Field>>,
     kind: PathType,
+}
+
+impl<F: Display> Display for PathTemplate<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.kind == PathType::Absolute {
+            f.write_str("/")?;
+        }
+        let mut parts = self.parts.iter();
+        if let Some(p) = parts.next() {
+            p.fmt(f)?;
+            for p in parts {
+                f.write_str("/")?;
+                p.fmt(f)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
