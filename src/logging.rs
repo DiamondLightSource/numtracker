@@ -14,6 +14,7 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::{EnvFilter, Layer};
+use url::Url;
 
 use crate::cli::TracingOptions;
 
@@ -28,30 +29,40 @@ fn resource() -> Resource {
     )
 }
 
-fn init_stdout<S>() -> impl Layer<S>
+fn init_stdout<S>(level: Option<Level>) -> impl Layer<S>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    tracing_subscriber::fmt::layer()
+    level.map(|lvl| tracing_subscriber::fmt::layer().with_filter(LevelFilter::from_level(lvl)))
 }
 
-fn init_tracing<S>() -> Result<impl Layer<S>, TraceError>
+fn init_tracing<S>(endpoint: Option<Url>, level: Level) -> Result<impl Layer<S>, TraceError>
 where
     S: Subscriber + for<'s> LookupSpan<'s>,
 {
-    let provider = new_pipeline()
-        .tracing()
-        .with_trace_config(Config::default().with_resource(resource()))
-        .with_exporter(opentelemetry_otlp::new_exporter().tonic())
-        .install_batch(runtime::Tokio)?;
-    global::set_tracer_provider(provider.clone());
-    let tracer = provider.tracer("visit-service");
-    Ok(OpenTelemetryLayer::new(tracer).with_filter(LevelFilter::INFO))
+    if let Some(endpoint) = endpoint {
+        let provider = new_pipeline()
+            .tracing()
+            .with_trace_config(Config::default().with_resource(resource()))
+            .with_exporter(
+                opentelemetry_otlp::new_exporter()
+                    .tonic()
+                    .with_endpoint(endpoint),
+            )
+            .install_batch(runtime::Tokio)?;
+        global::set_tracer_provider(provider.clone());
+        let tracer = provider.tracer("visit-service");
+        Ok(Some(
+            OpenTelemetryLayer::new(tracer).with_filter(LevelFilter::from_level(level)),
+        ))
+    } else {
+        Ok(None)
+    }
 }
 
-pub fn init_logging() -> Result<(), TraceError> {
-    let log_layer = init_stdout();
-    let trace_layer = init_tracing()?;
+pub fn init_logging(logging: Option<Level>, tracing: &TracingOptions) -> Result<(), TraceError> {
+    let log_layer = init_stdout(logging);
+    let trace_layer = init_tracing(tracing.tracing_url(), tracing.level())?;
 
     // Whatever level is set for logging/tracing, ignore the noise from the low-level libraries
     let filter = EnvFilter::new("trace") // let everything through

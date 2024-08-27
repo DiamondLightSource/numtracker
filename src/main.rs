@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::fmt::Display;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use async_graphql::extensions::Tracing;
 use async_graphql::http::GraphiQLSource;
@@ -9,22 +9,28 @@ use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
+use cli::{Cli, Command, ServeOptions};
 use numtracker::db_service::SqliteScanPathService;
 use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService};
 use tokio::net::TcpListener;
 use tracing::instrument;
 
+mod cli;
 mod logging;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let _ = logging::init_logging();
-    let db = SqliteScanPathService::connect("./demo.db").await.unwrap();
-    serve_graphql(db).await;
+    let args = Cli::init();
+    let _ = logging::init_logging(args.log_level(), args.tracing());
+    println!("{args:#?}");
+    match args.command {
+        Command::Serve(opts) => serve_graphql(&args.db, opts).await,
+    }
     Ok(())
 }
 
-async fn serve_graphql(db: SqliteScanPathService) {
+async fn serve_graphql(db: &Path, opts: ServeOptions) {
+    let db = SqliteScanPathService::connect(db).await.unwrap();
     let schema = Schema::build(Query, Mutation, EmptySubscription)
         .extension(Tracing)
         .data(db)
@@ -33,7 +39,7 @@ async fn serve_graphql(db: SqliteScanPathService) {
         .route("/graphql", post(graphql_handler))
         .route("/graphiql", get(graphiql))
         .layer(Extension(schema));
-    let listener = TcpListener::bind("127.0.0.1:8000").await.unwrap();
+    let listener = TcpListener::bind(opts.addr()).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 

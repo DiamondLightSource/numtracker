@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::Path;
 
 use sqlx::prelude::FromRow;
 use sqlx::query::QueryScalar;
@@ -26,7 +27,7 @@ struct NumtrackerConfig {
 
 impl SqliteScanPathService {
     #[instrument]
-    pub async fn connect(filename: &str) -> Result<Self, sqlx::Error> {
+    pub async fn connect(filename: &Path) -> Result<Self, sqlx::Error> {
         info!("Connecting to SQLite DB");
         let opts = SqliteConnectOptions::new()
             .create_if_missing(true)

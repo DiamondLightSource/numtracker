@@ -8,6 +8,8 @@ async-graphql = { version = "7.0.7", features = ["tracing"] }
 async-graphql-axum = "7.0.7"
 axum = "0.7.5"
 chrono = "0.4.38"
+clap = { version = "4.5.16", features = ["cargo", "derive"] }
+clap-verbosity-flag = "2.2.1"
 fd-lock = "4.0.2"
 opentelemetry = "0.24.0"
 opentelemetry-otlp = "0.17.0"
@@ -19,3 +21,4 @@ tokio = { version = "1.39.2", features = ["full"] }
 tracing = "0.1.40"
 tracing-opentelemetry = "0.25.0"
 tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+url = "2.5.2"
