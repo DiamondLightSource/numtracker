@@ -18,7 +18,7 @@ mod logging;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    logging::init_tracing();
+    let _ = logging::init_logging();
     let db = SqliteScanPathService::connect("./demo.db").await.unwrap();
     serve_graphql(db).await;
     Ok(())
