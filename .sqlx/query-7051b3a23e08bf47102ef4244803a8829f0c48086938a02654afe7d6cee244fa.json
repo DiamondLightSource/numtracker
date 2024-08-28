@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT last_number\nFROM scan_number\nJOIN beamline\nON beamline.id = scan_number.beamline\nWHERE beamline.name = ?;\n",
+  "describe": {
+    "columns": [
+      {
+        "name": "last_number",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7051b3a23e08bf47102ef4244803a8829f0c48086938a02654afe7d6cee244fa"
+}

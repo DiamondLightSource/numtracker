@@ -1,6 +1,7 @@
 use std::fmt;
 use std::path::Path;
 
+use futures::Stream;
 use sqlx::prelude::FromRow;
 use sqlx::query::QueryScalar;
 use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
@@ -62,6 +63,18 @@ impl SqliteScanPathService {
         }
         Ok(next)
     }
+
+    pub async fn latest_scan_number(&self, beamline: &str) -> Result<usize, SqliteNumberError> {
+        let number = query_file_scalar!("queries/latest_scan_number.sql", beamline)
+            .fetch_optional(&self.pool)
+            .await?
+            .ok_or(SqliteNumberError::BeamlineNotFound)?;
+
+        number
+            .try_into()
+            .map_err(|_| SqliteNumberError::InvalidValue(number))
+    }
+
     /// Increment and return the latest scan number for the given beamline
     async fn db_scan_number(&self, beamline: &str) -> Result<usize, SqliteNumberError> {
         let mut db = self.pool.begin().await?;
@@ -109,6 +122,11 @@ impl SqliteScanPathService {
         ))
         .await
     }
+
+    pub fn beamlines(&self) -> impl Stream<Item = Result<String, sqlx::Error>> + '_ {
+        query_file_scalar!("queries/all_beamlines.sql").fetch(&self.pool)
+    }
+
     async fn number_tracker_directory(
         &self,
         beamline: &str,
