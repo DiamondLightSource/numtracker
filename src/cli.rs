@@ -34,8 +34,9 @@ pub enum Command {
     Serve(ServeOptions),
     /// List the current configuration
     Info(InfoOptions),
+    /// Generate the graphql schema
+    Schema,
     // Minimal enum for now but will eventually have:
-    // * Schema - generate the graphql schema
     // * Sync - importing and/or exporting scan numbers from the configured directories
     // * Config - Setting/choosing/adding path templates etc
 }

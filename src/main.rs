@@ -27,6 +27,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     match args.command {
         Command::Serve(opts) => serve_graphql(&args.db, opts).await,
         Command::Info(info) => list_info(&args.db, info.beamline()).await,
+        Command::Schema => graphql_schema(),
     }
     Ok(())
 }
@@ -43,6 +44,11 @@ async fn serve_graphql(db: &Path, opts: ServeOptions) {
         .layer(Extension(schema));
     let listener = TcpListener::bind(opts.addr()).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+fn graphql_schema() {
+    let schema = Schema::new(Query, Mutation, EmptySubscription);
+    println!("{}", schema.sdl());
 }
 
 async fn list_info(db: &Path, beamline: Option<&str>) {
