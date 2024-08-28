@@ -33,7 +33,11 @@ fn init_stdout<S>(level: Option<Level>) -> impl Layer<S>
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    level.map(|lvl| tracing_subscriber::fmt::layer().with_filter(LevelFilter::from_level(lvl)))
+    level.map(|lvl| {
+        tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_filter(LevelFilter::from_level(lvl))
+    })
 }
 
 fn init_tracing<S>(endpoint: Option<Url>, level: Level) -> Result<impl Layer<S>, TraceError>

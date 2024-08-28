@@ -13,7 +13,7 @@ use cli::{Cli, Command, ServeOptions};
 use numtracker::db_service::SqliteScanPathService;
 use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService};
 use tokio::net::TcpListener;
-use tracing::instrument;
+use tracing::{debug, instrument};
 
 mod cli;
 mod logging;
@@ -22,7 +22,7 @@ mod logging;
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::init();
     let _ = logging::init_logging(args.log_level(), args.tracing());
-    println!("{args:#?}");
+    debug!(args = format_args!("{:#?}", args));
     match args.command {
         Command::Serve(opts) => serve_graphql(&args.db, opts).await,
     }
