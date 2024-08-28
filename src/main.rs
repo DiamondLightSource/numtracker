@@ -10,6 +10,7 @@ use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
 use cli::{Cli, Command, ServeOptions};
+use futures::stream::TryStreamExt;
 use numtracker::db_service::SqliteScanPathService;
 use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService};
 use tokio::net::TcpListener;
@@ -25,6 +26,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     debug!(args = format_args!("{:#?}", args));
     match args.command {
         Command::Serve(opts) => serve_graphql(&args.db, opts).await,
+        Command::Info(info) => list_info(&args.db, info.beamline()).await,
     }
     Ok(())
 }
@@ -41,6 +43,33 @@ async fn serve_graphql(db: &Path, opts: ServeOptions) {
         .layer(Extension(schema));
     let listener = TcpListener::bind(opts.addr()).await.unwrap();
     axum::serve(listener, app).await.unwrap();
+}
+
+async fn list_info(db: &Path, beamline: Option<&str>) {
+    let db = SqliteScanPathService::connect(db).await.unwrap();
+    if let Some(bl) = beamline {
+        list_bl_info(&db, bl).await;
+    } else {
+        let mut all = db.beamlines();
+        while let Ok(Some(bl)) = all.try_next().await {
+            list_bl_info(&db, &bl).await;
+        }
+    }
+}
+
+fn bl_field<F: Display, E: Error>(field: &str, value: Result<F, E>) {
+    match value {
+        Ok(value) => println!("    {field}: {value}"),
+        Err(e) => println!("    {field} not available: {e}"),
+    }
+}
+
+async fn list_bl_info(db: &SqliteScanPathService, bl: &str) {
+    println!("{bl}");
+    bl_field("Visit", db.visit_directory_template(bl).await);
+    bl_field("Scan", db.scan_file_template(bl).await);
+    bl_field("Detector", db.detector_file_template(bl).await);
+    bl_field("Scan number", db.latest_scan_number(bl).await);
 }
 
 async fn graphiql() -> impl IntoResponse {
