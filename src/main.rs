@@ -70,6 +70,9 @@ async fn list_bl_info(db: &SqliteScanPathService, bl: &str) {
     bl_field("Scan", db.scan_file_template(bl).await);
     bl_field("Detector", db.detector_file_template(bl).await);
     bl_field("Scan number", db.latest_scan_number(bl).await);
+    if let Some(fallback) = db.number_tracker_directory(bl).await.transpose() {
+        bl_field("Fallback numtracker", fallback.map(|cnf| cnf.display()));
+    }
 }
 
 async fn graphiql() -> impl IntoResponse {

@@ -21,9 +21,15 @@ pub struct SqliteScanPathService {
 }
 
 #[derive(Debug, FromRow)]
-struct NumtrackerConfig {
+pub struct NumtrackerConfig {
     directory: String,
     extension: String,
+}
+
+impl NumtrackerConfig {
+    pub fn display(&self) -> String {
+        format!("{}/*.{}", self.directory, self.extension)
+    }
 }
 
 impl SqliteScanPathService {
@@ -127,7 +133,7 @@ impl SqliteScanPathService {
         query_file_scalar!("queries/all_beamlines.sql").fetch(&self.pool)
     }
 
-    async fn number_tracker_directory(
+    pub async fn number_tracker_directory(
         &self,
         beamline: &str,
     ) -> Result<Option<NumtrackerConfig>, sqlx::Error> {
