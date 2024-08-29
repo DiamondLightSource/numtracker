@@ -19,6 +19,7 @@ use tracing::{debug, instrument};
 
 mod cli;
 mod logging;
+mod sync;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -29,6 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Command::Serve(opts) => serve_graphql(&args.db, opts).await,
         Command::Info(info) => list_info(&args.db, info.beamline()).await,
         Command::Schema => graphql_schema(),
+        Command::Sync(opts) => sync::sync_directories(&args.db, opts).await,
     }
     Ok(())
 }

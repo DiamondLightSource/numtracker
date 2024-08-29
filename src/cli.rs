@@ -36,8 +36,9 @@ pub enum Command {
     Info(InfoOptions),
     /// Generate the graphql schema
     Schema,
+    /// Compare and/or update numtracker directories
+    Sync(SyncOptions),
     // Minimal enum for now but will eventually have:
-    // * Sync - importing and/or exporting scan numbers from the configured directories
     // * Config - Setting/choosing/adding path templates etc
 }
 
@@ -56,6 +57,30 @@ pub struct InfoOptions {
     /// Limit the info to just one beamline
     #[clap(short, long)]
     beamline: Option<String>,
+}
+
+#[derive(Debug, Parser)]
+pub struct SyncOptions {
+    /// Limit the update to a single beamline
+    #[clap(short, long, global = true)]
+    beamline: Option<String>,
+    /// Mode
+    #[clap(subcommand)]
+    pub mode: Option<SyncMode>,
+}
+
+#[derive(Debug, Subcommand, Clone, Copy)]
+pub enum SyncMode {
+    /// Update the scan numbers in the DB to match those in the configured directories
+    Import {
+        #[clap(short, long)]
+        force: bool,
+    },
+    /// Set the scan number files in the configured directories to match those in the DB
+    Export {
+        #[clap(short, long)]
+        force: bool,
+    },
 }
 
 impl Cli {
@@ -84,6 +109,12 @@ impl ServeOptions {
 }
 
 impl InfoOptions {
+    pub fn beamline(&self) -> Option<&str> {
+        self.beamline.as_deref()
+    }
+}
+
+impl SyncOptions {
     pub fn beamline(&self) -> Option<&str> {
         self.beamline.as_deref()
     }
