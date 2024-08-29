@@ -1,4 +1,5 @@
 use std::fs as std_fs;
+use std::io::Error;
 use std::path::{Path, PathBuf};
 
 use fd_lock::{RwLock, RwLockWriteGuard};

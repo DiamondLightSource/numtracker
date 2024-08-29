@@ -11,7 +11,8 @@ use axum::routing::{get, post};
 use axum::{Extension, Router};
 use cli::{Cli, Command, ServeOptions};
 use futures::stream::TryStreamExt;
-use numtracker::db_service::SqliteScanPathService;
+use numtracker::db_service::{NumtrackerConfig, SqliteScanPathService};
+use numtracker::numtracker::GdaNumTracker;
 use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService};
 use tokio::net::TcpListener;
 use tracing::{debug, instrument};
@@ -77,7 +78,19 @@ async fn list_bl_info(db: &SqliteScanPathService, bl: &str) {
     bl_field("Detector", db.detector_file_template(bl).await);
     bl_field("Scan number", db.latest_scan_number(bl).await);
     if let Some(fallback) = db.number_tracker_directory(bl).await.transpose() {
-        bl_field("Fallback numtracker", fallback.map(|cnf| cnf.display()));
+        match fallback {
+            Ok(NumtrackerConfig {
+                directory,
+                extension,
+            }) => match GdaNumTracker::new(&directory)
+                .latest_scan_number(&extension)
+                .await
+            {
+                Ok(latest) => println!("    Numtracker file: {directory}/{latest}.{extension}"),
+                Err(e) => println!("    Numtracker file unavailable: {e}"),
+            },
+            Err(e) => println!("    Could not read fallback numtracker directory: {e}"),
+        }
     }
 }
 

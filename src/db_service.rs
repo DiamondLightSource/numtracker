@@ -22,8 +22,8 @@ pub struct SqliteScanPathService {
 
 #[derive(Debug, FromRow)]
 pub struct NumtrackerConfig {
-    directory: String,
-    extension: String,
+    pub directory: String,
+    pub extension: String,
 }
 
 impl NumtrackerConfig {
