@@ -129,6 +129,29 @@ impl GdaNumTracker {
         self.create_num_file(next, ext).await?;
         Ok(next)
     }
+
+    /// Create a new scan number file for the given number and extension, and ensure that there are
+    /// no other matching files with higher numbers.
+    pub async fn set_scan_number(&self, ext: &str, num: usize) -> Result<(), std::io::Error> {
+        let next = self.file_name(num, ext);
+        async_fs::OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(next)
+            .await?;
+        let mut dir = async_fs::read_dir(&self.directory).await?;
+        while let Some(file) = dir.next_entry().await? {
+            if !file.file_type().await?.is_file() {
+                continue;
+            }
+            if let Some(val) = self.file_num(&file.path(), ext) {
+                if val > num {
+                    async_fs::remove_file(&file.path()).await?;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl Default for GdaNumTracker {
