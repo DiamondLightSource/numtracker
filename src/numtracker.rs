@@ -108,7 +108,7 @@ impl GdaNumTracker {
     }
 
     /// Find the highest number that has a corresponding number file in this tracker's directory
-    async fn high_file(&self, ext: &str) -> Result<usize, std::io::Error> {
+    pub async fn latest_scan_number(&self, ext: &str) -> Result<usize, std::io::Error> {
         let mut high = 0;
         let mut dir = async_fs::read_dir(&self.directory).await?;
         while let Some(file) = dir.next_entry().await? {
@@ -125,7 +125,7 @@ impl GdaNumTracker {
     pub async fn next_scan_number(&self, ext: &str) -> Result<usize, std::io::Error> {
         let mut _lock = self.file_lock(ext)?;
         let _f = _lock.lock()?;
-        let next = self.high_file(ext).await? + 1;
+        let next = self.latest_scan_number(ext).await? + 1;
         self.create_num_file(next, ext).await?;
         Ok(next)
     }
