@@ -5,7 +5,7 @@ use futures::Stream;
 use sqlx::prelude::FromRow;
 use sqlx::query::QueryScalar;
 use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
-use sqlx::{query_file_as, query_file_scalar, Sqlite, SqlitePool};
+use sqlx::{query_file, query_file_as, query_file_scalar, Sqlite, SqlitePool};
 use tracing::{debug, info, instrument, warn};
 
 pub use self::error::{SqliteNumberDirectoryError, SqliteNumberError, SqliteTemplateError};
@@ -145,6 +145,14 @@ impl SqliteScanPathService {
         )
         .fetch_optional(&self.pool)
         .await
+    }
+
+    pub async fn set_scan_number(&self, bl: &str, current_file: usize) -> Result<(), sqlx::Error> {
+        let current_file = current_file as i64;
+        query_file!("queries/set_scan_number.sql", current_file, bl)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
     }
 }
 
