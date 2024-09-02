@@ -6,15 +6,15 @@ CREATE TABLE beamline (
 -- Templates for visit directories, scan files and detector files
 CREATE TABLE visit_template (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    template TEXT NOT NULl
+    template TEXT UNIQUE NOT NULl
 );
 CREATE TABLE scan_template (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    template TEXT NOT NULl
+    template TEXT UNIQUE NOT NULl
 );
 CREATE TABLE detector_template (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    template TEXT NOT NULl
+    template TEXT UNIQUE NOT NULl
 );
 
 -- Many-to-many tables for beamline to templates

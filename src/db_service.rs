@@ -1,11 +1,13 @@
-use std::fmt;
+use std::fmt::{self, Display};
 use std::path::Path;
 
 use futures::Stream;
 use sqlx::prelude::FromRow;
 use sqlx::query::QueryScalar;
 use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
-use sqlx::{query_file, query_file_as, query_file_scalar, Sqlite, SqlitePool};
+use sqlx::{
+    query_as, query_file, query_file_as, query_file_scalar, query_scalar, Sqlite, SqlitePool,
+};
 use tracing::{debug, info, instrument, warn};
 
 pub use self::error::{SqliteNumberDirectoryError, SqliteNumberError, SqliteTemplateError};
@@ -29,6 +31,18 @@ pub struct NumtrackerConfig {
 impl NumtrackerConfig {
     pub fn display(&self) -> String {
         format!("{}/*.{}", self.directory, self.extension)
+    }
+}
+
+#[derive(Debug)]
+pub struct TemplateOption {
+    pub id: i64,
+    pub template: String,
+}
+
+impl Display for TemplateOption {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.template.fmt(f)
     }
 }
 
@@ -153,6 +167,57 @@ impl SqliteScanPathService {
             .execute(&self.pool)
             .await?;
         Ok(())
+    }
+
+    pub async fn get_or_insert_visit_template(&self, template: String) -> sqlx::Result<i64> {
+        todo!("insert visit template")
+    }
+
+    pub async fn get_visit_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
+        query_as!(TemplateOption, "SELECT id, template FROM visit_template;")
+            .fetch_all(&self.pool)
+            .await
+    }
+
+    pub async fn get_or_insert_scan_template(&self, template: String) -> sqlx::Result<i64> {
+        let mut trn = self.pool.begin().await?;
+        let insert = query_scalar!(
+            "INSERT INTO scan_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+            template
+        )
+        .fetch_optional(&mut *trn)
+        .await?;
+        match insert {
+            Some(ins) => {
+                trn.commit().await?;
+                Ok(ins)
+            }
+            None => Ok(
+                query_scalar!("SELECT id FROM scan_template WHERE template = ?", template)
+                    .fetch_one(&self.pool)
+                    .await?
+                    .expect("Scan template didn't exist after insert failed"),
+            ),
+        }
+    }
+
+    pub async fn get_scan_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
+        query_as!(TemplateOption, "SELECT id, template FROM scan_template;")
+            .fetch_all(&self.pool)
+            .await
+    }
+
+    pub async fn get_or_insert_detector_template(&self, template: String) -> sqlx::Result<i64> {
+        Ok(todo!("insert detector template"))
+    }
+
+    pub async fn get_detector_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
+        query_as!(
+            TemplateOption,
+            "SELECT id, template FROM detector_template;"
+        )
+        .fetch_all(&self.pool)
+        .await
     }
 }
 

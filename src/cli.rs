@@ -99,7 +99,7 @@ pub enum SyncMode {
 #[derive(Debug, Parser)]
 pub struct ConfigOptions {
     #[clap(subcommand)]
-    action: ConfigAction,
+    pub action: ConfigAction,
 }
 
 #[derive(Debug, Subcommand)]
@@ -110,23 +110,23 @@ pub enum ConfigAction {
 
 #[derive(Debug, Parser)]
 pub struct BeamlineConfig {
-    beamline: String,
+    pub beamline: String,
     #[clap(short, long)]
-    new: bool,
+    pub new: bool,
     #[clap(long)]
-    scan_number: Option<u32>,
+    pub scan_number: Option<u32>,
     #[clap(long)]
-    visit: Option<Option<String>>,
+    pub visit: Option<Option<String>>,
     #[clap(long)]
-    scan: Option<Option<String>>,
+    pub scan: Option<Option<String>>,
     #[clap(long)]
-    detector: Option<Option<String>>,
+    pub detector: Option<Option<String>>,
 }
 
 #[derive(Debug, Parser)]
 pub struct TemplateConfig {
     #[clap(subcommand)]
-    action: TemplateAction,
+    pub action: TemplateAction,
 }
 
 #[derive(Debug, Clone, Subcommand)]
@@ -140,7 +140,7 @@ pub enum TemplateAction {
     },
 }
 
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, Copy, ValueEnum)]
 pub enum TemplateKind {
     Visit,
     Scan,
