@@ -1,7 +1,7 @@
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use clap_verbosity_flag::{InfoLevel, Verbosity};
 use tracing::Level;
 use url::Url;
@@ -38,8 +38,8 @@ pub enum Command {
     Schema,
     /// Compare and/or update numtracker directories
     Sync(SyncOptions),
-    // Minimal enum for now but will eventually have:
-    // * Config - Setting/choosing/adding path templates etc
+    /// Edit beamlines and their configurations
+    Config(ConfigOptions),
 }
 
 #[derive(Debug, Parser)]
@@ -81,6 +81,70 @@ pub enum SyncMode {
         #[clap(short, long)]
         force: bool,
     },
+}
+
+// Need to be able to:
+// * Add a new beamline
+//   - nt config beamline --new i22
+// * Add a new template (visit/scan/detector)
+//   - nt config template add visit '/dls/{template}/path'
+//   - nt config template add scan '{scan}/{file}/{path}'
+//   - nt config template add detector '{detector}/{file}/{path}'
+// * Set the scan number for a beamline
+//   - nt config beamline b21 --scan-number 123
+// * Set the templates used for a beamline
+//   - nt config beamline b21 --visit /path/to/visit
+//   - nt config beamline b21 --scan path/to/scan
+//   - nt config beamline b21 --det path/to/det
+#[derive(Debug, Parser)]
+pub struct ConfigOptions {
+    #[clap(subcommand)]
+    action: ConfigAction,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ConfigAction {
+    Beamline(BeamlineConfig),
+    Template(TemplateConfig),
+}
+
+#[derive(Debug, Parser)]
+pub struct BeamlineConfig {
+    beamline: String,
+    #[clap(short, long)]
+    new: bool,
+    #[clap(long)]
+    scan_number: Option<u32>,
+    #[clap(long)]
+    visit: Option<Option<String>>,
+    #[clap(long)]
+    scan: Option<Option<String>>,
+    #[clap(long)]
+    detector: Option<Option<String>>,
+}
+
+#[derive(Debug, Parser)]
+pub struct TemplateConfig {
+    #[clap(subcommand)]
+    action: TemplateAction,
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum TemplateAction {
+    Add {
+        kind: TemplateKind,
+        template: String,
+    },
+    List {
+        filter: Option<TemplateKind>,
+    },
+}
+
+#[derive(Debug, Clone, ValueEnum)]
+pub enum TemplateKind {
+    Visit,
+    Scan,
+    Detector,
 }
 
 impl Cli {

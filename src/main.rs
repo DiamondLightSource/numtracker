@@ -9,7 +9,7 @@ use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
-use cli::{Cli, Command, ServeOptions};
+use cli::{Cli, Command, ConfigOptions, ServeOptions};
 use futures::stream::TryStreamExt;
 use numtracker::db_service::{NumtrackerConfig, SqliteScanPathService};
 use numtracker::numtracker::GdaNumTracker;
@@ -31,6 +31,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Command::Info(info) => list_info(&args.db, info.beamline()).await,
         Command::Schema => graphql_schema(),
         Command::Sync(opts) => sync::sync_directories(&args.db, opts).await,
+        Command::Config(opts) => configure(&args.db, opts).await,
     }
     Ok(())
 }
@@ -64,6 +65,11 @@ async fn list_info(db: &Path, beamline: Option<&str>) {
             list_bl_info(&db, &bl).await;
         }
     }
+}
+
+async fn configure(db: &Path, opts: ConfigOptions) {
+    println!("{opts:#?}");
+    todo!()
 }
 
 fn bl_field<F: Display, E: Error>(field: &str, value: Result<F, E>) {
