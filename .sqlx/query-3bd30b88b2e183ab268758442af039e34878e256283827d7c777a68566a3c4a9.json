@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO scan_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+  "query": "INSERT INTO detector_template (template)\nVALUES (?)\nON CONFLICT (template) DO NOTHING\nRETURNING id\n",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       false
     ]
   },
-  "hash": "5d00db9b9af7d5b00357c165cb11753bc6a4444e407d3f84b880dc247490935d"
+  "hash": "3bd30b88b2e183ab268758442af039e34878e256283827d7c777a68566a3c4a9"
 }

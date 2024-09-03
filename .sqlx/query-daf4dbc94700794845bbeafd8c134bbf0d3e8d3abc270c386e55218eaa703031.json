@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO detector_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+  "query": "SELECT id FROM detector_template WHERE template = ?\n",
   "describe": {
     "columns": [
       {
@@ -13,8 +13,8 @@
       "Right": 1
     },
     "nullable": [
-      false
+      true
     ]
   },
-  "hash": "3a96db43cffc69a69314b32df78fa1dfaff72cbd3ded7149c9807d8e5a6f684b"
+  "hash": "daf4dbc94700794845bbeafd8c134bbf0d3e8d3abc270c386e55218eaa703031"
 }

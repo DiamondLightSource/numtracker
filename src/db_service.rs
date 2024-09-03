@@ -5,9 +5,7 @@ use futures::Stream;
 use sqlx::prelude::FromRow;
 use sqlx::query::QueryScalar;
 use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
-use sqlx::{
-    query_as, query_file, query_file_as, query_file_scalar, query_scalar, Sqlite, SqlitePool,
-};
+use sqlx::{query_as, query_file, query_file_as, query_file_scalar, Sqlite, SqlitePool};
 use tracing::{debug, info, instrument, warn};
 
 pub use self::error::{SqliteNumberDirectoryError, SqliteNumberError, SqliteTemplateError};
@@ -44,6 +42,26 @@ impl Display for TemplateOption {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.template.fmt(f)
     }
+}
+
+/// Macro to get or insert a new template id. Written as a macro instead of a function as
+/// sqlx queries require string literals for compile time checking.
+macro_rules! get_or_insert {
+    ($db:expr, $insert_query:literal, $get_id_query:literal, $template:ident) => {{
+        let mut trn = ($db).begin().await?;
+        let insert = query_file_scalar!($insert_query, $template)
+            .fetch_optional(&mut *trn)
+            .await?;
+        match insert {
+            Some(ins) => {
+                trn.commit().await?;
+                sqlx::Result::<_>::Ok(Some(ins))
+            }
+            None => Ok(query_file_scalar!($get_id_query, $template)
+                .fetch_one(&mut *trn)
+                .await?),
+        }
+    }};
 }
 
 impl SqliteScanPathService {
@@ -170,25 +188,13 @@ impl SqliteScanPathService {
     }
 
     pub async fn get_or_insert_visit_template(&self, template: String) -> sqlx::Result<i64> {
-        let mut trn = self.pool.begin().await?;
-        let insert = query_scalar!(
-            "INSERT INTO visit_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+        Ok(get_or_insert!(
+            self.pool,
+            "queries/insert_visit_template.sql",
+            "queries/get_visit_template.sql",
             template
-        )
-        .fetch_optional(&mut *trn)
-        .await?;
-        match insert {
-            Some(ins) => {
-                trn.commit().await?;
-                Ok(ins)
-            }
-            None => Ok(
-                query_scalar!("SELECT id FROM visit_template WHERE template = ?", template)
-                    .fetch_one(&self.pool)
-                    .await?
-                    .expect("Visit template didn't exist after insert failed"),
-            ),
-        }
+        )?
+        .expect("Visit template missing after being added"))
     }
 
     pub async fn get_visit_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
@@ -198,25 +204,13 @@ impl SqliteScanPathService {
     }
 
     pub async fn get_or_insert_scan_template(&self, template: String) -> sqlx::Result<i64> {
-        let mut trn = self.pool.begin().await?;
-        let insert = query_scalar!(
-            "INSERT INTO scan_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+        Ok(get_or_insert!(
+            self.pool,
+            "queries/insert_scan_template.sql",
+            "queries/get_scan_template.sql",
             template
-        )
-        .fetch_optional(&mut *trn)
-        .await?;
-        match insert {
-            Some(ins) => {
-                trn.commit().await?;
-                Ok(ins)
-            }
-            None => Ok(
-                query_scalar!("SELECT id FROM scan_template WHERE template = ?", template)
-                    .fetch_one(&self.pool)
-                    .await?
-                    .expect("Scan template didn't exist after insert failed"),
-            ),
-        }
+        )?
+        .expect("Scan template missing after being added"))
     }
 
     pub async fn get_scan_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
@@ -226,26 +220,13 @@ impl SqliteScanPathService {
     }
 
     pub async fn get_or_insert_detector_template(&self, template: String) -> sqlx::Result<i64> {
-        let mut trn = self.pool.begin().await?;
-        let insert = query_scalar!(
-            "INSERT INTO detector_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+        Ok(get_or_insert!(
+            self.pool,
+            "queries/insert_detector_template.sql",
+            "queries/get_detector_template.sql",
             template
-        )
-        .fetch_optional(&mut *trn)
-        .await?;
-        match insert {
-            Some(ins) => {
-                trn.commit().await?;
-                Ok(ins)
-            }
-            None => Ok(query_scalar!(
-                "SELECT id FROM detector_template WHERE template = ?",
-                template
-            )
-            .fetch_one(&self.pool)
-            .await?
-            .expect("Detector template didn't exist after insert failed")),
-        }
+        )?
+        .expect("Detector template missing after being added"))
     }
 
     pub async fn get_detector_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {

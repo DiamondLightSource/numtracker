@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id FROM visit_template WHERE template = ?",
+  "query": "INSERT INTO scan_template (template)\nVALUES (?)\nON CONFLICT (template) DO NOTHING\nRETURNING id\n",
   "describe": {
     "columns": [
       {
@@ -13,8 +13,8 @@
       "Right": 1
     },
     "nullable": [
-      true
+      false
     ]
   },
-  "hash": "a2f70a2aaea53730d9d0b66565f9cf93343d072afafaefc4e6a7eff9c07e6cc8"
+  "hash": "138c280e1d234a15e10428f5b949be0c88475c2011258e2e373303149e52a70d"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id FROM scan_template WHERE template = ?",
+  "query": "SELECT id FROM scan_template WHERE template = ?\n",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       true
     ]
   },
-  "hash": "f4402f7d794938f09cf97b1fb109e213a3aef76780d1a7945b1df13fabba2a88"
+  "hash": "4a15b006f2195d02b88180dd3a13fd9a028d179e53e02794ac84f985aa57379f"
 }

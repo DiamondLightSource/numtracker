@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id FROM detector_template WHERE template = ?",
+  "query": "SELECT id FROM visit_template WHERE template = ?\n",
   "describe": {
     "columns": [
       {
@@ -16,5 +16,5 @@
       true
     ]
   },
-  "hash": "255dfe0188e2df159240989eab5e4ad9dcee45f4c75abd81817cb609f274f501"
+  "hash": "0b0bba88cda878749dffc27e7af82b602b734009b6a0041f8060ab07ec1e08a4"
 }
