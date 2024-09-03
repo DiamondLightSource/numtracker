@@ -11,7 +11,7 @@ pub struct GdaNumTracker {
     directory: PathBuf,
 }
 
-pub async fn increment_and_get<P: AsRef<Path>>(dir: P, ext: &str) -> Result<usize, std::io::Error> {
+pub async fn increment_and_get<P: AsRef<Path>>(dir: P, ext: &str) -> Result<usize, Error> {
     GdaNumTracker::new(dir.as_ref()).next_scan_number(ext).await
 }
 
@@ -19,7 +19,7 @@ pub async fn increment_and_get<P: AsRef<Path>>(dir: P, ext: &str) -> Result<usiz
 struct TempFileLock(PathBuf, RwLock<std_fs::File>);
 
 impl TempFileLock {
-    fn new(path: PathBuf) -> Result<Self, std::io::Error> {
+    fn new(path: PathBuf) -> Result<Self, Error> {
         let lock = std_fs::OpenOptions::new()
             .create_new(true)
             .truncate(true)
@@ -27,7 +27,7 @@ impl TempFileLock {
             .open(&path)?;
         Ok(Self(path, RwLock::new(lock)))
     }
-    fn lock(&mut self) -> Result<RwLockWriteGuard<'_, std_fs::File>, std::io::Error> {
+    fn lock(&mut self) -> Result<RwLockWriteGuard<'_, std_fs::File>, Error> {
         self.1.try_write()
     }
 }
@@ -62,7 +62,7 @@ impl GdaNumTracker {
     /// that are aware of and opt in to respecting this lock. It does not prevent access to the
     /// directory from other uses/processes that don't check.
     // #[instrument]
-    fn file_lock(&self, ext: &str) -> Result<TempFileLock, std::io::Error> {
+    fn file_lock(&self, ext: &str) -> Result<TempFileLock, Error> {
         trace!("Creating new file lock for ext: {ext:?}");
         TempFileLock::new(
             self.directory
@@ -80,7 +80,7 @@ impl GdaNumTracker {
     /// Create a file named for the given number and, if present, remove the file for the previous
     /// number.
     // #[instrument]
-    async fn create_num_file(&self, num: usize, ext: &str) -> Result<(), std::io::Error> {
+    async fn create_num_file(&self, num: usize, ext: &str) -> Result<(), Error> {
         trace!("Creating new scan number file: {num}.{ext}");
         let next = self.file_name(num, ext);
         async_fs::OpenOptions::new()
@@ -109,7 +109,7 @@ impl GdaNumTracker {
     }
 
     /// Find the highest number that has a corresponding number file in this tracker's directory
-    pub async fn latest_scan_number(&self, ext: &str) -> Result<usize, std::io::Error> {
+    pub async fn latest_scan_number(&self, ext: &str) -> Result<usize, Error> {
         let mut high = 0;
         let mut dir = async_fs::read_dir(&self.directory).await?;
         while let Some(file) = dir.next_entry().await? {
@@ -123,7 +123,7 @@ impl GdaNumTracker {
         Ok(high)
     }
     #[instrument]
-    pub async fn next_scan_number(&self, ext: &str) -> Result<usize, std::io::Error> {
+    pub async fn next_scan_number(&self, ext: &str) -> Result<usize, Error> {
         let mut _lock = self.file_lock(ext)?;
         let _f = _lock.lock()?;
         let next = self.latest_scan_number(ext).await? + 1;
@@ -133,7 +133,7 @@ impl GdaNumTracker {
 
     /// Create a new scan number file for the given number and extension, and ensure that there are
     /// no other matching files with higher numbers.
-    pub async fn set_scan_number(&self, ext: &str, num: usize) -> Result<(), std::io::Error> {
+    pub async fn set_scan_number(&self, ext: &str, num: usize) -> Result<(), Error> {
         let next = self.file_name(num, ext);
         async_fs::OpenOptions::new()
             .create_new(true)
