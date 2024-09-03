@@ -109,15 +109,9 @@ async fn graphql_handler(
 }
 
 /// Read-only API for GraphQL
-///
-/// Generic type is only required so the type of service to be retrieved from the context can be
-/// accessed.
 struct Query;
 
 /// Read-write API for GraphQL
-///
-/// Generic type is only required so the type of service to be retrieved from the context can be
-/// accessed.
 struct Mutation;
 
 /// GraphQL type to mimic a key-value pair from the map type that GraphQL doesn't have
