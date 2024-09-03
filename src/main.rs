@@ -10,15 +10,14 @@ use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
 use cli::{Cli, Command, ServeOptions};
-use futures::stream::TryStreamExt;
-use numtracker::db_service::{NumtrackerConfig, SqliteScanPathService};
-use numtracker::numtracker::GdaNumTracker;
+use numtracker::db_service::SqliteScanPathService;
 use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService};
 use tokio::net::TcpListener;
 use tracing::{debug, instrument};
 
 mod cli;
 mod configuration;
+mod info;
 mod logging;
 mod sync;
 
@@ -29,7 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     debug!(args = format_args!("{:#?}", args));
     match args.command {
         Command::Serve(opts) => serve_graphql(&args.db, opts).await,
-        Command::Info(info) => list_info(&args.db, info.beamline()).await,
+        Command::Info(info) => info::list_info(&args.db, info.beamline()).await,
         Command::Schema => graphql_schema(),
         Command::Sync(opts) => sync::sync_directories(&args.db, opts).await,
         Command::Config(opts) => configuration::configure(&args.db, opts.action).await,
@@ -54,48 +53,6 @@ async fn serve_graphql(db: &Path, opts: ServeOptions) {
 fn graphql_schema() {
     let schema = Schema::new(Query, Mutation, EmptySubscription);
     println!("{}", schema.sdl());
-}
-
-async fn list_info(db: &Path, beamline: Option<&str>) {
-    let db = SqliteScanPathService::connect(db).await.unwrap();
-    if let Some(bl) = beamline {
-        list_bl_info(&db, bl).await;
-    } else {
-        let mut all = db.beamlines();
-        while let Ok(Some(bl)) = all.try_next().await {
-            list_bl_info(&db, &bl).await;
-        }
-    }
-}
-
-fn bl_field<F: Display, E: Error>(field: &str, value: Result<F, E>) {
-    match value {
-        Ok(value) => println!("    {field}: {value}"),
-        Err(e) => println!("    {field} not available: {e}"),
-    }
-}
-
-async fn list_bl_info(db: &SqliteScanPathService, bl: &str) {
-    println!("{bl}");
-    bl_field("Visit", db.visit_directory_template(bl).await);
-    bl_field("Scan", db.scan_file_template(bl).await);
-    bl_field("Detector", db.detector_file_template(bl).await);
-    bl_field("Scan number", db.latest_scan_number(bl).await);
-    if let Some(fallback) = db.number_tracker_directory(bl).await.transpose() {
-        match fallback {
-            Ok(NumtrackerConfig {
-                directory,
-                extension,
-            }) => match GdaNumTracker::new(&directory)
-                .latest_scan_number(&extension)
-                .await
-            {
-                Ok(latest) => println!("    Numtracker file: {directory}/{latest}.{extension}"),
-                Err(e) => println!("    Numtracker file unavailable: {e}"),
-            },
-            Err(e) => println!("    Could not read fallback numtracker directory: {e}"),
-        }
-    }
 }
 
 async fn graphiql() -> impl IntoResponse {
