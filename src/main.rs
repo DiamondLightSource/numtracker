@@ -20,7 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Command::Schema => graphql::graphql_schema(),
         Command::Info(info) => info::list_info(&args.db, info.beamline()).await,
         Command::Sync(opts) => sync::sync_directories(&args.db, opts).await,
-        Command::Config(opts) => configuration::configure(&args.db, opts.action).await,
+        Command::Config(opts) => configuration::configure(&args.db, opts.action).await?,
     }
     Ok(())
 }
