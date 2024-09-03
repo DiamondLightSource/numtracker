@@ -170,7 +170,25 @@ impl SqliteScanPathService {
     }
 
     pub async fn get_or_insert_visit_template(&self, template: String) -> sqlx::Result<i64> {
-        todo!("insert visit template")
+        let mut trn = self.pool.begin().await?;
+        let insert = query_scalar!(
+            "INSERT INTO visit_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+            template
+        )
+        .fetch_optional(&mut *trn)
+        .await?;
+        match insert {
+            Some(ins) => {
+                trn.commit().await?;
+                Ok(ins)
+            }
+            None => Ok(
+                query_scalar!("SELECT id FROM visit_template WHERE template = ?", template)
+                    .fetch_one(&self.pool)
+                    .await?
+                    .expect("Visit template didn't exist after insert failed"),
+            ),
+        }
     }
 
     pub async fn get_visit_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
@@ -208,7 +226,26 @@ impl SqliteScanPathService {
     }
 
     pub async fn get_or_insert_detector_template(&self, template: String) -> sqlx::Result<i64> {
-        Ok(todo!("insert detector template"))
+        let mut trn = self.pool.begin().await?;
+        let insert = query_scalar!(
+            "INSERT INTO detector_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+            template
+        )
+        .fetch_optional(&mut *trn)
+        .await?;
+        match insert {
+            Some(ins) => {
+                trn.commit().await?;
+                Ok(ins)
+            }
+            None => Ok(query_scalar!(
+                "SELECT id FROM detector_template WHERE template = ?",
+                template
+            )
+            .fetch_one(&self.pool)
+            .await?
+            .expect("Detector template didn't exist after insert failed")),
+        }
     }
 
     pub async fn get_detector_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {

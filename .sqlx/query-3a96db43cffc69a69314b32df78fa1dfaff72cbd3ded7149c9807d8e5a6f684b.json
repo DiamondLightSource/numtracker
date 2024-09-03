@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO detector_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3a96db43cffc69a69314b32df78fa1dfaff72cbd3ded7149c9807d8e5a6f684b"
+}

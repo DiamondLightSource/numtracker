@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO scan_template (template) VALUES (?) ON CONFLICT (template) DO NOTHING RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5d00db9b9af7d5b00357c165cb11753bc6a4444e407d3f84b880dc247490935d"
+}
