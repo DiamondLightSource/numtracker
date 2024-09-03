@@ -1,57 +1,87 @@
+#![deny(clippy::unwrap_used)]
 use std::error::Error;
 use std::fmt::Display;
 use std::path::Path;
 
 use inquire::Select;
-use numtracker::db_service::SqliteScanPathService;
+use numtracker::db_service::{SqliteScanPathService, TemplateOption};
 
-use crate::cli::{ConfigAction, TemplateAction, TemplateKind};
+use crate::cli::{BeamlineConfig, ConfigAction, TemplateAction, TemplateConfig, TemplateKind};
 
 pub async fn configure(db: &Path, opts: ConfigAction) -> Result<(), ConfigError> {
     let db = SqliteScanPathService::connect(db).await.unwrap();
     match opts {
-        ConfigAction::Beamline(opts) => {
-            println!("{}", opts.beamline);
-            println!("{opts:#?}");
-            if let Some(visit) = opts.visit {
-                set_template(&db, &opts.beamline, TemplateKind::Visit, visit).await?;
+        ConfigAction::Beamline(opts) => configure_beamline(&db, opts).await,
+        ConfigAction::Template(opts) => configure_template(&db, opts).await,
+    }
+}
+
+async fn configure_beamline(
+    db: &SqliteScanPathService,
+    opts: BeamlineConfig,
+) -> Result<(), ConfigError> {
+    println!("{opts:#?}");
+    if let Some(visit) = opts.visit {
+        set_template(&db, TemplateKind::Visit, visit).await?;
+    }
+    if let Some(scan) = opts.scan {
+        set_template(&db, TemplateKind::Scan, scan).await?;
+    }
+    if let Some(detector) = opts.detector {
+        set_template(&db, TemplateKind::Detector, detector).await?;
+    }
+    Ok(())
+}
+
+async fn configure_template(
+    db: &SqliteScanPathService,
+    opts: TemplateConfig,
+) -> Result<(), ConfigError> {
+    Ok(match opts.action {
+        TemplateAction::Add { kind, template } => match kind {
+            TemplateKind::Visit => {
+                println!("Adding visit: {template:?}");
+                db.get_or_insert_visit_template(template).await?;
             }
-            if let Some(scan) = opts.scan {
-                set_template(&db, &opts.beamline, TemplateKind::Scan, scan).await?;
+            TemplateKind::Scan => {
+                println!("Adding scan: {template:?}");
+                db.get_or_insert_scan_template(template).await?;
             }
-            if let Some(detector) = opts.detector {
-                set_template(&db, &opts.beamline, TemplateKind::Detector, detector).await?;
+            TemplateKind::Detector => {
+                println!("Adding detector: {template:?}");
+                db.get_or_insert_detector_template(template).await?;
+            }
+        },
+        TemplateAction::List { filter } => {
+            if let Some(TemplateKind::Visit) | None = filter {
+                list_templates("Visit", &db.get_visit_templates().await?)
+            }
+            if let Some(TemplateKind::Scan) | None = filter {
+                list_templates("Scan", &db.get_scan_templates().await?)
+            }
+            if let Some(TemplateKind::Detector) | None = filter {
+                list_templates("Detector", &db.get_detector_templates().await?)
             }
         }
-        ConfigAction::Template(opts) => match opts.action {
-            TemplateAction::Add { kind, template } => match kind {
-                TemplateKind::Visit => println!("Adding visit: {template:?}"),
-                TemplateKind::Scan => println!("Adding scan: {template:?}"),
-                TemplateKind::Detector => println!("Adding detector: {template:?}"),
-            },
-            TemplateAction::List { filter } => match filter {
-                Some(TemplateKind::Visit) => println!("Listing visit"),
-                Some(TemplateKind::Scan) => println!("Listing scan"),
-                Some(TemplateKind::Detector) => println!("Listing detector"),
-                None => println!("Listing all"),
-            },
-        },
-    };
-    Ok(())
+    })
+}
+
+fn list_templates(heading: &str, templates: &[TemplateOption]) {
+    println!("{heading} Templates:");
+    for tmp in templates {
+        println!("    {}", tmp);
+    }
 }
 
 async fn set_template(
     db: &SqliteScanPathService,
-    bl: &str,
     kind: TemplateKind,
     template: Option<String>,
-) -> Result<(), ConfigError> {
-    let template = match template {
-        Some(template) => new_template(db, kind, template).await?,
-        None => choose_template(db, kind).await?,
-    };
-    println!("Setting {bl} {kind:?} to {template:?}");
-    Ok(())
+) -> Result<i64, ConfigError> {
+    match template {
+        Some(template) => Ok(new_template(db, kind, template).await?),
+        None => choose_template(db, kind).await,
+    }
 }
 
 async fn new_template(
