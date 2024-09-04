@@ -294,7 +294,6 @@ mod error {
     use std::error::Error;
     use std::fmt::{self, Display};
 
-    use crate::paths::InvalidKey;
     use crate::template::PathTemplateError;
 
     /// Something that went wrong in the chain of querying the database for a template and
@@ -307,7 +306,7 @@ mod error {
         BeamlineNotFound,
         /// The template was present in the database but it could not be parsed into a valid
         /// [`PathTemplate`].
-        Invalid(PathTemplateError<InvalidKey>),
+        Invalid(PathTemplateError),
     }
 
     impl Display for SqliteTemplateError {
@@ -328,8 +327,8 @@ mod error {
         }
     }
 
-    impl From<PathTemplateError<InvalidKey>> for SqliteTemplateError {
-        fn from(err: PathTemplateError<InvalidKey>) -> Self {
+    impl From<PathTemplateError> for SqliteTemplateError {
+        fn from(err: PathTemplateError) -> Self {
             Self::Invalid(err)
         }
     }

@@ -77,12 +77,12 @@ impl PathType {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum PathTemplateError<F> {
+pub enum PathTemplateError {
     InvalidPath,
-    TemplateError(TemplateError<F>),
+    TemplateError(TemplateError),
 }
 
-impl<F: Display> Display for PathTemplateError<F> {
+impl Display for PathTemplateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PathTemplateError::InvalidPath => f.write_str("Path is not valid"),
@@ -91,7 +91,7 @@ impl<F: Display> Display for PathTemplateError<F> {
     }
 }
 
-impl<F: Error + 'static> Error for PathTemplateError<F> {
+impl Error for PathTemplateError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             PathTemplateError::InvalidPath => None,
@@ -114,12 +114,12 @@ enum ParseState {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct TemplateError<E> {
+pub struct TemplateError {
     position: usize,
-    kind: ErrorKind<E>,
+    kind: ErrorKind,
 }
 
-impl<F: Display> Display for TemplateError<F> {
+impl Display for TemplateError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -129,18 +129,11 @@ impl<F: Display> Display for TemplateError<F> {
     }
 }
 
-impl<F: Error + 'static> Error for TemplateError<F> {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match &self.kind {
-            ErrorKind::Unrecognised(e) => Some(e),
-            _ => None,
-        }
-    }
-}
+impl Error for TemplateError {}
 
 /// The reasons why a Template could be invalid
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum ErrorKind<E> {
+pub enum ErrorKind {
     /// Template placeholders cannot contain other placeholders
     Nested,
     /// Placeholders cannot be empty
@@ -148,22 +141,22 @@ pub enum ErrorKind<E> {
     /// A placeholder was opened but not closed
     Incomplete,
     /// The placeholder was not a recognised key
-    Unrecognised(E),
+    Unrecognised,
 }
 
-impl<E: Display> Display for ErrorKind<E> {
+impl Display for ErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ErrorKind::Nested => f.write_str("Nested placeholder"),
             ErrorKind::Empty => f.write_str("Empty placeholder"),
             ErrorKind::Incomplete => f.write_str("Unclosed placeholder"),
-            ErrorKind::Unrecognised(e) => write!(f, "Invalid placeholder: {e}"),
+            ErrorKind::Unrecognised => f.write_str("Invalid placeholder"),
         }
     }
 }
 
-impl<E> TemplateError<E> {
-    fn new(position: usize, kind: ErrorKind<E>) -> Self {
+impl TemplateError {
+    fn new(position: usize, kind: ErrorKind) -> Self {
         Self { position, kind }
     }
     fn nested(position: usize) -> Self {
@@ -175,19 +168,19 @@ impl<E> TemplateError<E> {
     fn empty(position: usize) -> Self {
         Self::new(position, ErrorKind::Empty)
     }
-    fn unknown(position: usize, err: E) -> Self {
-        Self::new(position, ErrorKind::Unrecognised(err))
+    fn unknown(position: usize) -> Self {
+        Self::new(position, ErrorKind::Unrecognised)
     }
 }
 
-impl<E> From<TemplateError<E>> for PathTemplateError<E> {
-    fn from(value: TemplateError<E>) -> Self {
+impl From<TemplateError> for PathTemplateError {
+    fn from(value: TemplateError) -> Self {
         Self::TemplateError(value)
     }
 }
 
 impl<F: TryFrom<String>> Template<F> {
-    pub fn new<S: AsRef<str>>(template: S) -> Result<Self, TemplateError<F::Error>> {
+    pub fn new<S: AsRef<str>>(template: S) -> Result<Self, TemplateError> {
         let mut parts = vec![];
         let mut state = ParseState::Init;
         for (i, c) in template.as_ref().chars().enumerate() {
@@ -206,7 +199,7 @@ impl<F: TryFrom<String>> Template<F> {
                     ParseState::PartialKey(key) => {
                         match F::try_from(key) {
                             Ok(field) => parts.push(Part::Field(field)),
-                            Err(e) => return Err(TemplateError::unknown(i, e)),
+                            Err(_) => return Err(TemplateError::unknown(i)),
                         }
                         // parts.push(Part::Field(F::try_from(key)));
                         state = ParseState::Init;
@@ -267,9 +260,7 @@ impl<F: PartialEq> Template<F> {
 }
 
 impl<F: TryFrom<String>> PathTemplate<F> {
-    pub fn new<S: AsRef<str>>(
-        template: S,
-    ) -> Result<Self, PathTemplateError<<F as TryFrom<String>>::Error>> {
+    pub fn new<S: AsRef<str>>(template: S) -> Result<Self, PathTemplateError> {
         let path = PathBuf::from(template.as_ref());
         let mut parts = Vec::new();
         let mut kind = PathType::Relative;
