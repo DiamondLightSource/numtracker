@@ -13,6 +13,15 @@ enum Part<Field> {
     Field(Field),
 }
 
+impl<Field> Part<Field> {
+    fn field(&self) -> Option<&Field> {
+        match self {
+            Part::Literal(_) => None,
+            Part::Field(f) => Some(f),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Template<Field> {
     parts: Vec<Part<Field>>,
@@ -226,7 +235,9 @@ impl<F: TryFrom<String>> Template<F> {
         }
         Ok(Self { parts })
     }
+}
 
+impl<F> Template<F> {
     pub fn render<Src: FieldSource<F>>(&self, src: &Src) -> String {
         let mut buf = String::new();
         for part in &self.parts {
@@ -236,6 +247,17 @@ impl<F: TryFrom<String>> Template<F> {
             }
         }
         buf
+    }
+    /// Iterate through all the fields in this template. Fields may be duplicated if they are
+    /// referenced multiple times.
+    pub fn referenced_fields(&self) -> impl Iterator<Item = &F> {
+        self.parts.iter().filter_map(|p| p.field())
+    }
+}
+
+impl<F: PartialEq> Template<F> {
+    pub fn references(&self, field: &F) -> bool {
+        self.referenced_fields().any(|f| f == field)
     }
 }
 
@@ -259,7 +281,9 @@ impl<F: TryFrom<String>> PathTemplate<F> {
         }
         Ok(Self { parts, kind })
     }
+}
 
+impl<F> PathTemplate<F> {
     pub fn render<'a, Src>(&self, src: &'a Src) -> PathBuf
     where
         Src: FieldSource<F>,
@@ -273,6 +297,18 @@ impl<F: TryFrom<String>> PathTemplate<F> {
 
     pub fn is_absolute(&self) -> bool {
         self.kind == PathType::Absolute
+    }
+
+    /// Iterate through all the fields in this path. Fields may be duplicated if they are
+    /// referenced multiple times in the path.
+    pub fn referenced_fields(&self) -> impl Iterator<Item = &F> {
+        self.parts.iter().flat_map(|t| t.referenced_fields())
+    }
+}
+
+impl<F: PartialEq> PathTemplate<F> {
+    pub fn references(&self, field: &F) -> bool {
+        self.referenced_fields().any(|f| f == field)
     }
 }
 

@@ -8,7 +8,7 @@ use tracing::{debug, info, instrument};
 pub mod db_service;
 pub mod numtracker;
 pub mod paths;
-pub(crate) mod template;
+pub mod template;
 
 pub struct VisitService {
     db: SqliteScanPathService,
