@@ -44,15 +44,15 @@ async fn configure_template(
     Ok(match opts.action {
         TemplateAction::Add { kind, template } => match kind {
             TemplateKind::Visit => {
-                println!("Adding visit: {template:?}");
+                println!("Adding visit template: {template:?}");
                 db.get_or_insert_visit_template(template).await?;
             }
             TemplateKind::Scan => {
-                println!("Adding scan: {template:?}");
+                println!("Adding scan template: {template:?}");
                 db.get_or_insert_scan_template(template).await?;
             }
             TemplateKind::Detector => {
-                println!("Adding detector: {template:?}");
+                println!("Adding detector template: {template:?}");
                 db.get_or_insert_detector_template(template).await?;
             }
         },
