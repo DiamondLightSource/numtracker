@@ -138,11 +138,16 @@ impl<F: Error + 'static> Error for TemplateError<F> {
     }
 }
 
+/// The reasons why a Template could be invalid
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ErrorKind<E> {
+    /// Template placeholders cannot contain other placeholders
     Nested,
+    /// Placeholders cannot be empty
     Empty,
+    /// A placeholder was opened but not closed
     Incomplete,
+    /// The placeholder was not a recognised key
     Unrecognised(E),
 }
 
