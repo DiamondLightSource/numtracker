@@ -179,9 +179,50 @@ impl SqliteScanPathService {
         .await
     }
 
-    pub async fn set_scan_number(&self, bl: &str, current_file: usize) -> Result<(), sqlx::Error> {
-        let current_file = current_file as i64;
-        query_file!("queries/set_scan_number.sql", current_file, bl)
+    pub async fn set_scan_number(&self, bl: &str, number: usize) -> Result<(), sqlx::Error> {
+        let number = number as i64;
+        debug!(
+            beamline = bl,
+            scan_number = number,
+            "Setting scan number directly"
+        );
+        query_file!("queries/set_scan_number.sql", number, bl)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn set_visit_template(&self, bl: &str, visit_id: i64) -> sqlx::Result<()> {
+        debug!(
+            beamline = bl,
+            visit = visit_id,
+            "Setting beamline visit template"
+        );
+        query_file!("queries/set_visit_template.sql", visit_id, bl)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn set_scan_template(&self, bl: &str, scan_id: i64) -> sqlx::Result<()> {
+        debug!(
+            beamline = bl,
+            scan = scan_id,
+            "Setting beamline scan template"
+        );
+        query_file!("queries/set_scan_template.sql", scan_id, bl)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn set_detector_template(&self, bl: &str, detector_id: i64) -> sqlx::Result<()> {
+        debug!(
+            beamline = bl,
+            detector = detector_id,
+            "Setting beamline detector template"
+        );
+        query_file!("queries/set_detector_template.sql", detector_id, bl)
             .execute(&self.pool)
             .await?;
         Ok(())

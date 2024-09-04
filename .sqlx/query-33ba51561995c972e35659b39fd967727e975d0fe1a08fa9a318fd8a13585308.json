@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO beamline_detector (beamline, detector)\nSELECT id, ?\n    FROM beamline\n    WHERE name = ?\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "33ba51561995c972e35659b39fd967727e975d0fe1a08fa9a318fd8a13585308"
+}

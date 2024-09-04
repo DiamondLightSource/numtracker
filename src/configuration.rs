@@ -22,13 +22,17 @@ async fn configure_beamline(
 ) -> Result<(), ConfigError> {
     println!("{opts:#?}");
     if let Some(visit) = opts.visit {
-        set_template(&db, TemplateKind::Visit, visit).await?;
+        let visit_id = set_template(&db, TemplateKind::Visit, visit).await?;
+        db.set_visit_template(&opts.beamline, visit_id).await?;
     }
     if let Some(scan) = opts.scan {
-        set_template(&db, TemplateKind::Scan, scan).await?;
+        let scan_id = set_template(&db, TemplateKind::Scan, scan).await?;
+        db.set_scan_template(&opts.beamline, scan_id).await?;
     }
     if let Some(detector) = opts.detector {
-        set_template(&db, TemplateKind::Detector, detector).await?;
+        let detector_id = set_template(&db, TemplateKind::Detector, detector).await?;
+        db.set_detector_template(&opts.beamline, detector_id)
+            .await?;
     }
     Ok(())
 }
