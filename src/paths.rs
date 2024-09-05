@@ -1,7 +1,11 @@
+use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::{self, Debug, Display};
+use std::hash::Hash;
 
-#[derive(Debug, PartialEq, Eq)]
+use crate::template::{PathTemplate, PathTemplateError};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BeamlineField {
     Year,
     Visit,
@@ -9,14 +13,14 @@ pub enum BeamlineField {
     Instrument,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScanField {
     Subdirectory,
     ScanNumber,
     Beamline(BeamlineField),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DetectorField {
     Detector,
     Scan(ScanField),
@@ -95,4 +99,89 @@ impl TryFrom<String> for DetectorField {
             _ => Ok(DetectorField::Scan(ScanField::try_from(value)?)),
         }
     }
+}
+
+trait PathField: TryFrom<String> + Eq + Hash + Clone + 'static {}
+impl<F> PathField for F where F: TryFrom<String> + Eq + Hash + Clone + 'static {}
+
+trait PathSpec {
+    type Field: PathField;
+    const REQUIRED: &'static [Self::Field];
+    const ABSOLUTE: bool;
+
+    fn create(path: &str) -> Result<PathTemplate<Self::Field>, InvalidPathTemplate<Self::Field>> {
+        let template = PathTemplate::new(path)?;
+        match (Self::ABSOLUTE, template.is_absolute()) {
+            (true, false) => Err(InvalidPathTemplate::ShouldBeAbsolute),
+            (false, true) => Err(InvalidPathTemplate::ShouldBeRelative),
+            _ => Ok(()),
+        }?;
+        let fields = template.referenced_fields().collect::<HashSet<_>>();
+        for f in Self::REQUIRED {
+            if !fields.contains(f) {
+                return Err(InvalidPathTemplate::MissingField(f.clone()));
+            }
+        }
+        Ok(template)
+    }
+}
+
+enum InvalidPathTemplate<E> {
+    TemplateError(PathTemplateError),
+    ShouldBeAbsolute,
+    ShouldBeRelative,
+    MissingField(E),
+}
+
+impl<F: Debug> Display for InvalidPathTemplate<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            InvalidPathTemplate::TemplateError(e) => write!(f, "{e}"),
+            InvalidPathTemplate::ShouldBeAbsolute => f.write_str("Path should be absolute"),
+            InvalidPathTemplate::ShouldBeRelative => f.write_str("Path should be relative"),
+            InvalidPathTemplate::MissingField(fld) => {
+                write!(f, "Template should reference missing field: {fld:?}")
+            }
+        }
+    }
+}
+
+impl<F> From<PathTemplateError> for InvalidPathTemplate<F> {
+    fn from(value: PathTemplateError) -> Self {
+        Self::TemplateError(value)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct VisitTemplate;
+#[derive(Debug, Clone, Copy)]
+pub struct ScanTemplate;
+#[derive(Debug, Clone, Copy)]
+pub struct DetectorTemplate;
+
+impl PathSpec for VisitTemplate {
+    type Field = BeamlineField;
+
+    const REQUIRED: &'static [Self::Field] = &[BeamlineField::Instrument, BeamlineField::Visit];
+
+    const ABSOLUTE: bool = true;
+}
+
+impl PathSpec for ScanTemplate {
+    type Field = ScanField;
+
+    const REQUIRED: &'static [Self::Field] = &[ScanField::ScanNumber];
+
+    const ABSOLUTE: bool = false;
+}
+
+impl PathSpec for DetectorTemplate {
+    type Field = DetectorField;
+
+    const REQUIRED: &'static [Self::Field] = &[
+        DetectorField::Detector,
+        DetectorField::Scan(ScanField::ScanNumber),
+    ];
+
+    const ABSOLUTE: bool = false;
 }
