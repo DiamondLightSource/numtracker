@@ -1,12 +1,6 @@
 use std::error::Error;
 use std::fmt::{self, Debug, Display};
 
-use crate::template::PathTemplate;
-
-pub type VisitTemplate = PathTemplate<BeamlineField>;
-pub type ScanTemplate = PathTemplate<ScanField>;
-pub type DetectorTemplate = PathTemplate<DetectorField>;
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum BeamlineField {
     Year,
