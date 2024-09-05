@@ -9,12 +9,12 @@ use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Router};
-use numtracker::db_service::SqliteScanPathService;
-use numtracker::{BeamlineContext, ScanService, Subdirectory, VisitService};
 use tokio::net::TcpListener;
 use tracing::instrument;
 
 use crate::cli::ServeOptions;
+use crate::context::{BeamlineContext, ScanService, Subdirectory, VisitService};
+use crate::db_service::SqliteScanPathService;
 pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
     let db = SqliteScanPathService::connect(db).await.unwrap();
     let schema = Schema::build(Query, Mutation, EmptySubscription)

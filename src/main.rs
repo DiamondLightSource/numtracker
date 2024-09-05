@@ -5,10 +5,15 @@ use tracing::debug;
 
 mod cli;
 mod configuration;
+mod context;
+mod db_service;
 mod graphql;
 mod info;
 mod logging;
+mod numtracker;
+mod paths;
 mod sync;
+mod template;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

@@ -3,11 +3,11 @@ use std::path::Path;
 
 use futures::TryStreamExt as _;
 use inquire::list_option::ListOption;
-use numtracker::db_service::{NumtrackerConfig, SqliteScanPathService};
-use numtracker::numtracker::GdaNumTracker;
 use tokio::sync::oneshot;
 
 use crate::cli::{SyncMode, SyncOptions};
+use crate::db_service::{NumtrackerConfig, SqliteScanPathService};
+use crate::numtracker::GdaNumTracker;
 
 pub async fn sync_directories(db: &Path, opts: SyncOptions) {
     let db = SqliteScanPathService::connect(db).await.unwrap();

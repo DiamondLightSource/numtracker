@@ -4,9 +4,9 @@ use std::fmt::Display;
 use std::path::Path;
 
 use inquire::Select;
-use numtracker::db_service::{SqliteScanPathService, TemplateOption};
 
 use crate::cli::{BeamlineConfig, ConfigAction, TemplateAction, TemplateConfig, TemplateKind};
+use crate::db_service::{SqliteScanPathService, TemplateOption};
 
 pub async fn configure(db: &Path, opts: ConfigAction) -> Result<(), ConfigError> {
     let db = SqliteScanPathService::connect(db).await.unwrap();

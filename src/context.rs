@@ -1,14 +1,14 @@
+use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::Display;
 use std::path::{Component, Path, PathBuf};
 
-use db_service::{SqliteNumberError, SqliteScanPathService, SqliteTemplateError};
+use chrono::{Datelike as _, Local};
 use tracing::{debug, info, instrument};
 
-pub mod db_service;
-pub mod numtracker;
-pub mod paths;
-pub mod template;
+use crate::db_service::{SqliteNumberError, SqliteScanPathService, SqliteTemplateError};
+use crate::paths::{BeamlineField, DetectorField, ScanField};
+use crate::template::FieldSource;
 
 pub struct VisitService {
     db: SqliteScanPathService,
@@ -127,6 +127,42 @@ impl ScanService {
                 (det, path)
             })
             .collect())
+    }
+}
+
+impl FieldSource<BeamlineField> for BeamlineContext {
+    fn resolve(&self, field: &BeamlineField) -> Cow<'_, str> {
+        match field {
+            // Should be year of visit?
+            BeamlineField::Year => Local::now().year().to_string().into(),
+            BeamlineField::Visit => self.visit().into(),
+            BeamlineField::Proposal => self
+                .visit
+                .split('-')
+                .next()
+                .expect("There is always one section for a split")
+                .into(),
+            BeamlineField::Instrument => AsRef::<str>::as_ref(&self.instrument).into(),
+        }
+    }
+}
+
+impl FieldSource<ScanField> for ScanContext {
+    fn resolve(&self, field: &ScanField) -> Cow<'_, str> {
+        match field {
+            ScanField::Subdirectory => self.subdirectory.as_ref().to_string_lossy(),
+            ScanField::ScanNumber => self.scan_number.to_string().into(),
+            ScanField::Beamline(bf) => self.beamline.resolve(bf),
+        }
+    }
+}
+
+impl<'a> FieldSource<DetectorField> for DetectorContext<'a> {
+    fn resolve(&self, field: &DetectorField) -> Cow<'_, str> {
+        match field {
+            DetectorField::Detector => self.detector.as_ref().into(),
+            DetectorField::Scan(sf) => self.scan.resolve(sf),
+        }
     }
 }
 

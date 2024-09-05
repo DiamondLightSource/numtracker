@@ -3,8 +3,9 @@ use std::fmt::Display;
 use std::path::Path;
 
 use futures::TryStreamExt as _;
-use numtracker::db_service::{NumtrackerConfig, SqliteScanPathService};
-use numtracker::numtracker::GdaNumTracker;
+
+use crate::db_service::{NumtrackerConfig, SqliteScanPathService};
+use crate::numtracker::GdaNumTracker;
 
 pub async fn list_info(db: &Path, beamline: Option<&str>) {
     let db = SqliteScanPathService::connect(db).await.unwrap();
