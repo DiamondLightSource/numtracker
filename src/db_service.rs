@@ -294,6 +294,7 @@ mod error {
     use std::error::Error;
     use std::fmt::{self, Display};
 
+    use crate::paths::InvalidPathTemplate;
     use crate::template::PathTemplateError;
 
     /// Something that went wrong in the chain of querying the database for a template and
@@ -406,6 +407,42 @@ mod error {
     impl From<sqlx::Error> for SqliteNumberDirectoryError {
         fn from(value: sqlx::Error) -> Self {
             Self::NotAccessible(value)
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum InsertTemplateError {
+        Db(sqlx::Error),
+        Invalid(InvalidPathTemplate),
+    }
+
+    impl Display for InsertTemplateError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                InsertTemplateError::Db(e) => write!(f, "Error inserting template: {e}"),
+                InsertTemplateError::Invalid(e) => write!(f, "Template was not valid: {e}"),
+            }
+        }
+    }
+
+    impl Error for InsertTemplateError {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            match self {
+                InsertTemplateError::Db(e) => Some(e),
+                InsertTemplateError::Invalid(e) => Some(e),
+            }
+        }
+    }
+
+    impl From<InvalidPathTemplate> for InsertTemplateError {
+        fn from(value: InvalidPathTemplate) -> Self {
+            Self::Invalid(value)
+        }
+    }
+
+    impl From<sqlx::Error> for InsertTemplateError {
+        fn from(value: sqlx::Error) -> Self {
+            Self::Db(value)
         }
     }
 }
