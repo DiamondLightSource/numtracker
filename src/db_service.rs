@@ -9,6 +9,7 @@ use sqlx::{query_as, query_file, query_file_as, query_file_scalar, Sqlite, Sqlit
 use tracing::{debug, info, instrument, warn};
 
 pub use self::error::{SqliteNumberDirectoryError, SqliteNumberError, SqliteTemplateError};
+use crate::cli::TemplateKind;
 use crate::numtracker;
 use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
 use crate::template::PathTemplate;
@@ -188,88 +189,89 @@ impl SqliteScanPathService {
         Ok(())
     }
 
-    pub async fn set_visit_template(&self, bl: &str, visit_id: i64) -> sqlx::Result<()> {
+    pub async fn set_beamline_template(
+        &self,
+        bl: &str,
+        kind: TemplateKind,
+        template_id: i64,
+    ) -> sqlx::Result<()> {
         debug!(
             beamline = bl,
-            visit = visit_id,
-            "Setting beamline visit template"
+            template_id, "Setting beamline {kind:?} template"
         );
-        query_file!("queries/set_visit_template.sql", visit_id, bl)
-            .execute(&self.pool)
-            .await?;
+        match kind {
+            TemplateKind::Visit => {
+                query_file!("queries/set_visit_template.sql", template_id, bl)
+                    .execute(&self.pool)
+                    .await?
+            }
+            TemplateKind::Scan => {
+                query_file!("queries/set_scan_template.sql", template_id, bl)
+                    .execute(&self.pool)
+                    .await?
+            }
+            TemplateKind::Detector => {
+                query_file!("queries/set_detector_template.sql", template_id, bl)
+                    .execute(&self.pool)
+                    .await?
+            }
+        };
         Ok(())
     }
 
-    pub async fn set_scan_template(&self, bl: &str, scan_id: i64) -> sqlx::Result<()> {
-        debug!(
-            beamline = bl,
-            scan = scan_id,
-            "Setting beamline scan template"
-        );
-        query_file!("queries/set_scan_template.sql", scan_id, bl)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn set_detector_template(&self, bl: &str, detector_id: i64) -> sqlx::Result<()> {
-        debug!(
-            beamline = bl,
-            detector = detector_id,
-            "Setting beamline detector template"
-        );
-        query_file!("queries/set_detector_template.sql", detector_id, bl)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn get_or_insert_visit_template(&self, template: String) -> sqlx::Result<i64> {
+    pub async fn insert_template(
+        &self,
+        kind: TemplateKind,
+        template: String,
+    ) -> Result<i64, sqlx::Error> {
         let template = template.as_str();
-        self.get_or_insert_template(
-            query_file_scalar!("queries/insert_visit_template.sql", template),
-            || query_file_scalar!("queries/get_visit_template.sql", template),
-        )
-        .await
+        let new_id = match kind {
+            TemplateKind::Visit => {
+                self.get_or_insert_template(
+                    query_file_scalar!("queries/insert_visit_template.sql", template),
+                    || query_file_scalar!("queries/get_visit_template.sql", template),
+                )
+                .await
+            }
+            TemplateKind::Scan => {
+                self.get_or_insert_template(
+                    query_file_scalar!("queries/insert_scan_template.sql", template),
+                    || query_file_scalar!("queries/get_scan_template.sql", template),
+                )
+                .await
+            }
+            TemplateKind::Detector => {
+                self.get_or_insert_template(
+                    query_file_scalar!("queries/insert_detector_template.sql", template),
+                    || query_file_scalar!("queries/get_detector_template.sql", template),
+                )
+                .await
+            }
+        }?;
+        Ok(new_id)
     }
 
-    pub async fn get_visit_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
-        query_as!(TemplateOption, "SELECT id, template FROM visit_template;")
-            .fetch_all(&self.pool)
-            .await
-    }
-
-    pub async fn get_or_insert_scan_template(&self, template: String) -> sqlx::Result<i64> {
-        let template = template.as_str();
-        self.get_or_insert_template(
-            query_file_scalar!("queries/insert_scan_template.sql", template),
-            || query_file_scalar!("queries/get_scan_template.sql", template),
-        )
-        .await
-    }
-
-    pub async fn get_scan_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
-        query_as!(TemplateOption, "SELECT id, template FROM scan_template;")
-            .fetch_all(&self.pool)
-            .await
-    }
-
-    pub async fn get_or_insert_detector_template(&self, template: String) -> sqlx::Result<i64> {
-        let template = template.as_str();
-        self.get_or_insert_template(
-            query_file_scalar!("queries/insert_detector_template.sql", template),
-            || query_file_scalar!("queries/get_detector_template.sql", template),
-        )
-        .await
-    }
-
-    pub async fn get_detector_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
-        query_as!(
-            TemplateOption,
-            "SELECT id, template FROM detector_template;"
-        )
-        .fetch_all(&self.pool)
-        .await
+    pub async fn get_templates(&self, kind: TemplateKind) -> sqlx::Result<Vec<TemplateOption>> {
+        match kind {
+            TemplateKind::Visit => {
+                query_as!(TemplateOption, "SELECT id, template FROM visit_template;")
+                    .fetch_all(&self.pool)
+                    .await
+            }
+            TemplateKind::Scan => {
+                query_as!(TemplateOption, "SELECT id, template FROM scan_template;")
+                    .fetch_all(&self.pool)
+                    .await
+            }
+            TemplateKind::Detector => {
+                query_as!(
+                    TemplateOption,
+                    "SELECT id, template FROM detector_template;"
+                )
+                .fetch_all(&self.pool)
+                .await
+            }
+        }
     }
 }
 

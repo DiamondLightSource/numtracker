@@ -5,6 +5,7 @@ use std::path::Path;
 
 use inquire::Select;
 
+use crate::cli::TemplateKind::*;
 use crate::cli::{BeamlineConfig, ConfigAction, TemplateAction, TemplateConfig, TemplateKind};
 use crate::db_service::{SqliteScanPathService, TemplateOption};
 
@@ -22,16 +23,18 @@ async fn configure_beamline(
 ) -> Result<(), ConfigError> {
     println!("{opts:#?}");
     if let Some(visit) = opts.visit {
-        let visit_id = set_template(&db, TemplateKind::Visit, visit).await?;
-        db.set_visit_template(&opts.beamline, visit_id).await?;
+        let visit_id = set_template(&db, Visit, visit).await?;
+        db.set_beamline_template(&opts.beamline, Visit, visit_id)
+            .await?;
     }
     if let Some(scan) = opts.scan {
-        let scan_id = set_template(&db, TemplateKind::Scan, scan).await?;
-        db.set_scan_template(&opts.beamline, scan_id).await?;
+        let scan_id = set_template(&db, Scan, scan).await?;
+        db.set_beamline_template(&opts.beamline, Scan, scan_id)
+            .await?;
     }
     if let Some(detector) = opts.detector {
-        let detector_id = set_template(&db, TemplateKind::Detector, detector).await?;
-        db.set_detector_template(&opts.beamline, detector_id)
+        let detector_id = set_template(&db, Detector, detector).await?;
+        db.set_beamline_template(&opts.beamline, Detector, detector_id)
             .await?;
     }
     Ok(())
@@ -41,33 +44,24 @@ async fn configure_template(
     db: &SqliteScanPathService,
     opts: TemplateConfig,
 ) -> Result<(), ConfigError> {
-    Ok(match opts.action {
-        TemplateAction::Add { kind, template } => match kind {
-            TemplateKind::Visit => {
-                println!("Adding visit template: {template:?}");
-                db.get_or_insert_visit_template(template).await?;
-            }
-            TemplateKind::Scan => {
-                println!("Adding scan template: {template:?}");
-                db.get_or_insert_scan_template(template).await?;
-            }
-            TemplateKind::Detector => {
-                println!("Adding detector template: {template:?}");
-                db.get_or_insert_detector_template(template).await?;
-            }
-        },
+    match opts.action {
+        TemplateAction::Add { kind, template } => {
+            println!("Adding {kind:?} template: {template:?}");
+            db.insert_template(kind, template).await?;
+        }
         TemplateAction::List { filter } => {
-            if let Some(TemplateKind::Visit) | None = filter {
-                list_templates("Visit", &db.get_visit_templates().await?)
+            if let Some(Visit) | None = filter {
+                list_templates("Visit", &db.get_templates(Visit).await?)
             }
-            if let Some(TemplateKind::Scan) | None = filter {
-                list_templates("Scan", &db.get_scan_templates().await?)
+            if let Some(Scan) | None = filter {
+                list_templates("Scan", &db.get_templates(Scan).await?)
             }
-            if let Some(TemplateKind::Detector) | None = filter {
-                list_templates("Detector", &db.get_detector_templates().await?)
+            if let Some(Detector) | None = filter {
+                list_templates("Detector", &db.get_templates(Detector).await?)
             }
         }
-    })
+    }
+    Ok(())
 }
 
 fn list_templates(heading: &str, templates: &[TemplateOption]) {
@@ -93,22 +87,14 @@ async fn new_template(
     kind: TemplateKind,
     template: String,
 ) -> Result<i64, sqlx::Error> {
-    match kind {
-        TemplateKind::Visit => db.get_or_insert_visit_template(template).await,
-        TemplateKind::Scan => db.get_or_insert_scan_template(template).await,
-        TemplateKind::Detector => db.get_or_insert_detector_template(template).await,
-    }
+    db.insert_template(kind, template).await
 }
 
 async fn choose_template(
     db: &SqliteScanPathService,
     kind: TemplateKind,
 ) -> Result<i64, ConfigError> {
-    let templates = match kind {
-        TemplateKind::Visit => db.get_visit_templates().await,
-        TemplateKind::Scan => db.get_scan_templates().await,
-        TemplateKind::Detector => db.get_detector_templates().await,
-    }?;
+    let templates = db.get_templates(kind).await?;
 
     Select::new(&format!("Choose a {kind:?} template: "), templates)
         .prompt()
