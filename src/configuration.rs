@@ -11,7 +11,7 @@ use crate::db_service::{InsertTemplateError, SqliteScanPathService, TemplateOpti
 use crate::paths::InvalidPathTemplate;
 
 pub async fn configure(db: &Path, opts: ConfigAction) -> Result<(), ConfigError> {
-    let db = SqliteScanPathService::connect(db).await.unwrap();
+    let db = SqliteScanPathService::connect(db).await?;
     match opts {
         ConfigAction::Beamline(opts) => configure_beamline(&db, opts).await,
         ConfigAction::Template(opts) => configure_template(&db, opts).await,
