@@ -88,7 +88,7 @@ impl ScanService {
 
     #[instrument(skip(self))]
     pub async fn visit_directory(&self) -> Result<PathBuf, SqliteTemplateError> {
-        let template = self.db.visit_directory_template(&self.beamline()).await?;
+        let template = self.db.visit_directory_template(self.beamline()).await?;
         info!("Visit template: {template:?}");
         Ok(template.render(&self.ctx.beamline))
     }

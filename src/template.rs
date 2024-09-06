@@ -274,7 +274,7 @@ impl<F: TryFrom<String>> PathTemplate<F> {
 }
 
 impl<F> PathTemplate<F> {
-    pub fn render<'a, Src>(&self, src: &'a Src) -> PathBuf
+    pub fn render<Src>(&self, src: &Src) -> PathBuf
     where
         Src: FieldSource<F>,
     {
