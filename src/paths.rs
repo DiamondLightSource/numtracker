@@ -101,15 +101,15 @@ impl TryFrom<String> for DetectorField {
     }
 }
 
-trait PathField: TryFrom<String> + Eq + Hash + Clone + 'static {}
-impl<F> PathField for F where F: TryFrom<String> + Eq + Hash + Clone + 'static {}
+trait PathField: TryFrom<String> + Eq + Hash + Display + 'static {}
+impl<F> PathField for F where F: TryFrom<String> + Eq + Hash + Display + 'static {}
 
 trait PathSpec {
     type Field: PathField;
     const REQUIRED: &'static [Self::Field];
     const ABSOLUTE: bool;
 
-    fn create(path: &str) -> Result<PathTemplate<Self::Field>, InvalidPathTemplate<Self::Field>> {
+    fn create(path: &str) -> Result<PathTemplate<Self::Field>, InvalidPathTemplate> {
         let template = PathTemplate::new(path)?;
         match (Self::ABSOLUTE, template.is_absolute()) {
             (true, false) => Err(InvalidPathTemplate::ShouldBeAbsolute),
@@ -119,21 +119,21 @@ trait PathSpec {
         let fields = template.referenced_fields().collect::<HashSet<_>>();
         for f in Self::REQUIRED {
             if !fields.contains(f) {
-                return Err(InvalidPathTemplate::MissingField(f.clone()));
+                return Err(InvalidPathTemplate::MissingField(f.to_string()));
             }
         }
         Ok(template)
     }
 }
 
-enum InvalidPathTemplate<E> {
+enum InvalidPathTemplate {
     TemplateError(PathTemplateError),
     ShouldBeAbsolute,
     ShouldBeRelative,
-    MissingField(E),
+    MissingField(String),
 }
 
-impl<F: Debug> Display for InvalidPathTemplate<F> {
+impl Display for InvalidPathTemplate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             InvalidPathTemplate::TemplateError(e) => write!(f, "{e}"),
@@ -146,7 +146,7 @@ impl<F: Debug> Display for InvalidPathTemplate<F> {
     }
 }
 
-impl<F> From<PathTemplateError> for InvalidPathTemplate<F> {
+impl From<PathTemplateError> for InvalidPathTemplate {
     fn from(value: PathTemplateError) -> Self {
         Self::TemplateError(value)
     }
