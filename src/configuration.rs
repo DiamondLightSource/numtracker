@@ -1,4 +1,3 @@
-#![deny(clippy::unwrap_used)]
 use std::error::Error;
 use std::fmt::Display;
 use std::path::Path;

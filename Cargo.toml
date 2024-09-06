@@ -3,6 +3,9 @@ name = "numtracker"
 version = "0.1.0"
 edition = "2021"
 
+[lints.clippy]
+unwrap_used = "deny"
+
 [dependencies]
 async-graphql = { version = "7.0.7", features = ["tracing"] }
 async-graphql-axum = "7.0.7"
