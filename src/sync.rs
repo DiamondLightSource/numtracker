@@ -5,42 +5,47 @@ use futures::TryStreamExt as _;
 use inquire::list_option::ListOption;
 use tokio::sync::oneshot;
 
+pub use self::error::SyncError;
 use crate::cli::{SyncMode, SyncOptions};
 use crate::db_service::{NumtrackerConfig, SqliteScanPathService};
 use crate::numtracker::GdaNumTracker;
 
-pub async fn sync_directories(db: &Path, opts: SyncOptions) {
-    let db = SqliteScanPathService::connect(db).await.unwrap();
+type SyncResult = std::result::Result<(), SyncError>;
+
+pub async fn sync_directories(db: &Path, opts: SyncOptions) -> SyncResult {
+    let db = SqliteScanPathService::connect(db).await?;
 
     if let Some(bl) = opts.beamline() {
-        sync_beamline_directory(&db, bl, opts.mode).await;
+        sync_beamline_directory(&db, bl, opts.mode).await?;
     } else {
         let mut all = db.beamlines();
         while let Ok(Some(bl)) = all.try_next().await {
-            sync_beamline_directory(&db, &bl, opts.mode).await;
+            sync_beamline_directory(&db, &bl, opts.mode).await?;
         }
     }
+    Ok(())
 }
 
-async fn sync_beamline_directory(db: &SqliteScanPathService, bl: &str, mode: Option<SyncMode>) {
+async fn sync_beamline_directory(
+    db: &SqliteScanPathService,
+    bl: &str,
+    mode: Option<SyncMode>,
+) -> SyncResult {
     let Some(NumtrackerConfig {
         directory,
         extension,
-    }) = db.number_tracker_directory(bl).await.unwrap()
+    }) = db.number_tracker_directory(bl).await?
     else {
         println!("Directory not configured for {bl}");
-        return;
+        return Ok(());
     };
-    let current_db = db.latest_scan_number(bl).await.unwrap();
+    let current_db = db.latest_scan_number(bl).await?;
     let gda_num_tracker = &GdaNumTracker::new(&directory);
-    let current_file = gda_num_tracker
-        .latest_scan_number(&extension)
-        .await
-        .unwrap();
+    let current_file = gda_num_tracker.latest_scan_number(&extension).await?;
 
     if current_db == current_file {
         println!("{bl} scan numbers are in sync: {current_db}");
-        return;
+        return Ok(());
     }
     println!("{bl} scan numbers do not match");
     println!("    DB  : {current_db}");
@@ -54,7 +59,7 @@ async fn sync_beamline_directory(db: &SqliteScanPathService, bl: &str, mode: Opt
                     .unwrap_or(false)
             {
                 println!("    Updating DB scan number from {current_db} to {current_file}");
-                db.set_scan_number(bl, current_file).await.unwrap();
+                db.set_scan_number(bl, current_file).await?;
             }
         }
         Some(SyncMode::Export { force }) => {
@@ -66,8 +71,7 @@ async fn sync_beamline_directory(db: &SqliteScanPathService, bl: &str, mode: Opt
                 println!("    Updating file scan number from {current_file} to {current_db}");
                 gda_num_tracker
                     .set_scan_number(&extension, current_db)
-                    .await
-                    .unwrap();
+                    .await?;
             }
         }
         None => {
@@ -103,15 +107,17 @@ async fn sync_beamline_directory(db: &SqliteScanPathService, bl: &str, mode: Opt
                 )
             });
             match rx.await.unwrap_or(SyncDirection::Skip) {
-                SyncDirection::Import(_) => db.set_scan_number(bl, current_file).await.unwrap(),
-                SyncDirection::Export(_) => gda_num_tracker
-                    .set_scan_number(&extension, current_db)
-                    .await
-                    .unwrap(),
+                SyncDirection::Import(_) => db.set_scan_number(bl, current_file).await?,
+                SyncDirection::Export(_) => {
+                    gda_num_tracker
+                        .set_scan_number(&extension, current_db)
+                        .await?
+                }
                 SyncDirection::Skip => println!("Skipping sync"),
             }
         }
     }
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -152,4 +158,62 @@ fn confirm(prompt: String) -> oneshot::Receiver<bool> {
         )
     });
     rx
+}
+
+mod error {
+    use std::error::Error;
+    use std::fmt::Display;
+
+    use crate::db_service::SqliteNumberError;
+
+    #[derive(Debug)]
+    pub enum SyncError {
+        Db(sqlx::Error),
+        Fs(std::io::Error),
+        BeamlineNotFound,
+        ValueError(i64),
+    }
+
+    impl Display for SyncError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                SyncError::Db(e) => e.fmt(f),
+                SyncError::Fs(e) => e.fmt(f),
+                SyncError::BeamlineNotFound => f.write_str("Beamline not in DB"),
+                SyncError::ValueError(v) => write!(f, "{v} is not a valid scan number"),
+            }
+        }
+    }
+
+    impl Error for SyncError {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            match self {
+                SyncError::Db(e) => Some(e),
+                SyncError::Fs(e) => Some(e),
+                _ => None,
+            }
+        }
+    }
+
+    impl From<sqlx::Error> for SyncError {
+        fn from(value: sqlx::Error) -> Self {
+            Self::Db(value)
+        }
+    }
+
+    impl From<std::io::Error> for SyncError {
+        fn from(value: std::io::Error) -> Self {
+            Self::Fs(value)
+        }
+    }
+
+    impl From<SqliteNumberError> for SyncError {
+        fn from(value: SqliteNumberError) -> Self {
+            match value {
+                SqliteNumberError::BeamlineNotFound => Self::BeamlineNotFound,
+                SqliteNumberError::ConnectionError(e) => Self::Db(e),
+                SqliteNumberError::InvalidValue(v) => Self::ValueError(v),
+            }
+        }
+    }
 }
