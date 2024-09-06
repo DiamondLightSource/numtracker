@@ -126,6 +126,7 @@ trait PathSpec {
     }
 }
 
+#[derive(Debug)]
 enum InvalidPathTemplate {
     TemplateError(PathTemplateError),
     ShouldBeAbsolute,
@@ -142,6 +143,15 @@ impl Display for InvalidPathTemplate {
             InvalidPathTemplate::MissingField(fld) => {
                 write!(f, "Template should reference missing field: {fld:?}")
             }
+        }
+    }
+}
+
+impl Error for InvalidPathTemplate {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            InvalidPathTemplate::TemplateError(e) => Some(e),
+            _ => None,
         }
     }
 }
