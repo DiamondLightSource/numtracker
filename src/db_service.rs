@@ -26,12 +26,6 @@ pub struct NumtrackerConfig {
     pub extension: String,
 }
 
-impl NumtrackerConfig {
-    pub fn display(&self) -> String {
-        format!("{}/*.{}", self.directory, self.extension)
-    }
-}
-
 #[derive(Debug)]
 pub struct TemplateOption {
     pub id: i64,
