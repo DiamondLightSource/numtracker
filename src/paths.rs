@@ -101,10 +101,10 @@ impl TryFrom<String> for DetectorField {
     }
 }
 
-trait PathField: TryFrom<String> + Eq + Hash + Display + 'static {}
+pub trait PathField: TryFrom<String> + Eq + Hash + Display + 'static {}
 impl<F> PathField for F where F: TryFrom<String> + Eq + Hash + Display + 'static {}
 
-trait PathSpec {
+pub trait PathSpec {
     type Field: PathField;
     const REQUIRED: &'static [Self::Field];
     const ABSOLUTE: bool;
@@ -127,7 +127,7 @@ trait PathSpec {
 }
 
 #[derive(Debug)]
-enum InvalidPathTemplate {
+pub enum InvalidPathTemplate {
     TemplateError(PathTemplateError),
     ShouldBeAbsolute,
     ShouldBeRelative,
