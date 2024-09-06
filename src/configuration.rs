@@ -78,17 +78,9 @@ async fn set_template(
     template: Option<String>,
 ) -> Result<i64, ConfigError> {
     match template {
-        Some(template) => Ok(new_template(db, kind, template).await?),
+        Some(template) => Ok(db.insert_template(kind, template).await?),
         None => choose_template(db, kind).await,
     }
-}
-
-async fn new_template(
-    db: &SqliteScanPathService,
-    kind: TemplateKind,
-    template: String,
-) -> Result<i64, ConfigError> {
-    Ok(db.insert_template(kind, template).await?)
 }
 
 async fn choose_template(
