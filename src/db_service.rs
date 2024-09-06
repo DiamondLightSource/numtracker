@@ -8,7 +8,9 @@ use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
 use sqlx::{query_as, query_file, query_file_as, query_file_scalar, Sqlite, SqlitePool};
 use tracing::{debug, info, instrument, warn};
 
-pub use self::error::{SqliteNumberDirectoryError, SqliteNumberError, SqliteTemplateError};
+pub use self::error::{
+    InsertTemplateError, SqliteNumberDirectoryError, SqliteNumberError, SqliteTemplateError,
+};
 use crate::cli::TemplateKind;
 use crate::numtracker;
 use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
@@ -223,7 +225,8 @@ impl SqliteScanPathService {
         &self,
         kind: TemplateKind,
         template: String,
-    ) -> Result<i64, sqlx::Error> {
+    ) -> Result<i64, InsertTemplateError> {
+        kind.validate(&template)?;
         let template = template.as_str();
         let new_id = match kind {
             TemplateKind::Visit => {

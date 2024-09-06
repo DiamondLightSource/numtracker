@@ -7,7 +7,8 @@ use inquire::Select;
 
 use crate::cli::TemplateKind::*;
 use crate::cli::{BeamlineConfig, ConfigAction, TemplateAction, TemplateConfig, TemplateKind};
-use crate::db_service::{SqliteScanPathService, TemplateOption};
+use crate::db_service::{InsertTemplateError, SqliteScanPathService, TemplateOption};
+use crate::paths::InvalidPathTemplate;
 
 pub async fn configure(db: &Path, opts: ConfigAction) -> Result<(), ConfigError> {
     let db = SqliteScanPathService::connect(db).await.unwrap();
@@ -86,8 +87,8 @@ async fn new_template(
     db: &SqliteScanPathService,
     kind: TemplateKind,
     template: String,
-) -> Result<i64, sqlx::Error> {
-    db.insert_template(kind, template).await
+) -> Result<i64, ConfigError> {
+    Ok(db.insert_template(kind, template).await?)
 }
 
 async fn choose_template(
@@ -104,8 +105,9 @@ async fn choose_template(
 
 #[derive(Debug)]
 pub enum ConfigError {
-    Db(sqlx::Error),
     Cancelled,
+    Db(sqlx::Error),
+    InvalidTemplate(InvalidPathTemplate),
 }
 
 impl From<sqlx::Error> for ConfigError {
@@ -114,11 +116,21 @@ impl From<sqlx::Error> for ConfigError {
     }
 }
 
+impl From<InsertTemplateError> for ConfigError {
+    fn from(value: InsertTemplateError) -> Self {
+        match value {
+            InsertTemplateError::Db(e) => Self::Db(e),
+            InsertTemplateError::Invalid(e) => Self::InvalidTemplate(e),
+        }
+    }
+}
+
 impl Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConfigError::Db(db) => write!(f, "Error reading/writing to DB: {db}"),
             ConfigError::Cancelled => write!(f, "User cancelled operation"),
+            ConfigError::Db(db) => write!(f, "Error reading/writing to DB: {db}"),
+            ConfigError::InvalidTemplate(e) => write!(f, "Template was not valid: {e}"),
         }
     }
 }
@@ -126,8 +138,9 @@ impl Display for ConfigError {
 impl Error for ConfigError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            ConfigError::Db(db) => Some(db),
             ConfigError::Cancelled => None,
+            ConfigError::Db(db) => Some(db),
+            ConfigError::InvalidTemplate(e) => Some(e),
         }
     }
 }
