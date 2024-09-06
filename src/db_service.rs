@@ -38,26 +38,6 @@ impl Display for TemplateOption {
     }
 }
 
-/// Macro to get or insert a new template id. Written as a macro instead of a function as
-/// sqlx queries require string literals for compile time checking.
-macro_rules! get_or_insert {
-    ($db:expr, $insert_query:literal, $get_id_query:literal, $template:ident) => {{
-        let mut trn = ($db).begin().await?;
-        let insert = query_file_scalar!($insert_query, $template)
-            .fetch_optional(&mut *trn)
-            .await?;
-        match insert {
-            Some(ins) => {
-                trn.commit().await?;
-                sqlx::Result::<_>::Ok(Some(ins))
-            }
-            None => Ok(query_file_scalar!($get_id_query, $template)
-                .fetch_one(&mut *trn)
-                .await?),
-        }
-    }};
-}
-
 impl SqliteScanPathService {
     #[instrument]
     pub async fn connect(filename: &Path) -> Result<Self, sqlx::Error> {
@@ -83,6 +63,28 @@ impl SqliteScanPathService {
 
         Ok(PathTemplate::new(template)?)
     }
+
+    /// Insert a new template into the database, or return the ID if the template is already
+    /// present
+    async fn get_or_insert_template<'q>(
+        &self,
+        insert: QueryScalar<'q, Sqlite, i64, SqliteArguments<'q>>,
+        get: impl FnOnce() -> QueryScalar<'q, Sqlite, Option<i64>, SqliteArguments<'q>>,
+    ) -> sqlx::Result<i64> {
+        let mut trn = self.pool.begin().await?;
+        let inserted = insert.fetch_optional(&mut *trn).await?;
+        match inserted {
+            Some(ins) => {
+                trn.commit().await?;
+                Ok(ins)
+            }
+            None => Ok(get()
+                .fetch_one(&mut *trn)
+                .await?
+                .expect("Template missing after being inserted")),
+        }
+    }
+
     pub async fn next_scan_number(&self, beamline: &str) -> Result<usize, SqliteNumberError> {
         let next = self.db_scan_number(beamline).await?;
         let fallback = self.directory_scan_number(beamline).await;
@@ -223,13 +225,12 @@ impl SqliteScanPathService {
     }
 
     pub async fn get_or_insert_visit_template(&self, template: String) -> sqlx::Result<i64> {
-        Ok(get_or_insert!(
-            self.pool,
-            "queries/insert_visit_template.sql",
-            "queries/get_visit_template.sql",
-            template
-        )?
-        .expect("Visit template missing after being added"))
+        let template = template.as_str();
+        self.get_or_insert_template(
+            query_file_scalar!("queries/insert_visit_template.sql", template),
+            || query_file_scalar!("queries/get_visit_template.sql", template),
+        )
+        .await
     }
 
     pub async fn get_visit_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
@@ -239,13 +240,12 @@ impl SqliteScanPathService {
     }
 
     pub async fn get_or_insert_scan_template(&self, template: String) -> sqlx::Result<i64> {
-        Ok(get_or_insert!(
-            self.pool,
-            "queries/insert_scan_template.sql",
-            "queries/get_scan_template.sql",
-            template
-        )?
-        .expect("Scan template missing after being added"))
+        let template = template.as_str();
+        self.get_or_insert_template(
+            query_file_scalar!("queries/insert_scan_template.sql", template),
+            || query_file_scalar!("queries/get_scan_template.sql", template),
+        )
+        .await
     }
 
     pub async fn get_scan_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
@@ -255,13 +255,12 @@ impl SqliteScanPathService {
     }
 
     pub async fn get_or_insert_detector_template(&self, template: String) -> sqlx::Result<i64> {
-        Ok(get_or_insert!(
-            self.pool,
-            "queries/insert_detector_template.sql",
-            "queries/get_detector_template.sql",
-            template
-        )?
-        .expect("Detector template missing after being added"))
+        let template = template.as_str();
+        self.get_or_insert_template(
+            query_file_scalar!("queries/insert_detector_template.sql", template),
+            || query_file_scalar!("queries/get_detector_template.sql", template),
+        )
+        .await
     }
 
     pub async fn get_detector_templates(&self) -> sqlx::Result<Vec<TemplateOption>> {
