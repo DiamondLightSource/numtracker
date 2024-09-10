@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::path::Path;
 
-use futures::TryStreamExt as _;
+use futures::{Future, TryFutureExt, TryStreamExt as _};
 use inquire::list_option::ListOption;
 use tokio::sync::oneshot;
 
@@ -53,21 +53,13 @@ async fn sync_beamline_directory(
 
     match mode {
         Some(SyncMode::Import { force }) => {
-            if force
-                || confirm(format!("Set DB scan number for {bl} to {current_file}?"))
-                    .await
-                    .unwrap_or(false)
-            {
+            if force || confirm(format!("Set DB scan number for {bl} to {current_file}?")).await {
                 println!("    Updating DB scan number from {current_db} to {current_file}");
                 db.set_scan_number(bl, current_file).await?;
             }
         }
         Some(SyncMode::Export { force }) => {
-            if force
-                || confirm(format!("Set scan file for {bl} to {current_db}?"))
-                    .await
-                    .unwrap_or(false)
-            {
+            if force || confirm(format!("Set scan file for {bl} to {current_db}?")).await {
                 println!("    Updating file scan number from {current_file} to {current_db}");
                 gda_num_tracker
                     .set_scan_number(&extension, current_db)
@@ -147,7 +139,8 @@ impl Display for SyncDirection {
     }
 }
 
-fn confirm(prompt: String) -> oneshot::Receiver<bool> {
+/// Ask user for confirmation in background task, defaulting to false if user aborts
+fn confirm(prompt: String) -> impl Future<Output = bool> {
     let (tx, rx) = oneshot::channel();
     tokio::task::spawn_blocking(move || {
         tx.send(
@@ -157,7 +150,7 @@ fn confirm(prompt: String) -> oneshot::Receiver<bool> {
                 .unwrap_or(false),
         )
     });
-    rx
+    rx.unwrap_or_else(|_| false)
 }
 
 mod error {
