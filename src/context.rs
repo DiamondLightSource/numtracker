@@ -269,9 +269,6 @@ impl BeamlineContext {
     pub fn new(instrument: String, visit: String) -> Self {
         Self { instrument, visit }
     }
-    pub fn instrument(&self) -> &str {
-        &self.instrument
-    }
     pub fn visit(&self) -> &str {
         &self.visit
     }
@@ -285,13 +282,6 @@ impl BeamlineContext {
 }
 
 impl ScanContext {
-    pub fn with_subdirectory(self, sub: Subdirectory) -> Self {
-        Self {
-            subdirectory: sub,
-            ..self
-        }
-    }
-
     fn for_detector(&self, det: &str) -> DetectorContext {
         DetectorContext {
             scan: self,
