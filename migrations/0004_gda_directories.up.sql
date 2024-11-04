@@ -13,8 +13,3 @@ number_file_directory.directory as directory,
 extension
 FROM beamline
 JOIN number_file_directory ON beamline.id = number_file_directory.beamline;
-
--- dummy test data
-INSERT INTO number_file_directory (beamline, directory, extension) VALUES
-    (1, "trackers/i22", "tmp"),
-    (2, "trackers/b21", "b21");

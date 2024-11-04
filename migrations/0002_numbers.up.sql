@@ -10,11 +10,3 @@ scan_number.last_number as last_number
 FROM scan_number
 JOIN beamline ON
 scan_number.beamline = beamline.id;
-
-
-INSERT INTO scan_number (beamline, last_number)
-VALUES
-    (1, 122),
-    (2, 621),
-    (3, 111),
-    (4, 1111);
