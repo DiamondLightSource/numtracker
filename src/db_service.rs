@@ -81,9 +81,9 @@ impl SqliteScanPathService {
         Ok(PathTemplate::new(template)?)
     }
 
-    /// Insert a new template into the database, or return the ID if the template is already
+    /// Insert a new record into the database, or return the ID if the record is already
     /// present
-    async fn get_or_insert_template<'q>(
+    async fn get_or_insert<'q>(
         &self,
         insert: QueryScalar<'q, Sqlite, i64, SqliteArguments<'q>>,
         get: impl FnOnce() -> QueryScalar<'q, Sqlite, Option<i64>, SqliteArguments<'q>>,
@@ -98,7 +98,8 @@ impl SqliteScanPathService {
             None => Ok(get()
                 .fetch_one(&mut *trn)
                 .await?
-                .expect("Template missing after being inserted")),
+                // None here suggests an error in the queries being passed
+                .expect("Record missing after being inserted")),
         }
     }
 
@@ -235,6 +236,13 @@ impl SqliteScanPathService {
         Ok(())
     }
 
+    pub async fn insert_beamline(&self, beamline: &str) -> Result<i64, sqlx::Error> {
+        self.get_or_insert(
+            query_file_scalar!("queries/insert_beamline.sql", beamline),
+            || query_file_scalar!("queries/get_beamline_id.sql", beamline),
+        )
+        .await
+    }
     pub async fn insert_template(
         &self,
         kind: TemplateKind,
@@ -244,21 +252,21 @@ impl SqliteScanPathService {
         let template = template.as_str();
         let new_id = match kind {
             TemplateKind::Visit => {
-                self.get_or_insert_template(
+                self.get_or_insert(
                     query_file_scalar!("queries/insert_visit_template.sql", template),
                     || query_file_scalar!("queries/get_visit_template.sql", template),
                 )
                 .await
             }
             TemplateKind::Scan => {
-                self.get_or_insert_template(
+                self.get_or_insert(
                     query_file_scalar!("queries/insert_scan_template.sql", template),
                     || query_file_scalar!("queries/get_scan_template.sql", template),
                 )
                 .await
             }
             TemplateKind::Detector => {
-                self.get_or_insert_template(
+                self.get_or_insert(
                     query_file_scalar!("queries/insert_detector_template.sql", template),
                     || query_file_scalar!("queries/get_detector_template.sql", template),
                 )
