@@ -324,6 +324,24 @@ impl SqliteScanPathService {
             }
         }
     }
+
+    #[cfg(test)]
+    async fn ro_memory() -> Self {
+        // only read-write so that migrations can be applied
+        let opts = SqliteConnectOptions::new().in_memory(true);
+        let pool = SqlitePool::connect_with(opts).await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        // ... then set to read-only
+        pool.set_connect_options(SqliteConnectOptions::new().read_only(true));
+        Self { pool }
+    }
+
+    #[cfg(test)]
+    async fn memory() -> Self {
+        let pool = SqlitePool::connect(":memory:").await.unwrap();
+        sqlx::migrate!().run(&pool).await.unwrap();
+        Self { pool }
+    }
 }
 
 impl fmt::Debug for SqliteScanPathService {
@@ -508,5 +526,184 @@ mod error {
         fn from(value: sqlx::Error) -> Self {
             Self::Db(value)
         }
+    }
+}
+
+#[cfg(test)]
+mod db_tests {
+    use futures::StreamExt;
+    use tokio::test;
+
+    use super::SqliteScanPathService;
+    use crate::cli::TemplateKind;
+    use crate::db_service::{InsertTemplateError, SqliteNumberError, SqliteTemplateError};
+    use crate::paths::InvalidPathTemplate;
+
+    /// Remove repeated .await.unwrap() noise from tests
+    macro_rules! ok {
+        ($call:expr) => {
+            $call.await.unwrap()
+        };
+    }
+    /// Remove repeated .await.unwrap_err() noise from tests
+    macro_rules! err {
+        ($call:expr) => {
+            $call.await.unwrap_err()
+        };
+    }
+
+    #[test]
+    async fn insert_duplicate_template() {
+        let db = SqliteScanPathService::memory().await;
+        let id_1 = ok!(db.insert_template(TemplateKind::Scan, "{instrument}_{scan_number}".into()));
+        let id_2 = ok!(db.insert_template(TemplateKind::Scan, "{instrument}_{scan_number}".into()));
+        assert_eq!(id_1, id_2);
+    }
+
+    #[test]
+    async fn insert_invalid_visit_template() {
+        let db = SqliteScanPathService::memory().await;
+        let e = err!(db.insert_template(
+            TemplateKind::Visit,
+            "/no/instrument/segment/for/{visit}".into()
+        ));
+        assert!(matches!(
+            e,
+            InsertTemplateError::Invalid(InvalidPathTemplate::MissingField(_)),
+        ))
+    }
+
+    #[test]
+    async fn read_only_fails() {
+        let db = SqliteScanPathService::ro_memory().await;
+        let e = err!(db.insert_template(TemplateKind::Scan, "{scan_number}".into()));
+        assert!(matches!(e, InsertTemplateError::Db(_)))
+    }
+
+    #[test]
+    async fn insert_beamline() {
+        let db = SqliteScanPathService::memory().await;
+        let beamlines = db.beamlines().collect::<Vec<_>>().await;
+        assert!(beamlines.is_empty());
+        ok!(db.insert_beamline("i22"));
+
+        let beamlines = db.beamlines().collect::<Vec<_>>().await;
+        assert_eq!(beamlines.len(), 1);
+        assert_eq!(beamlines[0].as_deref().unwrap(), "i22");
+    }
+
+    #[test]
+    async fn scan_numbers() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_beamline("i22"));
+        assert_eq!(ok!(db.next_scan_number("i22")), 1);
+        assert_eq!(ok!(db.next_scan_number("i22")), 2);
+
+        ok!(db.set_scan_number("i22", 122));
+        assert_eq!(ok!(db.next_scan_number("i22")), 123);
+        assert_eq!(ok!(db.next_scan_number("i22")), 124);
+        assert_eq!(ok!(db.latest_scan_number("i22")), 124);
+    }
+
+    #[test]
+    async fn latest_scan_number_for_missing_beamline() {
+        let db = SqliteScanPathService::memory().await;
+        let e = err!(db.latest_scan_number("i22"));
+        let SqliteNumberError::BeamlineNotFound = e else {
+            panic!("Unexpected error when beamline is missing: {e}")
+        };
+    }
+
+    #[test]
+    async fn inc_scan_number_for_missing_beamline() {
+        let db = SqliteScanPathService::memory().await;
+        let e = err!(db.next_scan_number("i22"));
+        let SqliteNumberError::BeamlineNotFound = e else {
+            panic!("Unexpected error when beamline is missing: {e}")
+        };
+    }
+
+    #[test]
+    async fn visit_template_for_missing_beamline() {
+        let db = SqliteScanPathService::memory().await;
+        let e = err!(db.visit_directory_template("i22"));
+        let SqliteTemplateError::BeamlineNotFound = e else {
+            panic!("Unexpected error for missing beamline: {e}")
+        };
+
+        // err!(db.set_beamline_template("i22", TemplateKind::Visit, 14));
+    }
+
+    #[test]
+    async fn get_set_visit_template() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_beamline("i22"));
+        let v_id = ok!(db.insert_template(
+            TemplateKind::Visit,
+            "/tmp/{instrument}/data/{year}/{visit}".into()
+        ));
+        ok!(db.set_beamline_template("i22", TemplateKind::Visit, v_id));
+        let t = ok!(db.visit_directory_template("i22"));
+        assert_eq!(t.to_string(), "/tmp/{instrument}/data/{year}/{visit}")
+    }
+
+    #[test]
+    async fn get_set_scan_template() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_beamline("i22"));
+        let s_id = ok!(db.insert_template(TemplateKind::Scan, "{instrument}_{scan_number}".into()));
+        ok!(db.set_beamline_template("i22", TemplateKind::Scan, s_id));
+        let t = ok!(db.scan_file_template("i22"));
+        assert_eq!(t.to_string(), "{instrument}_{scan_number}")
+    }
+
+    #[test]
+    async fn get_set_detector_template() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_beamline("i22"));
+        let d_id = ok!(db.insert_template(
+            TemplateKind::Detector,
+            "{instrument}_{scan_number}_{detector}".into()
+        ));
+        ok!(db.set_beamline_template("i22", TemplateKind::Detector, d_id));
+        let t = ok!(db.detector_file_template("i22"));
+        assert_eq!(t.to_string(), "{instrument}_{scan_number}_{detector}")
+    }
+
+    #[test]
+    async fn invalid_template_id() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_beamline("i22"));
+        err!(db.set_beamline_template("i22", TemplateKind::Visit, 42));
+    }
+
+    #[test]
+    async fn get_templates() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_template(TemplateKind::Visit, "/{instrument}/{visit}".into()));
+        ok!(db.insert_template(TemplateKind::Scan, "{scan_number}".into()));
+        ok!(db.insert_template(TemplateKind::Detector, "{scan_number}_{detector}".into()));
+
+        assert_eq!(
+            ok!(db.get_templates(TemplateKind::Visit))
+                .into_iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>(),
+            &["/{instrument}/{visit}"]
+        );
+        assert_eq!(
+            ok!(db.get_templates(TemplateKind::Scan))
+                .into_iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>(),
+            &["{scan_number}"]
+        );
+        assert_eq!(
+            ok!(db.get_templates(TemplateKind::Detector))
+                .into_iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<_>>(),
+            &["{scan_number}_{detector}"]
+        );
     }
 }
