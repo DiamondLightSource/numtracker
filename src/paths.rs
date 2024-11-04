@@ -115,6 +115,7 @@ impl TryFrom<String> for DetectorField {
     }
 }
 
+#[allow(unused)] // not actually unused: see github.com/rust-lang/rust/issues/128839
 pub trait PathField: TryFrom<String> + Eq + Hash + Display + 'static {}
 impl<F> PathField for F where F: TryFrom<String> + Eq + Hash + Display + 'static {}
 
