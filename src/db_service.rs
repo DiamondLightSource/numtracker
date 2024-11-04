@@ -15,9 +15,10 @@
 use std::fmt::{self, Display};
 use std::path::Path;
 
+use error::UpdateSingleError;
 use futures::Stream;
 use sqlx::prelude::FromRow;
-use sqlx::query::QueryScalar;
+use sqlx::query::{Query, QueryScalar};
 use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
 use sqlx::{query_as, query_file, query_file_as, query_file_scalar, Sqlite, SqlitePool};
 use tracing::{debug, info, instrument, warn};
@@ -100,6 +101,22 @@ impl SqliteScanPathService {
                 .await?
                 // None here suggests an error in the queries being passed
                 .expect("Record missing after being inserted")),
+        }
+    }
+
+    async fn update_single<'q>(
+        &self,
+        query: Query<'q, Sqlite, SqliteArguments<'q>>,
+    ) -> Result<(), UpdateSingleError> {
+        let mut trn = self.pool.begin().await?;
+        let res = query.execute(&mut *trn).await?;
+        match res.rows_affected() {
+            0 => Err(UpdateSingleError::ZeroRecords),
+            2.. => Err(UpdateSingleError::TooMany),
+            _ => {
+                trn.commit().await?;
+                Ok(())
+            }
         }
     }
 
@@ -193,17 +210,25 @@ impl SqliteScanPathService {
         .await
     }
 
-    pub async fn set_scan_number(&self, bl: &str, number: usize) -> Result<(), sqlx::Error> {
+    pub async fn set_scan_number(&self, bl: &str, number: usize) -> Result<(), SqliteNumberError> {
         let number = number as i64;
         debug!(
             beamline = bl,
             scan_number = number,
             "Setting scan number directly"
         );
-        query_file!("queries/set_scan_number.sql", number, bl)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
+        match self
+            .update_single(query_file!("queries/set_scan_number.sql", number, bl))
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(UpdateSingleError::Db(e)) => Err(e.into()),
+            Err(UpdateSingleError::ZeroRecords) => Err(SqliteNumberError::BeamlineNotFound),
+            Err(UpdateSingleError::TooMany) => {
+                // This should never happen if the schema constraints are set correctly
+                Err(SqliteNumberError::DuplicateBeamlineError)
+            }
+        }
     }
 
     pub async fn set_beamline_template(
@@ -358,6 +383,7 @@ mod error {
     #[derive(Debug)]
     pub enum SqliteNumberError {
         BeamlineNotFound,
+        DuplicateBeamlineError,
         ConnectionError(sqlx::Error),
         InvalidValue(i64),
     }
@@ -368,6 +394,9 @@ mod error {
                 Self::BeamlineNotFound => f.write_str("No scan number configured for beamline"),
                 Self::ConnectionError(e) => write!(f, "Could not access DB: {e}"),
                 Self::InvalidValue(v) => write!(f, "Scan number {v} in DB is not valid"),
+                Self::DuplicateBeamlineError => {
+                    write!(f, "Invalid DB state - multiple entries for beamline")
+                }
             }
         }
     }
@@ -375,7 +404,9 @@ mod error {
     impl Error for SqliteNumberError {
         fn source(&self) -> Option<&(dyn Error + 'static)> {
             match self {
-                Self::BeamlineNotFound | Self::InvalidValue(_) => None,
+                Self::BeamlineNotFound | Self::InvalidValue(_) | Self::DuplicateBeamlineError => {
+                    None
+                }
                 Self::ConnectionError(e) => Some(e),
             }
         }
@@ -462,6 +493,18 @@ mod error {
     }
 
     impl From<sqlx::Error> for InsertTemplateError {
+        fn from(value: sqlx::Error) -> Self {
+            Self::Db(value)
+        }
+    }
+
+    pub enum UpdateSingleError {
+        Db(sqlx::Error),
+        ZeroRecords,
+        TooMany,
+    }
+
+    impl From<sqlx::Error> for UpdateSingleError {
         fn from(value: sqlx::Error) -> Self {
             Self::Db(value)
         }
