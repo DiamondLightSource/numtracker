@@ -243,6 +243,7 @@ impl SqliteScanPathService {
         )
         .await
     }
+
     pub async fn insert_template(
         &self,
         kind: TemplateKind,
