@@ -1,6 +1,7 @@
 CREATE TABLE beamline (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE NOT NULL
+    name TEXT UNIQUE NOT NULL,
+    scan_number INTEGER NOT NULL DEFAULT 0
 );
 
 -- Templates for visit directories, scan files and detector files
