@@ -588,6 +588,16 @@ mod db_tests {
     }
 
     #[test]
+    async fn get_missing_visit_template() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_beamline("i22"));
+        let e = err!(db.visit_directory_template("i22"));
+        let SqliteTemplateError::TemplateNotSet = e else {
+            panic!("Unexpected error getting visit directory: {e:?}");
+        };
+    }
+
+    #[test]
     async fn get_set_visit_template() {
         let db = SqliteScanPathService::memory().await;
         ok!(db.insert_beamline("i22"));
