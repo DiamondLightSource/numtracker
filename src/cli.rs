@@ -136,6 +136,10 @@ pub struct BeamlineConfig {
     pub scan: Option<Option<String>>,
     #[clap(long)]
     pub detector: Option<Option<String>>,
+    #[clap(long)]
+    pub fallback_directory: Option<String>,
+    #[clap(long, requires = "fallback_directory")]
+    pub fallback_extension: Option<String>,
 }
 
 #[derive(Debug, Parser)]

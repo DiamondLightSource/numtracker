@@ -20,7 +20,7 @@ use inquire::Select;
 
 use crate::cli::TemplateKind::*;
 use crate::cli::{BeamlineConfig, ConfigAction, TemplateKind};
-use crate::db_service::{InsertTemplateError, SqliteScanPathService};
+use crate::db_service::{FallbackConfigError, InsertTemplateError, SqliteScanPathService};
 use crate::paths::InvalidPathTemplate;
 
 pub async fn configure(db: &Path, opts: ConfigAction) -> Result<(), ConfigError> {
@@ -51,6 +51,10 @@ async fn configure_beamline(
     if let Some(detector) = opts.detector {
         let detector = set_template(db, Detector, detector).await?;
         db.set_beamline_template(&opts.beamline, Detector, &detector)
+            .await?;
+    }
+    if let Some(dir) = opts.fallback_directory {
+        db.set_fallback(&opts.beamline, &dir, opts.fallback_extension.as_deref())
             .await?;
     }
     Ok(())
@@ -87,6 +91,7 @@ pub enum ConfigError {
     Db(sqlx::Error),
     InvalidTemplate(InvalidPathTemplate),
     MissingBeamline(String),
+    DuplicateBeamline(String),
     NoTemplates,
 }
 
@@ -106,6 +111,16 @@ impl From<InsertTemplateError> for ConfigError {
     }
 }
 
+impl From<FallbackConfigError> for ConfigError {
+    fn from(value: FallbackConfigError) -> Self {
+        match value {
+            FallbackConfigError::MissingBeamline(bl) => Self::MissingBeamline(bl),
+            FallbackConfigError::DuplicateBeamline(bl) => Self::DuplicateBeamline(bl),
+            FallbackConfigError::Db(e) => Self::Db(e),
+        }
+    }
+}
+
 impl Display for ConfigError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -113,6 +128,9 @@ impl Display for ConfigError {
             ConfigError::Db(db) => write!(f, "Error reading/writing to DB: {db}"),
             ConfigError::InvalidTemplate(e) => write!(f, "Template was not valid: {e}"),
             ConfigError::MissingBeamline(bl) => write!(f, "Beamline {bl:?} is not configured"),
+            ConfigError::DuplicateBeamline(bl) => {
+                write!(f, "Beamline {bl:?} has multiple configurations")
+            }
             ConfigError::NoTemplates => f.write_str("No templates available"),
         }
     }
@@ -121,7 +139,10 @@ impl Display for ConfigError {
 impl Error for ConfigError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Cancelled | Self::MissingBeamline(_) | Self::NoTemplates => None,
+            Self::Cancelled
+            | Self::MissingBeamline(_)
+            | Self::NoTemplates
+            | Self::DuplicateBeamline(_) => None,
             Self::Db(db) => Some(db),
             Self::InvalidTemplate(e) => Some(e),
         }

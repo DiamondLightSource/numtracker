@@ -24,7 +24,8 @@ use sqlx::{query_file, query_file_as, query_file_scalar, query_scalar, Sqlite, S
 use tracing::{debug, info, instrument, warn};
 
 pub use self::error::{
-    InsertTemplateError, SqliteNumberDirectoryError, SqliteNumberError, SqliteTemplateError,
+    FallbackConfigError, InsertTemplateError, SqliteNumberDirectoryError, SqliteNumberError,
+    SqliteTemplateError,
 };
 use crate::cli::TemplateKind;
 use crate::numtracker;
@@ -277,6 +278,27 @@ impl SqliteScanPathService {
         templates.map(|t| t.into_iter().flatten().collect::<Vec<_>>())
     }
 
+    pub async fn set_fallback(
+        &self,
+        beamline: &str,
+        directory: &str,
+        ext: Option<&str>,
+    ) -> Result<(), FallbackConfigError> {
+        let update = self
+            .update_single(query_file!(
+                "queries/set_fallback.sql",
+                directory,
+                ext,
+                beamline
+            ))
+            .await;
+        update.map_err(|e| match e {
+            UpdateSingleError::Db(e) => FallbackConfigError::Db(e),
+            UpdateSingleError::ZeroRecords => FallbackConfigError::MissingBeamline(beamline.into()),
+            UpdateSingleError::TooMany => FallbackConfigError::DuplicateBeamline(beamline.into()),
+        })
+    }
+
     #[cfg(test)]
     async fn ro_memory() -> Self {
         // only read-write so that migrations can be applied
@@ -487,6 +509,31 @@ mod error {
             Self::Db(value)
         }
     }
+
+    #[derive(Debug)]
+    pub enum FallbackConfigError {
+        MissingBeamline(String),
+        DuplicateBeamline(String),
+        Db(sqlx::Error),
+    }
+
+    impl Display for FallbackConfigError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::MissingBeamline(bl) => write!(f, "No configuration for {bl}"),
+                Self::DuplicateBeamline(bl) => {
+                    write!(f, "Multiple configurations for {bl}")
+                }
+                Self::Db(e) => e.fmt(f),
+            }
+        }
+    }
+
+    impl From<sqlx::Error> for FallbackConfigError {
+        fn from(value: sqlx::Error) -> Self {
+            Self::Db(value)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -669,5 +716,37 @@ mod db_tests {
                 .collect::<Vec<_>>(),
             &["{scan_number}_{detector}"]
         );
+    }
+
+    #[test]
+    async fn full_fallback() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_beamline("i22"));
+        ok!(db.set_fallback("i22", "tracker_dir", Some("i22_ext")));
+        let fb = ok!(db.number_tracker_directory("i22"));
+        let fb = fb.expect("Fallback config missing");
+        assert_eq!(fb.directory, "tracker_dir");
+        assert_eq!(fb.extension, "i22_ext");
+    }
+
+    #[test]
+    async fn partial_fallback() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_beamline("i22"));
+        ok!(db.set_fallback("i22", "tracker_dir", None));
+        let fb = ok!(db.number_tracker_directory("i22"));
+        let fb = fb.expect("Fallback config missing");
+        assert_eq!(fb.directory, "tracker_dir");
+        assert_eq!(fb.extension, "i22");
+    }
+
+    #[test]
+    async fn no_fallback() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(db.insert_beamline("i22"));
+        let fb = ok!(db.number_tracker_directory("i22"));
+        let None = fb else {
+            panic!("Fallback config should be missing");
+        };
     }
 }
