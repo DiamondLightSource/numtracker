@@ -1,0 +1,45 @@
+name: Numtracker CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: nightly
+          components: rustfmt, clippy
+    - uses: Swatinem/rust-cache@v2
+    - name: Check formatting
+      # Use nightly for formatting to enable unstable formatting styles
+      # * group imports
+      # * import_granularity
+      run: cargo +nightly fmt -- --check
+    - name: Clippy
+      run: |
+        cargo --version
+        cargo clippy --version
+        cargo clippy --all-targets --all-features -- --deny warnings
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: stable
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Build Everything
+      run: cargo build --all-targets
+    - name: Run tests
+      run: cargo test --all-targets --verbose
