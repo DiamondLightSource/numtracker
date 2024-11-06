@@ -1,4 +1,3 @@
-INSERT INTO detector_template (template)
-VALUES (?)
-ON CONFLICT (template) DO NOTHING
-RETURNING id
+UPDATE beamline
+SET detector = ?
+WHERE name = ?;

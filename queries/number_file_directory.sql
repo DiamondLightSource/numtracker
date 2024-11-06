@@ -1,3 +1,3 @@
-SELECT directory, extension
-FROM beamline_number_file_directory
-WHERE beamline = ?;
+SELECT fallback_directory as directory, fallback_extension as extension
+FROM beamline
+WHERE name = ?;

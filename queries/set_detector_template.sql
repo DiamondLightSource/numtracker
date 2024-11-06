@@ -1,4 +1,3 @@
-INSERT INTO beamline_detector (beamline, detector)
-SELECT id, ?
-    FROM beamline
-    WHERE name = ?
+UPDATE beamline
+SET detector = ?
+WHERE name = ?

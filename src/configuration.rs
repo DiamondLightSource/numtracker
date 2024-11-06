@@ -19,15 +19,14 @@ use std::path::Path;
 use inquire::Select;
 
 use crate::cli::TemplateKind::*;
-use crate::cli::{BeamlineConfig, ConfigAction, TemplateAction, TemplateConfig, TemplateKind};
-use crate::db_service::{InsertTemplateError, SqliteScanPathService, TemplateOption};
+use crate::cli::{BeamlineConfig, ConfigAction, TemplateKind};
+use crate::db_service::{InsertTemplateError, SqliteScanPathService};
 use crate::paths::InvalidPathTemplate;
 
 pub async fn configure(db: &Path, opts: ConfigAction) -> Result<(), ConfigError> {
     let db = SqliteScanPathService::connect(db).await?;
     match opts {
         ConfigAction::Beamline(opts) => configure_beamline(&db, opts).await,
-        ConfigAction::Template(opts) => configure_template(&db, opts).await,
     }
 }
 
@@ -40,61 +39,30 @@ async fn configure_beamline(
     let _ = db.insert_beamline(&opts.beamline).await?;
 
     if let Some(visit) = opts.visit {
-        let visit_id = set_template(db, Visit, visit).await?;
-        db.set_beamline_template(&opts.beamline, Visit, visit_id)
+        let visit = set_template(db, Visit, visit).await?;
+        db.set_beamline_template(&opts.beamline, Visit, &visit)
             .await?;
     }
     if let Some(scan) = opts.scan {
-        let scan_id = set_template(db, Scan, scan).await?;
-        db.set_beamline_template(&opts.beamline, Scan, scan_id)
+        let scan = set_template(db, Scan, scan).await?;
+        db.set_beamline_template(&opts.beamline, Scan, &scan)
             .await?;
     }
     if let Some(detector) = opts.detector {
-        let detector_id = set_template(db, Detector, detector).await?;
-        db.set_beamline_template(&opts.beamline, Detector, detector_id)
+        let detector = set_template(db, Detector, detector).await?;
+        db.set_beamline_template(&opts.beamline, Detector, &detector)
             .await?;
     }
     Ok(())
-}
-
-async fn configure_template(
-    db: &SqliteScanPathService,
-    opts: TemplateConfig,
-) -> Result<(), ConfigError> {
-    match opts.action {
-        TemplateAction::Add { kind, template } => {
-            println!("Adding {kind:?} template: {template:?}");
-            db.insert_template(kind, template).await?;
-        }
-        TemplateAction::List { filter } => {
-            if let Some(Visit) | None = filter {
-                list_templates("Visit", &db.get_templates(Visit).await?)
-            }
-            if let Some(Scan) | None = filter {
-                list_templates("Scan", &db.get_templates(Scan).await?)
-            }
-            if let Some(Detector) | None = filter {
-                list_templates("Detector", &db.get_templates(Detector).await?)
-            }
-        }
-    }
-    Ok(())
-}
-
-fn list_templates(heading: &str, templates: &[TemplateOption]) {
-    println!("{heading} Templates:");
-    for tmp in templates {
-        println!("    {}", tmp);
-    }
 }
 
 async fn set_template(
     db: &SqliteScanPathService,
     kind: TemplateKind,
     template: Option<String>,
-) -> Result<i64, ConfigError> {
+) -> Result<String, ConfigError> {
     match template {
-        Some(template) => Ok(db.insert_template(kind, template).await?),
+        Some(template) => Ok(template),
         None => choose_template(db, kind).await,
     }
 }
@@ -102,12 +70,14 @@ async fn set_template(
 async fn choose_template(
     db: &SqliteScanPathService,
     kind: TemplateKind,
-) -> Result<i64, ConfigError> {
+) -> Result<String, ConfigError> {
     let templates = db.get_templates(kind).await?;
+    if templates.is_empty() {
+        return Err(ConfigError::NoTemplates);
+    }
 
     Select::new(&format!("Choose a {kind:?} template: "), templates)
         .prompt()
-        .map(|t| t.id)
         .map_err(|_| ConfigError::Cancelled)
 }
 
@@ -116,6 +86,8 @@ pub enum ConfigError {
     Cancelled,
     Db(sqlx::Error),
     InvalidTemplate(InvalidPathTemplate),
+    MissingBeamline(String),
+    NoTemplates,
 }
 
 impl From<sqlx::Error> for ConfigError {
@@ -129,6 +101,7 @@ impl From<InsertTemplateError> for ConfigError {
         match value {
             InsertTemplateError::Db(e) => Self::Db(e),
             InsertTemplateError::Invalid(e) => Self::InvalidTemplate(e),
+            InsertTemplateError::MissingBeamline(bl) => Self::MissingBeamline(bl),
         }
     }
 }
@@ -139,6 +112,8 @@ impl Display for ConfigError {
             ConfigError::Cancelled => write!(f, "User cancelled operation"),
             ConfigError::Db(db) => write!(f, "Error reading/writing to DB: {db}"),
             ConfigError::InvalidTemplate(e) => write!(f, "Template was not valid: {e}"),
+            ConfigError::MissingBeamline(bl) => write!(f, "Beamline {bl:?} is not configured"),
+            ConfigError::NoTemplates => f.write_str("No templates available"),
         }
     }
 }
@@ -146,9 +121,9 @@ impl Display for ConfigError {
 impl Error for ConfigError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            ConfigError::Cancelled => None,
-            ConfigError::Db(db) => Some(db),
-            ConfigError::InvalidTemplate(e) => Some(e),
+            Self::Cancelled | Self::MissingBeamline(_) | Self::NoTemplates => None,
+            Self::Db(db) => Some(db),
+            Self::InvalidTemplate(e) => Some(e),
         }
     }
 }

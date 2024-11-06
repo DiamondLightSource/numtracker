@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT directory, extension\nFROM beamline_number_file_directory\nWHERE beamline = ?;\n",
+  "query": "SELECT fallback_directory as directory, fallback_extension as extension\nFROM beamline\nWHERE name = ?;\n",
   "describe": {
     "columns": [
       {
@@ -18,9 +18,9 @@
       "Right": 1
     },
     "nullable": [
-      false,
-      false
+      true,
+      true
     ]
   },
-  "hash": "692d517848fd2d821d144bb4c2f9237ffed350674cfddbc6509fd9f6e0bc2117"
+  "hash": "d7e4f09dc26cde9c72bf5ec6e6e46e257a247f60b269034e73a83385c576e9ca"
 }

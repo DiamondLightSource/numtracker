@@ -121,7 +121,6 @@ pub struct ConfigOptions {
 #[derive(Debug, Subcommand)]
 pub enum ConfigAction {
     Beamline(BeamlineConfig),
-    Template(TemplateConfig),
 }
 
 #[derive(Debug, Parser)]

@@ -1,4 +1,3 @@
 INSERT INTO beamline (name)
 VALUES (?)
 ON CONFLICT DO NOTHING
-RETURNING id;

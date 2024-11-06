@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt::{self, Display};
+use std::fmt;
 use std::path::Path;
 
 use error::UpdateSingleError;
@@ -20,7 +20,7 @@ use futures::Stream;
 use sqlx::prelude::FromRow;
 use sqlx::query::{Query, QueryScalar};
 use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
-use sqlx::{query_as, query_file, query_file_as, query_file_scalar, Sqlite, SqlitePool};
+use sqlx::{query_file, query_file_as, query_file_scalar, query_scalar, Sqlite, SqlitePool};
 use tracing::{debug, info, instrument, warn};
 
 pub use self::error::{
@@ -39,21 +39,15 @@ pub struct SqliteScanPathService {
 }
 
 #[derive(Debug, FromRow)]
-pub struct NumtrackerConfig {
-    pub directory: String,
-    pub extension: String,
+struct FallbackConfig {
+    directory: Option<String>,
+    extension: Option<String>,
 }
 
 #[derive(Debug)]
-pub struct TemplateOption {
-    pub id: i64,
-    pub template: String,
-}
-
-impl Display for TemplateOption {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.template.fmt(f)
-    }
+pub struct NumtrackerConfig {
+    pub directory: String,
+    pub extension: String,
 }
 
 impl SqliteScanPathService {
@@ -71,37 +65,17 @@ impl SqliteScanPathService {
     /// Execute a prepared query and parse the returned string into a [`PathTemplate`]
     async fn template_from<'bl, F: TryFrom<String, Error = InvalidKey>>(
         &self,
-        query: QueryScalar<'bl, Sqlite, String, SqliteArguments<'bl>>,
+        query: QueryScalar<'bl, Sqlite, Option<String>, SqliteArguments<'bl>>,
     ) -> SqliteTemplateResult<F> {
         let template = query
             .fetch_optional(&self.pool)
             .await?
-            .ok_or(SqliteTemplateError::BeamlineNotFound)?;
+            .ok_or(SqliteTemplateError::BeamlineNotFound)?
+            .ok_or(SqliteTemplateError::TemplateNotSet)?;
+
         debug!(template = template, "Template from DB");
 
         Ok(PathTemplate::new(template)?)
-    }
-
-    /// Insert a new record into the database, or return the ID if the record is already
-    /// present
-    async fn get_or_insert<'q>(
-        &self,
-        insert: QueryScalar<'q, Sqlite, i64, SqliteArguments<'q>>,
-        get: impl FnOnce() -> QueryScalar<'q, Sqlite, Option<i64>, SqliteArguments<'q>>,
-    ) -> sqlx::Result<i64> {
-        let mut trn = self.pool.begin().await?;
-        let inserted = insert.fetch_optional(&mut *trn).await?;
-        match inserted {
-            Some(ins) => {
-                trn.commit().await?;
-                Ok(ins)
-            }
-            None => Ok(get()
-                .fetch_one(&mut *trn)
-                .await?
-                // None here suggests an error in the queries being passed
-                .expect("Record missing after being inserted")),
-        }
     }
 
     async fn update_single<'q>(
@@ -163,7 +137,7 @@ impl SqliteScanPathService {
         beamline: &str,
     ) -> Result<usize, SqliteNumberDirectoryError> {
         match self.number_tracker_directory(beamline).await? {
-            Some(nc) => Ok(numtracker::increment_and_get(&nc.directory, &nc.extension).await?),
+            Some(nc) => Ok(numtracker::increment_and_get(nc.directory, &nc.extension).await?),
             None => Err(SqliteNumberDirectoryError::NotConfigured),
         }
     }
@@ -201,13 +175,25 @@ impl SqliteScanPathService {
         beamline: &str,
     ) -> Result<Option<NumtrackerConfig>, sqlx::Error> {
         debug!("Getting number_tracker_directory for {beamline}");
-        query_file_as!(
-            NumtrackerConfig,
+        let fallback = query_file_as!(
+            FallbackConfig,
             "queries/number_file_directory.sql",
             beamline
         )
         .fetch_optional(&self.pool)
-        .await
+        .await?;
+        Ok(fallback.and_then(|fb| match (fb.directory, fb.extension) {
+            (None, None) => None,
+            (None, Some(_)) => None, // this should be unreachable due to table constraints
+            (Some(dir), None) => Some(NumtrackerConfig {
+                directory: dir,
+                extension: beamline.into(),
+            }),
+            (Some(dir), Some(ext)) => Some(NumtrackerConfig {
+                directory: dir,
+                extension: ext,
+            }),
+        }))
     }
 
     pub async fn set_scan_number(&self, bl: &str, number: usize) -> Result<(), SqliteNumberError> {
@@ -235,94 +221,60 @@ impl SqliteScanPathService {
         &self,
         bl: &str,
         kind: TemplateKind,
-        template_id: i64,
-    ) -> sqlx::Result<()> {
+        template: &str,
+    ) -> Result<(), InsertTemplateError> {
         debug!(
             beamline = bl,
-            template_id, "Setting beamline {kind:?} template"
+            template, "Setting beamline {kind:?} template"
         );
-        match kind {
+        kind.validate(template)?;
+        let update = match kind {
             TemplateKind::Visit => {
-                query_file!("queries/set_visit_template.sql", template_id, bl)
-                    .execute(&self.pool)
-                    .await?
+                self.update_single(query_file!("queries/set_visit_template.sql", template, bl))
+                    .await
             }
             TemplateKind::Scan => {
-                query_file!("queries/set_scan_template.sql", template_id, bl)
-                    .execute(&self.pool)
-                    .await?
+                self.update_single(query_file!("queries/set_scan_template.sql", template, bl))
+                    .await
             }
             TemplateKind::Detector => {
-                query_file!("queries/set_detector_template.sql", template_id, bl)
-                    .execute(&self.pool)
-                    .await?
+                self.update_single(query_file!(
+                    "queries/set_detector_template.sql",
+                    template,
+                    bl
+                ))
+                .await
             }
         };
+        update.map_err(|_| InsertTemplateError::MissingBeamline(bl.into()))
+    }
+
+    pub async fn insert_beamline(&self, beamline: &str) -> Result<(), sqlx::Error> {
+        query_file!("queries/insert_beamline.sql", beamline)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 
-    pub async fn insert_beamline(&self, beamline: &str) -> Result<i64, sqlx::Error> {
-        self.get_or_insert(
-            query_file_scalar!("queries/insert_beamline.sql", beamline),
-            || query_file_scalar!("queries/get_beamline_id.sql", beamline),
-        )
-        .await
-    }
-
-    pub async fn insert_template(
-        &self,
-        kind: TemplateKind,
-        template: String,
-    ) -> Result<i64, InsertTemplateError> {
-        kind.validate(&template)?;
-        let template = template.as_str();
-        let new_id = match kind {
+    pub async fn get_templates(&self, kind: TemplateKind) -> sqlx::Result<Vec<String>> {
+        let templates = match kind {
             TemplateKind::Visit => {
-                self.get_or_insert(
-                    query_file_scalar!("queries/insert_visit_template.sql", template),
-                    || query_file_scalar!("queries/get_visit_template.sql", template),
-                )
-                .await
-            }
-            TemplateKind::Scan => {
-                self.get_or_insert(
-                    query_file_scalar!("queries/insert_scan_template.sql", template),
-                    || query_file_scalar!("queries/get_scan_template.sql", template),
-                )
-                .await
-            }
-            TemplateKind::Detector => {
-                self.get_or_insert(
-                    query_file_scalar!("queries/insert_detector_template.sql", template),
-                    || query_file_scalar!("queries/get_detector_template.sql", template),
-                )
-                .await
-            }
-        }?;
-        Ok(new_id)
-    }
-
-    pub async fn get_templates(&self, kind: TemplateKind) -> sqlx::Result<Vec<TemplateOption>> {
-        match kind {
-            TemplateKind::Visit => {
-                query_as!(TemplateOption, "SELECT id, template FROM visit_template;")
+                query_scalar!("SELECT DISTINCT visit FROM beamline;")
                     .fetch_all(&self.pool)
                     .await
             }
             TemplateKind::Scan => {
-                query_as!(TemplateOption, "SELECT id, template FROM scan_template;")
+                query_scalar!("SELECT DISTINCT scan FROM beamline;")
                     .fetch_all(&self.pool)
                     .await
             }
             TemplateKind::Detector => {
-                query_as!(
-                    TemplateOption,
-                    "SELECT id, template FROM detector_template;"
-                )
-                .fetch_all(&self.pool)
-                .await
+                query_scalar!("SELECT DISTINCT detector FROM beamline;")
+                    .fetch_all(&self.pool)
+                    .await
             }
-        }
+        };
+        templates.map(|t| t.into_iter().flatten().collect::<Vec<_>>())
     }
 
     #[cfg(test)]
@@ -372,13 +324,16 @@ mod error {
         /// The template was present in the database but it could not be parsed into a valid
         /// [`PathTemplate`].
         Invalid(PathTemplateError),
+        /// The requested template is not set for the requested beamline
+        TemplateNotSet,
     }
 
     impl Display for SqliteTemplateError {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 Self::ConnectionError(e) => write!(f, "Could not access database: {e}"),
-                Self::BeamlineNotFound => f.write_str("No template found for beamline"),
+                Self::BeamlineNotFound => f.write_str("Beamline configuration not found"),
+                Self::TemplateNotSet => f.write_str("No template set for beamline"),
                 Self::Invalid(e) => write!(f, "Template is not valid: {e}"),
             }
         }
@@ -484,6 +439,7 @@ mod error {
     pub enum InsertTemplateError {
         Db(sqlx::Error),
         Invalid(InvalidPathTemplate),
+        MissingBeamline(String),
     }
 
     impl Display for InsertTemplateError {
@@ -491,6 +447,9 @@ mod error {
             match self {
                 InsertTemplateError::Db(e) => write!(f, "Error inserting template: {e}"),
                 InsertTemplateError::Invalid(e) => write!(f, "Template was not valid: {e}"),
+                InsertTemplateError::MissingBeamline(bl) => {
+                    write!(f, "No configuration for beamline {bl:?}")
+                }
             }
         }
     }
@@ -500,6 +459,7 @@ mod error {
             match self {
                 InsertTemplateError::Db(e) => Some(e),
                 InsertTemplateError::Invalid(e) => Some(e),
+                InsertTemplateError::MissingBeamline(_) => None,
             }
         }
     }
@@ -553,17 +513,10 @@ mod db_tests {
     }
 
     #[test]
-    async fn insert_duplicate_template() {
-        let db = SqliteScanPathService::memory().await;
-        let id_1 = ok!(db.insert_template(TemplateKind::Scan, "{instrument}_{scan_number}".into()));
-        let id_2 = ok!(db.insert_template(TemplateKind::Scan, "{instrument}_{scan_number}".into()));
-        assert_eq!(id_1, id_2);
-    }
-
-    #[test]
     async fn insert_invalid_visit_template() {
         let db = SqliteScanPathService::memory().await;
-        let e = err!(db.insert_template(
+        let e = err!(db.set_beamline_template(
+            "i22",
             TemplateKind::Visit,
             "/no/instrument/segment/for/{visit}".into()
         ));
@@ -576,8 +529,8 @@ mod db_tests {
     #[test]
     async fn read_only_fails() {
         let db = SqliteScanPathService::ro_memory().await;
-        let e = err!(db.insert_template(TemplateKind::Scan, "{scan_number}".into()));
-        assert!(matches!(e, InsertTemplateError::Db(_)))
+        let e = err!(db.insert_beamline("i22"));
+        assert!(matches!(e, sqlx::Error::Database(_)))
     }
 
     #[test]
@@ -631,18 +584,18 @@ mod db_tests {
             panic!("Unexpected error for missing beamline: {e}")
         };
 
-        // err!(db.set_beamline_template("i22", TemplateKind::Visit, 14));
+        err!(db.set_beamline_template("i22", TemplateKind::Visit, "/{instrument}/{visit}"));
     }
 
     #[test]
     async fn get_set_visit_template() {
         let db = SqliteScanPathService::memory().await;
         ok!(db.insert_beamline("i22"));
-        let v_id = ok!(db.insert_template(
+        ok!(db.set_beamline_template(
+            "i22",
             TemplateKind::Visit,
             "/tmp/{instrument}/data/{year}/{visit}".into()
         ));
-        ok!(db.set_beamline_template("i22", TemplateKind::Visit, v_id));
         let t = ok!(db.visit_directory_template("i22"));
         assert_eq!(t.to_string(), "/tmp/{instrument}/data/{year}/{visit}")
     }
@@ -651,8 +604,11 @@ mod db_tests {
     async fn get_set_scan_template() {
         let db = SqliteScanPathService::memory().await;
         ok!(db.insert_beamline("i22"));
-        let s_id = ok!(db.insert_template(TemplateKind::Scan, "{instrument}_{scan_number}".into()));
-        ok!(db.set_beamline_template("i22", TemplateKind::Scan, s_id));
+        ok!(db.set_beamline_template(
+            "i22",
+            TemplateKind::Scan,
+            "{instrument}_{scan_number}".into()
+        ));
         let t = ok!(db.scan_file_template("i22"));
         assert_eq!(t.to_string(), "{instrument}_{scan_number}")
     }
@@ -661,28 +617,26 @@ mod db_tests {
     async fn get_set_detector_template() {
         let db = SqliteScanPathService::memory().await;
         ok!(db.insert_beamline("i22"));
-        let d_id = ok!(db.insert_template(
+        ok!(db.set_beamline_template(
+            "i22",
             TemplateKind::Detector,
             "{instrument}_{scan_number}_{detector}".into()
         ));
-        ok!(db.set_beamline_template("i22", TemplateKind::Detector, d_id));
         let t = ok!(db.detector_file_template("i22"));
         assert_eq!(t.to_string(), "{instrument}_{scan_number}_{detector}")
     }
 
     #[test]
-    async fn invalid_template_id() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        err!(db.set_beamline_template("i22", TemplateKind::Visit, 42));
-    }
-
-    #[test]
     async fn get_templates() {
         let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_template(TemplateKind::Visit, "/{instrument}/{visit}".into()));
-        ok!(db.insert_template(TemplateKind::Scan, "{scan_number}".into()));
-        ok!(db.insert_template(TemplateKind::Detector, "{scan_number}_{detector}".into()));
+        ok!(db.insert_beamline("i22"));
+        ok!(db.set_beamline_template("i22", TemplateKind::Visit, "/{instrument}/{visit}".into()));
+        ok!(db.set_beamline_template("i22", TemplateKind::Scan, "{scan_number}".into()));
+        ok!(db.set_beamline_template(
+            "i22",
+            TemplateKind::Detector,
+            "{scan_number}_{detector}".into()
+        ));
 
         assert_eq!(
             ok!(db.get_templates(TemplateKind::Visit))
