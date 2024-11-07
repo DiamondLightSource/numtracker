@@ -189,7 +189,7 @@ mod error {
                 SyncError::Fs(e) => e.fmt(f),
                 SyncError::BeamlineNotFound => f.write_str("Beamline not in DB"),
                 SyncError::ValueError(v) => write!(f, "{v} is not a valid scan number"),
-                SyncError::InvalidState(msg) => f.write_str(&msg),
+                SyncError::InvalidState(msg) => f.write_str(msg),
             }
         }
     }

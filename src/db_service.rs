@@ -139,7 +139,7 @@ impl SqliteScanPathService {
     ) -> Result<usize, SqliteNumberDirectoryError> {
         match self.number_tracker_directory(beamline).await? {
             Some(nc) => Ok(numtracker::increment_and_get(nc.directory, &nc.extension).await?),
-            None => Err(SqliteNumberDirectoryError::NotConfigured),
+            None => Err(SqliteNumberDirectoryError::NoConfiguration),
         }
     }
     #[instrument]
@@ -416,9 +416,9 @@ mod error {
     #[derive(Debug)]
     pub enum SqliteNumberDirectoryError {
         /// There is no directory configured for the requested beamline
-        NotConfigured,
+        NoConfiguration,
         /// The DB could not be accessed or queried
-        NotAccessible(sqlx::Error),
+        Inaccessible(sqlx::Error),
         /// The directory was not present or not readable
         NotReabable(std::io::Error),
     }
@@ -426,10 +426,10 @@ mod error {
     impl Display for SqliteNumberDirectoryError {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                Self::NotConfigured => {
+                Self::NoConfiguration => {
                     f.write_str("No directory configured for the given beamline")
                 }
-                Self::NotAccessible(e) => e.fmt(f),
+                Self::Inaccessible(e) => e.fmt(f),
                 Self::NotReabable(e) => e.fmt(f),
             }
         }
@@ -438,8 +438,8 @@ mod error {
     impl Error for SqliteNumberDirectoryError {
         fn source(&self) -> Option<&(dyn Error + 'static)> {
             match self {
-                Self::NotConfigured => None,
-                Self::NotAccessible(e) => Some(e),
+                Self::NoConfiguration => None,
+                Self::Inaccessible(e) => Some(e),
                 Self::NotReabable(e) => Some(e),
             }
         }
@@ -453,7 +453,7 @@ mod error {
 
     impl From<sqlx::Error> for SqliteNumberDirectoryError {
         fn from(value: sqlx::Error) -> Self {
-            Self::NotAccessible(value)
+            Self::Inaccessible(value)
         }
     }
 
@@ -565,7 +565,7 @@ mod db_tests {
         let e = err!(db.set_beamline_template(
             "i22",
             TemplateKind::Visit,
-            "/no/instrument/segment/for/{visit}".into()
+            "/no/instrument/segment/for/{visit}"
         ));
         assert!(matches!(
             e,
@@ -651,7 +651,7 @@ mod db_tests {
         ok!(db.set_beamline_template(
             "i22",
             TemplateKind::Visit,
-            "/tmp/{instrument}/data/{year}/{visit}".into()
+            "/tmp/{instrument}/data/{year}/{visit}"
         ));
         let t = ok!(db.visit_directory_template("i22"));
         assert_eq!(t.to_string(), "/tmp/{instrument}/data/{year}/{visit}")
@@ -661,11 +661,7 @@ mod db_tests {
     async fn get_set_scan_template() {
         let db = SqliteScanPathService::memory().await;
         ok!(db.insert_beamline("i22"));
-        ok!(db.set_beamline_template(
-            "i22",
-            TemplateKind::Scan,
-            "{instrument}_{scan_number}".into()
-        ));
+        ok!(db.set_beamline_template("i22", TemplateKind::Scan, "{instrument}_{scan_number}"));
         let t = ok!(db.scan_file_template("i22"));
         assert_eq!(t.to_string(), "{instrument}_{scan_number}")
     }
@@ -677,7 +673,7 @@ mod db_tests {
         ok!(db.set_beamline_template(
             "i22",
             TemplateKind::Detector,
-            "{instrument}_{scan_number}_{detector}".into()
+            "{instrument}_{scan_number}_{detector}"
         ));
         let t = ok!(db.detector_file_template("i22"));
         assert_eq!(t.to_string(), "{instrument}_{scan_number}_{detector}")
@@ -687,33 +683,20 @@ mod db_tests {
     async fn get_templates() {
         let db = SqliteScanPathService::memory().await;
         ok!(db.insert_beamline("i22"));
-        ok!(db.set_beamline_template("i22", TemplateKind::Visit, "/{instrument}/{visit}".into()));
-        ok!(db.set_beamline_template("i22", TemplateKind::Scan, "{scan_number}".into()));
-        ok!(db.set_beamline_template(
-            "i22",
-            TemplateKind::Detector,
-            "{scan_number}_{detector}".into()
-        ));
+        ok!(db.set_beamline_template("i22", TemplateKind::Visit, "/{instrument}/{visit}"));
+        ok!(db.set_beamline_template("i22", TemplateKind::Scan, "{scan_number}"));
+        ok!(db.set_beamline_template("i22", TemplateKind::Detector, "{scan_number}_{detector}"));
 
         assert_eq!(
-            ok!(db.get_templates(TemplateKind::Visit))
-                .into_iter()
-                .map(|t| t.to_string())
-                .collect::<Vec<_>>(),
+            ok!(db.get_templates(TemplateKind::Visit)),
             &["/{instrument}/{visit}"]
         );
         assert_eq!(
-            ok!(db.get_templates(TemplateKind::Scan))
-                .into_iter()
-                .map(|t| t.to_string())
-                .collect::<Vec<_>>(),
+            ok!(db.get_templates(TemplateKind::Scan)),
             &["{scan_number}"]
         );
         assert_eq!(
-            ok!(db.get_templates(TemplateKind::Detector))
-                .into_iter()
-                .map(|t| t.to_string())
-                .collect::<Vec<_>>(),
+            ok!(db.get_templates(TemplateKind::Detector)),
             &["{scan_number}_{detector}"]
         );
     }

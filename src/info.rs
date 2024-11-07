@@ -22,7 +22,9 @@ use crate::db_service::{NumtrackerConfig, SqliteScanPathService};
 use crate::numtracker::GdaNumTracker;
 
 pub async fn list_info(db: &Path, beamline: Option<&str>) {
-    let db = SqliteScanPathService::connect(db).await.unwrap();
+    let db = SqliteScanPathService::connect(db)
+        .await
+        .expect("DB not available");
     if let Some(bl) = beamline {
         list_bl_info(&db, bl).await;
     } else {

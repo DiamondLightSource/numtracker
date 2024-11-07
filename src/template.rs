@@ -476,7 +476,7 @@ mod path_template_tests {
     use super::string_templates::*;
     use super::*;
 
-    fn from_template<'a, Src: FieldSource<String>>(fmt: &'static str, src: &'a Src) -> PathBuf {
+    fn from_template<Src: FieldSource<String>>(fmt: &'static str, src: &Src) -> PathBuf {
         PathTemplate::new(fmt).unwrap().render(src)
     }
 

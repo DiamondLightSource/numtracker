@@ -30,7 +30,9 @@ use crate::cli::ServeOptions;
 use crate::context::{BeamlineContext, ScanService, Subdirectory, VisitService};
 use crate::db_service::SqliteScanPathService;
 pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
-    let db = SqliteScanPathService::connect(db).await.unwrap();
+    let db = SqliteScanPathService::connect(db)
+        .await
+        .expect("Unable to open DB");
     let schema = Schema::build(Query, Mutation, EmptySubscription)
         .extension(Tracing)
         .data(db)
@@ -39,8 +41,12 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
         .route("/graphql", post(graphql_handler))
         .route("/graphiql", get(graphiql))
         .layer(Extension(schema));
-    let listener = TcpListener::bind(opts.addr()).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = TcpListener::bind(opts.addr())
+        .await
+        .unwrap_or_else(|_| panic!("Port {:?} in use", opts.addr()));
+    axum::serve(listener, app)
+        .await
+        .expect("Can't serve graphql endpoint");
 }
 
 pub fn graphql_schema() {

@@ -36,7 +36,7 @@ async fn configure_beamline(
 ) -> Result<(), ConfigError> {
     println!("{opts:#?}");
     // ensure the beamline is present but we don't care about the ID
-    let _ = db.insert_beamline(&opts.beamline).await?;
+    db.insert_beamline(&opts.beamline).await?;
 
     if let Some(visit) = opts.visit {
         let visit = set_template(db, Visit, visit).await?;
