@@ -36,7 +36,7 @@ impl<Field> Part<Field> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Template<Field> {
     parts: Vec<Part<Field>>,
 }
@@ -53,7 +53,7 @@ impl<F: Display> Display for Template<F> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PathTemplate<Field> {
     parts: Vec<Template<Field>>,
     kind: PathType,
@@ -82,7 +82,7 @@ enum PathType {
     Relative,
 }
 impl PathType {
-    fn init(&self) -> PathBuf {
+    fn init(self) -> PathBuf {
         match self {
             PathType::Absolute => PathBuf::from("/"),
             PathType::Relative => PathBuf::new(),
@@ -146,7 +146,7 @@ impl Display for TemplateError {
 impl Error for TemplateError {}
 
 /// The reasons why a Template could be invalid
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum ErrorKind {
     /// Template placeholders cannot contain other placeholders
     Nested,
@@ -185,6 +185,10 @@ impl TemplateError {
     fn unknown(position: usize) -> Self {
         Self::new(position, ErrorKind::Unrecognised)
     }
+    #[cfg(test)]
+    pub fn kind(&self) -> ErrorKind {
+        self.kind
+    }
 }
 
 impl From<TemplateError> for PathTemplateError {
@@ -194,7 +198,7 @@ impl From<TemplateError> for PathTemplateError {
 }
 
 impl<F: TryFrom<String>> Template<F> {
-    pub fn new<S: AsRef<str>>(template: S) -> Result<Self, TemplateError> {
+    fn new<S: AsRef<str>>(template: S) -> Result<Self, TemplateError> {
         let mut parts = vec![];
         let mut state = ParseState::Init;
         for (i, c) in template.as_ref().chars().enumerate() {
@@ -268,7 +272,7 @@ impl<F> Template<F> {
 }
 
 impl<F: TryFrom<String>> PathTemplate<F> {
-    pub fn new<S: AsRef<str>>(template: S) -> Result<Self, PathTemplateError> {
+    pub(super) fn new<S: AsRef<str>>(template: S) -> Result<Self, PathTemplateError> {
         let path = PathBuf::from(template.as_ref());
         let mut parts = Vec::new();
         let mut kind = PathType::Relative;
@@ -306,7 +310,7 @@ impl<F> PathTemplate<F> {
     /// Iterate through all the fields in this path. Fields may be duplicated if they are
     /// referenced multiple times in the path.
     pub fn referenced_fields(&self) -> impl Iterator<Item = &F> {
-        self.parts.iter().flat_map(|t| t.referenced_fields())
+        self.parts.iter().flat_map(Template::referenced_fields)
     }
 }
 
@@ -529,14 +533,30 @@ mod path_template_tests {
     }
 
     #[test]
+    fn current_directory_normalised() {
+        let path = from_template("./subdirectory", &NullSource);
+        assert_eq!(path, PathBuf::from("subdirectory"));
+
+        let path = from_template("./nested/./subdirectory", &NullSource);
+        assert_eq!(path, PathBuf::from("nested/subdirectory"));
+    }
+
+    #[test]
     fn invalid_path() {
-        fn assert_invalid(fmt: &'static str) {
-            assert_eq!(
-                PathTemplate::<String>::new(fmt).unwrap_err(),
-                PathTemplateError::InvalidPath
-            )
-        }
-        assert_invalid("../empty/{segment}");
-        assert_invalid("/../empty/{segment}");
+        assert_eq!(
+            PathTemplate::<String>::new("../parent/directory").unwrap_err(),
+            PathTemplateError::InvalidPath
+        )
+    }
+
+    #[rstest::rstest]
+    #[case::unclosed("unclosed/partial_{place/holder")]
+    #[case::empty("empty/{}/placeholder")]
+    #[case::nested("nested/{place{holder}}")]
+    fn invalid_path_template(#[case] template: &str) {
+        let e = PathTemplate::<String>::new(template).unwrap_err();
+        let PathTemplateError::TemplateError(_) = e else {
+            panic!("Unexpected error from path template: {e}");
+        };
     }
 }

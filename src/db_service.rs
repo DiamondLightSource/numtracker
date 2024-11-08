@@ -13,42 +13,268 @@
 // limitations under the License.
 
 use std::fmt;
+use std::marker::PhantomData;
 use std::path::Path;
 
-use error::UpdateSingleError;
-use futures::Stream;
-use sqlx::prelude::FromRow;
-use sqlx::query::{Query, QueryScalar};
-use sqlx::sqlite::{SqliteArguments, SqliteConnectOptions};
-use sqlx::{query_file, query_file_as, query_file_scalar, query_scalar, Sqlite, SqlitePool};
-use tracing::{debug, info, instrument, warn};
+use error::{ConfigurationError, NewConfigurationError};
+use futures::{Stream, TryStreamExt as _};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
+use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
+use tracing::{info, instrument, trace};
 
-pub use self::error::{
-    FallbackConfigError, InsertTemplateError, SqliteNumberDirectoryError, SqliteNumberError,
-    SqliteTemplateError,
+use crate::paths::{
+    BeamlineField, DetectorField, DetectorTemplate, InvalidPathTemplate, PathSpec, ScanField,
+    ScanTemplate, VisitTemplate,
 };
-use crate::cli::TemplateKind;
-use crate::numtracker;
-use crate::paths::{BeamlineField, DetectorField, InvalidKey, ScanField};
 use crate::template::PathTemplate;
 
-type SqliteTemplateResult<F> = Result<PathTemplate<F>, SqliteTemplateError>;
+type SqliteTemplateResult<F> = Result<PathTemplate<F>, InvalidPathTemplate>;
 
 #[derive(Clone)]
 pub struct SqliteScanPathService {
     pool: SqlitePool,
 }
 
-#[derive(Debug, FromRow)]
-struct FallbackConfig {
-    directory: Option<String>,
-    extension: Option<String>,
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct NumtrackerConfig {
     pub directory: String,
     pub extension: String,
+}
+
+#[derive(Debug)]
+struct RawPathTemplate<F>(String, PhantomData<F>);
+
+impl<Spec> RawPathTemplate<Spec>
+where
+    Spec: PathSpec,
+{
+    fn as_template(&self) -> SqliteTemplateResult<Spec::Field> {
+        Spec::new_checked(&self.0)
+    }
+}
+
+impl<F> From<String> for RawPathTemplate<F> {
+    fn from(value: String) -> Self {
+        Self(value, PhantomData)
+    }
+}
+
+#[derive(Debug)]
+pub struct BeamlineConfiguration {
+    name: String,
+    scan_number: u32,
+    visit: RawPathTemplate<VisitTemplate>,
+    scan: RawPathTemplate<ScanTemplate>,
+    detector: RawPathTemplate<DetectorTemplate>,
+    fallback: Option<NumtrackerConfig>,
+}
+
+impl BeamlineConfiguration {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn scan_number(&self) -> u32 {
+        self.scan_number
+    }
+
+    pub fn fallback(&self) -> Option<&NumtrackerConfig> {
+        self.fallback.as_ref()
+    }
+
+    pub fn visit(&self) -> SqliteTemplateResult<BeamlineField> {
+        self.visit.as_template()
+    }
+
+    pub fn scan(&self) -> SqliteTemplateResult<ScanField> {
+        self.scan.as_template()
+    }
+
+    pub fn detector(&self) -> SqliteTemplateResult<DetectorField> {
+        self.detector.as_template()
+    }
+}
+
+impl<'r> FromRow<'r, SqliteRow> for BeamlineConfiguration {
+    fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(DbBeamlineConfig {
+            id: None,
+            name: row.try_get("name")?,
+            scan_number: row.try_get("scan_number")?,
+            visit: row.try_get::<String, _>("visit")?,
+            scan: row.try_get::<String, _>("scan")?,
+            detector: row.try_get::<String, _>("detector")?,
+            fallback_extension: row.try_get::<Option<String>, _>("fallback_extension")?,
+            fallback_directory: row.try_get::<Option<String>, _>("fallback_directory")?,
+        }
+        .into())
+    }
+}
+
+#[derive(Debug)]
+pub struct BeamlineConfigurationUpdate {
+    pub name: String,
+    pub scan_number: Option<u32>,
+    pub visit: Option<PathTemplate<BeamlineField>>,
+    pub scan: Option<PathTemplate<ScanField>>,
+    pub detector: Option<PathTemplate<DetectorField>>,
+    pub directory: Option<String>,
+    pub extension: Option<String>,
+}
+
+impl BeamlineConfigurationUpdate {
+    fn is_empty(&self) -> bool {
+        self.scan_number.is_none()
+            && self.visit.is_none()
+            && self.scan.is_none()
+            && self.detector.is_none()
+            && self.directory.is_none()
+            && self.extension.is_none()
+    }
+
+    pub async fn update_beamline(
+        &self,
+        db: &SqliteScanPathService,
+    ) -> Result<Option<BeamlineConfiguration>, sqlx::Error> {
+        if self.is_empty() {
+            return match db.current_configuration(&self.name).await {
+                Ok(bc) => Ok(Some(bc)),
+                Err(ConfigurationError::MissingBeamline(_)) => Ok(None),
+                Err(ConfigurationError::Db(e)) => Err(e),
+            };
+        }
+        let mut q: QueryBuilder<Sqlite> = QueryBuilder::new("UPDATE beamline SET ");
+        let mut fields = q.separated(", ");
+        if let Some(num) = self.scan_number {
+            fields.push("scan_number=");
+            fields.push_bind_unseparated(num);
+        }
+        if let Some(visit) = &self.visit {
+            fields.push("visit=");
+            fields.push_bind_unseparated(visit.to_string());
+        }
+        if let Some(scan) = &self.scan {
+            fields.push("scan=");
+            fields.push_bind_unseparated(scan.to_string());
+        }
+        if let Some(detector) = &self.detector {
+            fields.push("detector=");
+            fields.push_bind_unseparated(detector.to_string());
+        }
+        if let Some(dir) = &self.directory {
+            fields.push("fallback_directory=");
+            fields.push_bind_unseparated(dir);
+        }
+        if let Some(ext) = &self.extension {
+            if ext != &self.name {
+                // extension defaults to beamline name
+                fields.push("fallback_extension=");
+                fields.push_bind_unseparated(ext);
+            }
+        }
+        q.push(" WHERE name = ");
+        q.push_bind(&self.name);
+        q.push(" RETURNING *");
+
+        trace!(
+            beamline = self.name,
+            query = q.sql(),
+            "Updating beamline configuration",
+        );
+
+        q.build_query_as().fetch_optional(&db.pool).await
+    }
+    pub async fn insert_new(
+        self,
+        db: &SqliteScanPathService,
+    ) -> Result<BeamlineConfiguration, NewConfigurationError> {
+        let dbc = DbBeamlineConfig {
+            id: None,
+            name: self.name,
+            scan_number: i64::from(self.scan_number.unwrap_or(0)),
+            visit: self.visit.ok_or("visit")?.to_string(),
+            scan: self.scan.ok_or("scan")?.to_string(),
+            detector: self.detector.ok_or("detector")?.to_string(),
+            fallback_directory: self.directory,
+            fallback_extension: self.extension,
+        };
+        Ok(dbc.insert_into(db).await?)
+    }
+    #[cfg(test)]
+    fn empty(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            scan_number: None,
+            visit: None,
+            scan: None,
+            detector: None,
+            directory: None,
+            extension: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct DbBeamlineConfig {
+    #[allow(unused)] // unused but allows use of 'SELECT * ...' queries
+    id: Option<i64>,
+    name: String,
+    scan_number: i64,
+    visit: String,
+    scan: String,
+    detector: String,
+    fallback_directory: Option<String>,
+    fallback_extension: Option<String>,
+}
+
+impl DbBeamlineConfig {
+    pub async fn insert_into(
+        self,
+        db: &SqliteScanPathService,
+    ) -> sqlx::Result<BeamlineConfiguration> {
+        let bc = query_as!(
+            DbBeamlineConfig,
+            "INSERT INTO beamline
+                (name, scan_number, visit, scan, detector, fallback_directory, fallback_extension)
+            VALUES
+                (?,?,?,?,?,?,?)
+            RETURNING *",
+            self.name,
+            self.scan_number,
+            self.visit,
+            self.scan,
+            self.detector,
+            self.fallback_directory,
+            self.fallback_extension
+        )
+        .fetch_one(&db.pool)
+        .await?;
+        Ok(bc.into())
+    }
+}
+
+impl From<DbBeamlineConfig> for BeamlineConfiguration {
+    fn from(value: DbBeamlineConfig) -> Self {
+        let fallback = match (value.fallback_directory, value.fallback_extension) {
+            (None, _) => None,
+            (Some(dir), None) => Some(NumtrackerConfig {
+                directory: dir,
+                extension: value.name.clone(),
+            }),
+            (Some(dir), Some(ext)) => Some(NumtrackerConfig {
+                directory: dir,
+                extension: ext,
+            }),
+        };
+        Self {
+            name: value.name,
+            scan_number: u32::try_from(value.scan_number).expect("Run out of scan numbers"),
+            visit: value.visit.into(),
+            scan: value.scan.into(),
+            detector: value.detector.into(),
+            fallback,
+        }
+    }
 }
 
 impl SqliteScanPathService {
@@ -63,251 +289,51 @@ impl SqliteScanPathService {
         Ok(Self { pool })
     }
 
-    /// Execute a prepared query and parse the returned string into a [`PathTemplate`]
-    async fn template_from<'bl, F: TryFrom<String, Error = InvalidKey>>(
+    pub async fn current_configuration<'bl>(
         &self,
-        query: QueryScalar<'bl, Sqlite, Option<String>, SqliteArguments<'bl>>,
-    ) -> SqliteTemplateResult<F> {
-        let template = query
-            .fetch_optional(&self.pool)
-            .await?
-            .ok_or(SqliteTemplateError::BeamlineNotFound)?
-            .ok_or(SqliteTemplateError::TemplateNotSet)?;
-
-        debug!(template = template, "Template from DB");
-
-        Ok(PathTemplate::new(template)?)
-    }
-
-    async fn update_single<'q>(
-        &self,
-        query: Query<'q, Sqlite, SqliteArguments<'q>>,
-    ) -> Result<(), UpdateSingleError> {
-        let mut trn = self.pool.begin().await?;
-        let res = query.execute(&mut *trn).await?;
-        match res.rows_affected() {
-            0 => Err(UpdateSingleError::ZeroRecords),
-            2.. => Err(UpdateSingleError::TooMany),
-            _ => {
-                trn.commit().await?;
-                Ok(())
-            }
-        }
-    }
-
-    pub async fn next_scan_number(&self, beamline: &str) -> Result<usize, SqliteNumberError> {
-        let next = self.db_scan_number(beamline).await?;
-        let fallback = self.directory_scan_number(beamline).await;
-        match fallback {
-            Ok(n) if n != next => {
-                warn!("Fallback numbering inconsistent. Expected: {next}, found {n}")
-            }
-            Err(e) => warn!("Error incrementing fallback directory number: {e}"),
-            Ok(_) => {}
-        }
-        Ok(next)
-    }
-
-    pub async fn latest_scan_number(&self, beamline: &str) -> Result<usize, SqliteNumberError> {
-        let number = query_file_scalar!("queries/latest_scan_number.sql", beamline)
-            .fetch_optional(&self.pool)
-            .await?
-            .ok_or(SqliteNumberError::BeamlineNotFound)?;
-
-        number
-            .try_into()
-            .map_err(|_| SqliteNumberError::InvalidValue(number))
-    }
-
-    /// Increment and return the latest scan number for the given beamline
-    async fn db_scan_number(&self, beamline: &str) -> Result<usize, SqliteNumberError> {
-        let mut db = self.pool.begin().await?;
-        let next = query_file_scalar!("queries/increment_scan_number.sql", beamline)
-            .fetch_optional(&mut *db)
-            .await?
-            .ok_or(SqliteNumberError::BeamlineNotFound)?;
-        let next = next
-            .try_into()
-            .map_err(|_| SqliteNumberError::InvalidValue(next))?;
-        debug!("Next scan number: {next}");
-        db.commit().await?;
-        Ok(next)
-    }
-    async fn directory_scan_number(
-        &self,
-        beamline: &str,
-    ) -> Result<usize, SqliteNumberDirectoryError> {
-        match self.number_tracker_directory(beamline).await? {
-            Some(nc) => Ok(numtracker::increment_and_get(nc.directory, &nc.extension).await?),
-            None => Err(SqliteNumberDirectoryError::NoConfiguration),
-        }
-    }
-    #[instrument]
-    pub async fn visit_directory_template(
-        &self,
-        beamline: &str,
-    ) -> SqliteTemplateResult<BeamlineField> {
-        self.template_from(query_file_scalar!("queries/visit_template.sql", beamline))
-            .await
-    }
-    #[instrument]
-    pub async fn scan_file_template(&self, beamline: &str) -> SqliteTemplateResult<ScanField> {
-        self.template_from(query_file_scalar!("queries/scan_template.sql", beamline))
-            .await
-    }
-    #[instrument]
-    pub async fn detector_file_template(
-        &self,
-        beamline: &str,
-    ) -> SqliteTemplateResult<DetectorField> {
-        self.template_from(query_file_scalar!(
-            "queries/detector_template.sql",
-            beamline
-        ))
-        .await
-    }
-
-    pub fn beamlines(&self) -> impl Stream<Item = Result<String, sqlx::Error>> + '_ {
-        query_file_scalar!("queries/all_beamlines.sql").fetch(&self.pool)
-    }
-
-    pub async fn number_tracker_directory(
-        &self,
-        beamline: &str,
-    ) -> Result<Option<NumtrackerConfig>, sqlx::Error> {
-        debug!("Getting number_tracker_directory for {beamline}");
-        let fallback = query_file_as!(
-            FallbackConfig,
-            "queries/number_file_directory.sql",
+        beamline: &'bl str,
+    ) -> Result<BeamlineConfiguration, ConfigurationError<'bl>> {
+        query_as!(
+            DbBeamlineConfig,
+            "SELECT * FROM beamline WHERE name = ?",
             beamline
         )
         .fetch_optional(&self.pool)
-        .await?;
-        Ok(fallback.and_then(|fb| match (fb.directory, fb.extension) {
-            (None, None) => None,
-            (None, Some(_)) => None, // this should be unreachable due to table constraints
-            (Some(dir), None) => Some(NumtrackerConfig {
-                directory: dir,
-                extension: beamline.into(),
-            }),
-            (Some(dir), Some(ext)) => Some(NumtrackerConfig {
-                directory: dir,
-                extension: ext,
-            }),
-        }))
+        .await?
+        .map(BeamlineConfiguration::from)
+        .ok_or(ConfigurationError::MissingBeamline(beamline))
     }
 
-    pub async fn set_scan_number(&self, bl: &str, number: usize) -> Result<(), SqliteNumberError> {
-        let number = number as i64;
-        debug!(
-            beamline = bl,
-            scan_number = number,
-            "Setting scan number directly"
-        );
-        match self
-            .update_single(query_file!("queries/set_scan_number.sql", number, bl))
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(UpdateSingleError::Db(e)) => Err(e.into()),
-            Err(UpdateSingleError::ZeroRecords) => Err(SqliteNumberError::BeamlineNotFound),
-            Err(UpdateSingleError::TooMany) => {
-                // This should never happen if the schema constraints are set correctly
-                Err(SqliteNumberError::DuplicateBeamlineError)
-            }
-        }
-    }
-
-    pub async fn set_beamline_template(
+    pub async fn next_scan_configuration<'bl>(
         &self,
-        bl: &str,
-        kind: TemplateKind,
-        template: &str,
-    ) -> Result<(), InsertTemplateError> {
-        debug!(
-            beamline = bl,
-            template, "Setting beamline {kind:?} template"
-        );
-        kind.validate(template)?;
-        let update = match kind {
-            TemplateKind::Visit => {
-                self.update_single(query_file!("queries/set_visit_template.sql", template, bl))
-                    .await
-            }
-            TemplateKind::Scan => {
-                self.update_single(query_file!("queries/set_scan_template.sql", template, bl))
-                    .await
-            }
-            TemplateKind::Detector => {
-                self.update_single(query_file!(
-                    "queries/set_detector_template.sql",
-                    template,
-                    bl
-                ))
-                .await
-            }
-        };
-        update.map_err(|_| InsertTemplateError::MissingBeamline(bl.into()))
+        beamline: &'bl str,
+        current_high: Option<u32>,
+    ) -> Result<BeamlineConfiguration, ConfigurationError<'bl>> {
+        let exp = current_high.unwrap_or(0);
+        query_as!(
+            DbBeamlineConfig,
+            "UPDATE beamline SET scan_number = max(scan_number, ?) + 1 WHERE name = ? RETURNING *",
+            exp,
+            beamline
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .map(BeamlineConfiguration::from)
+        .ok_or(ConfigurationError::MissingBeamline(beamline))
     }
 
-    pub async fn insert_beamline(&self, beamline: &str) -> Result<(), sqlx::Error> {
-        query_file!("queries/insert_beamline.sql", beamline)
-            .execute(&self.pool)
-            .await?;
-        Ok(())
-    }
-
-    pub async fn get_templates(&self, kind: TemplateKind) -> sqlx::Result<Vec<String>> {
-        let templates = match kind {
-            TemplateKind::Visit => {
-                query_scalar!("SELECT DISTINCT visit FROM beamline;")
-                    .fetch_all(&self.pool)
-                    .await
-            }
-            TemplateKind::Scan => {
-                query_scalar!("SELECT DISTINCT scan FROM beamline;")
-                    .fetch_all(&self.pool)
-                    .await
-            }
-            TemplateKind::Detector => {
-                query_scalar!("SELECT DISTINCT detector FROM beamline;")
-                    .fetch_all(&self.pool)
-                    .await
-            }
-        };
-        templates.map(|t| t.into_iter().flatten().collect::<Vec<_>>())
-    }
-
-    pub async fn set_fallback(
-        &self,
-        beamline: &str,
-        directory: &str,
-        ext: Option<&str>,
-    ) -> Result<(), FallbackConfigError> {
-        let update = self
-            .update_single(query_file!(
-                "queries/set_fallback.sql",
-                directory,
-                ext,
-                beamline
-            ))
-            .await;
-        update.map_err(|e| match e {
-            UpdateSingleError::Db(e) => FallbackConfigError::Db(e),
-            UpdateSingleError::ZeroRecords => FallbackConfigError::MissingBeamline(beamline.into()),
-            UpdateSingleError::TooMany => FallbackConfigError::DuplicateBeamline(beamline.into()),
-        })
+    pub fn all_beamlines(&self) -> impl Stream<Item = sqlx::Result<BeamlineConfiguration>> + '_ {
+        query_as!(DbBeamlineConfig, "SELECT * FROM beamline")
+            .fetch(&self.pool)
+            .map_ok(BeamlineConfiguration::from)
     }
 
     #[cfg(test)]
     async fn ro_memory() -> Self {
-        // only read-write so that migrations can be applied
-        let opts = SqliteConnectOptions::new().in_memory(true);
-        let pool = SqlitePool::connect_with(opts).await.unwrap();
-        sqlx::migrate!().run(&pool).await.unwrap();
-        // ... then set to read-only
-        pool.set_connect_options(SqliteConnectOptions::new().read_only(true));
-        Self { pool }
+        let db = Self::memory().await;
+        db.pool
+            .set_connect_options(SqliteConnectOptions::new().read_only(true));
+        db
     }
 
     #[cfg(test)]
@@ -332,204 +358,59 @@ mod error {
     use std::error::Error;
     use std::fmt::{self, Display};
 
-    use crate::paths::InvalidPathTemplate;
-    use crate::template::PathTemplateError;
-
-    /// Something that went wrong in the chain of querying the database for a template and
-    /// converting it into a usable template.
     #[derive(Debug)]
-    pub enum SqliteTemplateError {
-        /// It wasn't possible to get the requested template from the database.
-        ConnectionError(sqlx::Error),
-        /// There is no template available for the requested beamline
-        BeamlineNotFound,
-        /// The template was present in the database but it could not be parsed into a valid
-        /// [`PathTemplate`].
-        Invalid(PathTemplateError),
-        /// The requested template is not set for the requested beamline
-        TemplateNotSet,
-    }
-
-    impl Display for SqliteTemplateError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Self::ConnectionError(e) => write!(f, "Could not access database: {e}"),
-                Self::BeamlineNotFound => f.write_str("Beamline configuration not found"),
-                Self::TemplateNotSet => f.write_str("No template set for beamline"),
-                Self::Invalid(e) => write!(f, "Template is not valid: {e}"),
-            }
-        }
-    }
-
-    impl Error for SqliteTemplateError {}
-
-    impl From<sqlx::Error> for SqliteTemplateError {
-        fn from(sql: sqlx::Error) -> Self {
-            Self::ConnectionError(sql)
-        }
-    }
-
-    impl From<PathTemplateError> for SqliteTemplateError {
-        fn from(err: PathTemplateError) -> Self {
-            Self::Invalid(err)
-        }
-    }
-
-    #[derive(Debug)]
-    pub enum SqliteNumberError {
-        BeamlineNotFound,
-        DuplicateBeamlineError,
-        ConnectionError(sqlx::Error),
-        InvalidValue(i64),
-    }
-
-    impl Display for SqliteNumberError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Self::BeamlineNotFound => f.write_str("No scan number configured for beamline"),
-                Self::ConnectionError(e) => write!(f, "Could not access DB: {e}"),
-                Self::InvalidValue(v) => write!(f, "Scan number {v} in DB is not valid"),
-                Self::DuplicateBeamlineError => {
-                    write!(f, "Invalid DB state - multiple entries for beamline")
-                }
-            }
-        }
-    }
-
-    impl Error for SqliteNumberError {
-        fn source(&self) -> Option<&(dyn Error + 'static)> {
-            match self {
-                Self::BeamlineNotFound | Self::InvalidValue(_) | Self::DuplicateBeamlineError => {
-                    None
-                }
-                Self::ConnectionError(e) => Some(e),
-            }
-        }
-    }
-
-    impl From<sqlx::Error> for SqliteNumberError {
-        fn from(value: sqlx::Error) -> Self {
-            Self::ConnectionError(value)
-        }
-    }
-
-    #[derive(Debug)]
-    pub enum SqliteNumberDirectoryError {
-        /// There is no directory configured for the requested beamline
-        NoConfiguration,
-        /// The DB could not be accessed or queried
-        Inaccessible(sqlx::Error),
-        /// The directory was not present or not readable
-        NotReabable(std::io::Error),
-    }
-
-    impl Display for SqliteNumberDirectoryError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Self::NoConfiguration => {
-                    f.write_str("No directory configured for the given beamline")
-                }
-                Self::Inaccessible(e) => e.fmt(f),
-                Self::NotReabable(e) => e.fmt(f),
-            }
-        }
-    }
-
-    impl Error for SqliteNumberDirectoryError {
-        fn source(&self) -> Option<&(dyn Error + 'static)> {
-            match self {
-                Self::NoConfiguration => None,
-                Self::Inaccessible(e) => Some(e),
-                Self::NotReabable(e) => Some(e),
-            }
-        }
-    }
-
-    impl From<std::io::Error> for SqliteNumberDirectoryError {
-        fn from(value: std::io::Error) -> Self {
-            Self::NotReabable(value)
-        }
-    }
-
-    impl From<sqlx::Error> for SqliteNumberDirectoryError {
-        fn from(value: sqlx::Error) -> Self {
-            Self::Inaccessible(value)
-        }
-    }
-
-    #[derive(Debug)]
-    pub enum InsertTemplateError {
+    pub enum ConfigurationError<'bl> {
+        MissingBeamline(&'bl str),
         Db(sqlx::Error),
-        Invalid(InvalidPathTemplate),
-        MissingBeamline(String),
     }
 
-    impl Display for InsertTemplateError {
+    impl Display for ConfigurationError<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                InsertTemplateError::Db(e) => write!(f, "Error inserting template: {e}"),
-                InsertTemplateError::Invalid(e) => write!(f, "Template was not valid: {e}"),
-                InsertTemplateError::MissingBeamline(bl) => {
-                    write!(f, "No configuration for beamline {bl:?}")
+                ConfigurationError::MissingBeamline(bl) => {
+                    write!(f, "No configuration available for beamline {bl:?}")
                 }
+                ConfigurationError::Db(e) => write!(f, "Error reading configuration: {e}"),
             }
         }
     }
 
-    impl Error for InsertTemplateError {
+    impl Error for ConfigurationError<'_> {
         fn source(&self) -> Option<&(dyn Error + 'static)> {
             match self {
-                InsertTemplateError::Db(e) => Some(e),
-                InsertTemplateError::Invalid(e) => Some(e),
-                InsertTemplateError::MissingBeamline(_) => None,
+                ConfigurationError::MissingBeamline(_) => None,
+                ConfigurationError::Db(e) => Some(e),
             }
         }
     }
 
-    impl From<InvalidPathTemplate> for InsertTemplateError {
-        fn from(value: InvalidPathTemplate) -> Self {
-            Self::Invalid(value)
-        }
-    }
-
-    impl From<sqlx::Error> for InsertTemplateError {
-        fn from(value: sqlx::Error) -> Self {
-            Self::Db(value)
-        }
-    }
-
-    pub enum UpdateSingleError {
-        Db(sqlx::Error),
-        ZeroRecords,
-        TooMany,
-    }
-
-    impl From<sqlx::Error> for UpdateSingleError {
+    impl From<sqlx::Error> for ConfigurationError<'_> {
         fn from(value: sqlx::Error) -> Self {
             Self::Db(value)
         }
     }
 
     #[derive(Debug)]
-    pub enum FallbackConfigError {
-        MissingBeamline(String),
-        DuplicateBeamline(String),
+    pub enum NewConfigurationError {
+        MissingField(String),
         Db(sqlx::Error),
     }
-
-    impl Display for FallbackConfigError {
+    impl Display for NewConfigurationError {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
-                Self::MissingBeamline(bl) => write!(f, "No configuration for {bl}"),
-                Self::DuplicateBeamline(bl) => {
-                    write!(f, "Multiple configurations for {bl}")
+                NewConfigurationError::MissingField(name) => {
+                    write!(f, "Missing field {name:?} for new configuration")
                 }
-                Self::Db(e) => e.fmt(f),
+                NewConfigurationError::Db(e) => write!(f, "Error inserting new configuration: {e}"),
             }
         }
     }
-
-    impl From<sqlx::Error> for FallbackConfigError {
+    impl From<&str> for NewConfigurationError {
+        fn from(value: &str) -> Self {
+            Self::MissingField(value.into())
+        }
+    }
+    impl From<sqlx::Error> for NewConfigurationError {
         fn from(value: sqlx::Error) -> Self {
             Self::Db(value)
         }
@@ -538,13 +419,15 @@ mod error {
 
 #[cfg(test)]
 mod db_tests {
-    use futures::StreamExt;
+    use rstest::{fixture, rstest};
+    use sqlx::error::{DatabaseError as _, ErrorKind};
+    use sqlx::sqlite::SqliteError;
     use tokio::test;
 
     use super::SqliteScanPathService;
-    use crate::cli::TemplateKind;
-    use crate::db_service::{InsertTemplateError, SqliteNumberError, SqliteTemplateError};
-    use crate::paths::InvalidPathTemplate;
+    use crate::db_service::error::{ConfigurationError, NewConfigurationError};
+    use crate::db_service::{BeamlineConfiguration, BeamlineConfigurationUpdate};
+    use crate::paths::{DetectorTemplate, PathSpec, ScanTemplate, VisitTemplate};
 
     /// Remove repeated .await.unwrap() noise from tests
     macro_rules! ok {
@@ -553,183 +436,211 @@ mod db_tests {
         };
     }
     /// Remove repeated .await.unwrap_err() noise from tests
+    /// Await the given future, unwrap the err and match it against the expected pattern
     macro_rules! err {
         ($call:expr) => {
             $call.await.unwrap_err()
         };
+        ($exp:path, $call:expr) => {{
+            let e = $call.await.unwrap_err();
+            let $exp(e) = e else {
+                panic!("Unexpected error: {e}");
+            };
+            e
+        }};
     }
 
-    #[test]
-    async fn insert_invalid_visit_template() {
+    #[fixture]
+    async fn db() -> SqliteScanPathService {
         let db = SqliteScanPathService::memory().await;
-        let e = err!(db.set_beamline_template(
-            "i22",
-            TemplateKind::Visit,
-            "/no/instrument/segment/for/{visit}"
-        ));
-        assert!(matches!(
-            e,
-            InsertTemplateError::Invalid(InvalidPathTemplate::MissingField(_)),
-        ))
+        update().insert_new(&db).await.unwrap();
+        db
+    }
+
+    #[fixture]
+    fn update() -> BeamlineConfigurationUpdate {
+        BeamlineConfigurationUpdate {
+            name: "i22".into(),
+            scan_number: Some(122),
+            visit: VisitTemplate::new_checked("/tmp/{instrument}/data/{year}/{visit}").ok(),
+            scan: ScanTemplate::new_checked("{subdirectory}/{instrument}-{scan_number}").ok(),
+            detector: DetectorTemplate::new_checked(
+                "{subdirectory}/{instrument}-{scan_number}-{detector}",
+            )
+            .ok(),
+            directory: Some("/tmp/trackers".into()),
+            extension: Some("ext".into()),
+        }
     }
 
     #[test]
-    async fn read_only_fails() {
+    async fn empty_db_has_no_config() {
+        let db = SqliteScanPathService::memory().await;
+        let e = err!(
+            ConfigurationError::MissingBeamline,
+            db.current_configuration("i22")
+        );
+        assert_eq!(e, "i22")
+    }
+
+    #[rstest]
+    #[case::visit("visit", |u: &mut BeamlineConfigurationUpdate| u.visit = None)]
+    #[case::scan("scan", |u: &mut BeamlineConfigurationUpdate| u.scan = None)]
+    #[case::scan("detector", |u: &mut BeamlineConfigurationUpdate| u.detector = None)]
+    #[tokio::test]
+    async fn enew_beamline_with_missing_field(
+        mut update: BeamlineConfigurationUpdate,
+        #[case] name: &str,
+        #[case] init: impl FnOnce(&mut BeamlineConfigurationUpdate),
+    ) {
+        let db = SqliteScanPathService::memory().await;
+        init(&mut update);
+        let field = err!(NewConfigurationError::MissingField, update.insert_new(&db));
+        assert_eq!(field, name);
+    }
+
+    #[rstest]
+    #[case::directory(|u: &mut BeamlineConfigurationUpdate| u.extension = None)]
+    #[case::scan_number(|u: &mut BeamlineConfigurationUpdate| u.scan_number = None)]
+    #[tokio::test]
+    async fn new_beamline_without_optional(
+        mut update: BeamlineConfigurationUpdate,
+        #[case] init: impl FnOnce(&mut BeamlineConfigurationUpdate),
+    ) {
+        let db = SqliteScanPathService::memory().await;
+        init(&mut update);
+        let bc = ok!(update.insert_new(&db));
+        assert_eq!(bc.name(), "i22");
+    }
+
+    #[rstest]
+    #[test]
+    async fn extension_requires_directory(mut update: BeamlineConfigurationUpdate) {
+        let db = SqliteScanPathService::memory().await;
+        update.directory = None;
+        let e = err!(NewConfigurationError::Db, update.insert_new(&db));
+        let e = *e.into_database_error().unwrap().downcast::<SqliteError>();
+        assert_eq!(e.kind(), ErrorKind::CheckViolation)
+    }
+
+    #[rstest]
+    #[test]
+    async fn read_only_db_propagates_errors(update: BeamlineConfigurationUpdate) {
         let db = SqliteScanPathService::ro_memory().await;
-        let e = err!(db.insert_beamline("i22"));
-        assert!(matches!(e, sqlx::Error::Database(_)))
+        let e = err!(NewConfigurationError::Db, update.insert_new(&db));
+        let e = e.into_database_error().unwrap().downcast::<SqliteError>();
+        assert_eq!(e.kind(), ErrorKind::Other);
+    }
+
+    #[rstest]
+    #[test]
+    async fn read_only_db_propagates_error(update: BeamlineConfigurationUpdate) {
+        let db = SqliteScanPathService::ro_memory().await;
+        let e = err!(NewConfigurationError::Db, update.insert_new(&db));
+        let e = e.into_database_error().unwrap().downcast::<SqliteError>();
+        assert_eq!(e.kind(), ErrorKind::Other);
     }
 
     #[test]
-    async fn insert_beamline() {
+    async fn duplicate_beamlines() {
         let db = SqliteScanPathService::memory().await;
-        let beamlines = db.beamlines().collect::<Vec<_>>().await;
-        assert!(beamlines.is_empty());
-        ok!(db.insert_beamline("i22"));
-
-        let beamlines = db.beamlines().collect::<Vec<_>>().await;
-        assert_eq!(beamlines.len(), 1);
-        assert_eq!(beamlines[0].as_deref().unwrap(), "i22");
+        _ = ok!(update().insert_new(&db));
+        let e = err!(NewConfigurationError::Db, update().insert_new(&db));
+        let e = e.into_database_error().unwrap().downcast::<SqliteError>();
+        assert_eq!(e.kind(), ErrorKind::UniqueViolation);
     }
 
+    #[rstest]
     #[test]
-    async fn scan_numbers() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        assert_eq!(ok!(db.next_scan_number("i22")), 1);
-        assert_eq!(ok!(db.next_scan_number("i22")), 2);
-
-        ok!(db.set_scan_number("i22", 122));
-        assert_eq!(ok!(db.next_scan_number("i22")), 123);
-        assert_eq!(ok!(db.next_scan_number("i22")), 124);
-        assert_eq!(ok!(db.latest_scan_number("i22")), 124);
+    async fn incrementing_scan_numbers(#[future(awt)] db: SqliteScanPathService) {
+        let s1 = ok!(db.next_scan_configuration("i22", None));
+        let s2 = ok!(db.next_scan_configuration("i22", None));
+        assert_eq!(s1.scan_number() + 1, s2.scan_number());
     }
 
+    #[rstest]
     #[test]
-    async fn latest_scan_number_for_missing_beamline() {
-        let db = SqliteScanPathService::memory().await;
-        let e = err!(db.latest_scan_number("i22"));
-        let SqliteNumberError::BeamlineNotFound = e else {
-            panic!("Unexpected error when beamline is missing: {e}")
-        };
+    async fn overriding_scan_number_updates_db(#[future(awt)] db: SqliteScanPathService) {
+        let s1 = ok!(db.next_scan_configuration("i22", None));
+        let s2 = ok!(db.next_scan_configuration("i22", Some(1234)));
+        let s3 = ok!(db.next_scan_configuration("i22", None));
+        assert_eq!(s1.scan_number(), 123);
+        assert_eq!(s2.scan_number(), 1235);
+        assert_eq!(s3.scan_number(), 1236);
     }
 
+    #[rstest]
     #[test]
-    async fn inc_scan_number_for_missing_beamline() {
-        let db = SqliteScanPathService::memory().await;
-        let e = err!(db.next_scan_number("i22"));
-        let SqliteNumberError::BeamlineNotFound = e else {
-            panic!("Unexpected error when beamline is missing: {e}")
-        };
+    async fn lower_scan_override_is_ignored(#[future(awt)] db: SqliteScanPathService) {
+        let s1 = ok!(db.next_scan_configuration("i22", Some(42)));
+        assert_eq!(s1.scan_number(), 123);
     }
 
+    #[rstest]
     #[test]
-    async fn visit_template_for_missing_beamline() {
-        let db = SqliteScanPathService::memory().await;
-        let e = err!(db.visit_directory_template("i22"));
-        let SqliteTemplateError::BeamlineNotFound = e else {
-            panic!("Unexpected error for missing beamline: {e}")
-        };
-
-        err!(db.set_beamline_template("i22", TemplateKind::Visit, "/{instrument}/{visit}"));
+    async fn incrementing_missing_beamline(#[future(awt)] db: SqliteScanPathService) {
+        let e = err!(
+            ConfigurationError::MissingBeamline,
+            db.next_scan_configuration("b21", None)
+        );
+        assert_eq!(e, "b21")
     }
 
+    #[rstest]
     #[test]
-    async fn get_missing_visit_template() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        let e = err!(db.visit_directory_template("i22"));
-        let SqliteTemplateError::TemplateNotSet = e else {
-            panic!("Unexpected error getting visit directory: {e:?}");
-        };
-    }
-
-    #[test]
-    async fn get_set_visit_template() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        ok!(db.set_beamline_template(
-            "i22",
-            TemplateKind::Visit,
+    async fn current_configuration(#[future(awt)] db: SqliteScanPathService) {
+        let conf = ok!(db.current_configuration("i22"));
+        assert_eq!(conf.name(), "i22");
+        assert_eq!(conf.scan_number(), 122);
+        assert_eq!(
+            conf.visit().unwrap().to_string(),
             "/tmp/{instrument}/data/{year}/{visit}"
-        ));
-        let t = ok!(db.visit_directory_template("i22"));
-        assert_eq!(t.to_string(), "/tmp/{instrument}/data/{year}/{visit}")
-    }
-
-    #[test]
-    async fn get_set_scan_template() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        ok!(db.set_beamline_template("i22", TemplateKind::Scan, "{instrument}_{scan_number}"));
-        let t = ok!(db.scan_file_template("i22"));
-        assert_eq!(t.to_string(), "{instrument}_{scan_number}")
-    }
-
-    #[test]
-    async fn get_set_detector_template() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        ok!(db.set_beamline_template(
-            "i22",
-            TemplateKind::Detector,
-            "{instrument}_{scan_number}_{detector}"
-        ));
-        let t = ok!(db.detector_file_template("i22"));
-        assert_eq!(t.to_string(), "{instrument}_{scan_number}_{detector}")
-    }
-
-    #[test]
-    async fn get_templates() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        ok!(db.set_beamline_template("i22", TemplateKind::Visit, "/{instrument}/{visit}"));
-        ok!(db.set_beamline_template("i22", TemplateKind::Scan, "{scan_number}"));
-        ok!(db.set_beamline_template("i22", TemplateKind::Detector, "{scan_number}_{detector}"));
-
-        assert_eq!(
-            ok!(db.get_templates(TemplateKind::Visit)),
-            &["/{instrument}/{visit}"]
         );
         assert_eq!(
-            ok!(db.get_templates(TemplateKind::Scan)),
-            &["{scan_number}"]
+            conf.scan().unwrap().to_string(),
+            "{subdirectory}/{instrument}-{scan_number}"
         );
         assert_eq!(
-            ok!(db.get_templates(TemplateKind::Detector)),
-            &["{scan_number}_{detector}"]
+            conf.detector().unwrap().to_string(),
+            "{subdirectory}/{instrument}-{scan_number}-{detector}"
         );
-    }
-
-    #[test]
-    async fn full_fallback() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        ok!(db.set_fallback("i22", "tracker_dir", Some("i22_ext")));
-        let fb = ok!(db.number_tracker_directory("i22"));
-        let fb = fb.expect("Fallback config missing");
-        assert_eq!(fb.directory, "tracker_dir");
-        assert_eq!(fb.extension, "i22_ext");
-    }
-
-    #[test]
-    async fn partial_fallback() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        ok!(db.set_fallback("i22", "tracker_dir", None));
-        let fb = ok!(db.number_tracker_directory("i22"));
-        let fb = fb.expect("Fallback config missing");
-        assert_eq!(fb.directory, "tracker_dir");
-        assert_eq!(fb.extension, "i22");
-    }
-
-    #[test]
-    async fn no_fallback() {
-        let db = SqliteScanPathService::memory().await;
-        ok!(db.insert_beamline("i22"));
-        let fb = ok!(db.number_tracker_directory("i22"));
-        let None = fb else {
-            panic!("Fallback config should be missing");
+        let Some(fb) = conf.fallback() else {
+            panic!("Missing fallback configuration");
         };
+        assert_eq!(fb.directory, "/tmp/trackers");
+        assert_eq!(fb.extension, "ext");
+    }
+
+    type Update = BeamlineConfigurationUpdate;
+
+    #[rstest]
+    #[case::visit(
+            |u: &mut Update| u.visit = VisitTemplate::new_checked("/new/{instrument}/{proposal}/{visit}").ok(),
+            |u: BeamlineConfiguration| assert_eq!(u.visit().unwrap().to_string(), "/new/{instrument}/{proposal}/{visit}"))]
+    #[case::scan(
+            |u: &mut Update| u.scan = ScanTemplate::new_checked("new-{scan_number}").ok(),
+            |u: BeamlineConfiguration| assert_eq!(u.scan().unwrap().to_string(), "new-{scan_number}"))]
+    #[case::detector(
+            |u: &mut Update| u.detector = DetectorTemplate::new_checked("new-{scan_number}-{detector}").ok(),
+            |u: BeamlineConfiguration| assert_eq!(u.detector().unwrap().to_string(), "new-{scan_number}-{detector}"))]
+    #[case::scan_number(
+            |u: &mut Update| u.scan_number = Some(42),
+            |u: BeamlineConfiguration| assert_eq!(u.scan_number(), 42))]
+    #[case::directory(
+            |u: &mut Update| u.directory = Some("/new_trackers".into()),
+            |u: BeamlineConfiguration| assert_eq!(u.fallback().unwrap().directory, "/new_trackers"))]
+    #[case::extension(
+            |u: &mut Update| u.extension = Some("new".into()),
+            |u: BeamlineConfiguration| assert_eq!(u.fallback().unwrap().extension, "new"))]
+    #[tokio::test]
+    async fn update_existing(
+        #[future(awt)] db: SqliteScanPathService,
+        #[case] init: impl FnOnce(&mut Update),
+        #[case] check: impl FnOnce(BeamlineConfiguration),
+    ) {
+        let mut upd = Update::empty("i22");
+        init(&mut upd);
+        let bc = ok!(upd.update_beamline(&db)).expect("Updated beamline missing");
+        check(bc)
     }
 }
