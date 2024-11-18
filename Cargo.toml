@@ -12,7 +12,7 @@ async-graphql = { version = "=7.0.9", features = ["tracing"] }
 async-graphql-axum = "=7.0.9"
 axum = "0.7.5"
 chrono = "0.4.38"
-clap = { version = "4.5.16", features = ["cargo", "derive"] }
+clap = { version = "4.5.16", features = ["cargo", "derive", "env"] }
 clap-verbosity-flag = "2.2.1"
 futures = "0.3.30"
 opentelemetry = "0.24.0"

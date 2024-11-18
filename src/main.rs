@@ -29,7 +29,7 @@ mod template;
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::init();
     let _ = logging::init(args.log_level(), args.tracing());
-    debug!(args = format_args!("{:#?}", args));
+    debug!(?args, "Starting numtracker service");
     match args.command {
         Command::Serve(opts) => graphql::serve_graphql(&args.db, opts).await,
         Command::Schema => graphql::graphql_schema(),

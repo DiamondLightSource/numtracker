@@ -22,7 +22,7 @@ use url::Url;
 
 #[derive(Debug, Parser)]
 pub struct Cli {
-    #[clap(short, long, default_value = "numtracker.db")]
+    #[clap(short, long, default_value = "numtracker.db", env = "NUMTRACKER_DB")]
     pub(crate) db: PathBuf,
     #[clap(flatten, next_help_heading = "Logging/Debug")]
     verbose: Verbosity<InfoLevel>,
@@ -35,10 +35,10 @@ pub struct Cli {
 #[derive(Debug, Parser)]
 pub struct TracingOptions {
     /// The URL of the tracing OTLP platform (eg Jaeger)
-    #[clap(long = "tracing")]
+    #[clap(long = "tracing", env = "NUMTRACKER_TRACING")]
     tracing_url: Option<Url>,
     /// The minimum level of tracing events to send
-    #[clap(long, default_value_t = Level::INFO)]
+    #[clap(long, default_value_t = Level::INFO, env = "NUMTRACKER_TRACING_LEVEL")]
     tracing_level: Level,
 }
 
@@ -53,10 +53,10 @@ pub enum Command {
 #[derive(Debug, Parser)]
 pub struct ServeOptions {
     /// The IP for this to service to be bound to
-    #[clap(short = 'H', long, default_value_t = Ipv4Addr::UNSPECIFIED)]
+    #[clap(short = 'H', long, default_value_t = Ipv4Addr::UNSPECIFIED, env="NUMTRACKER_HOST")]
     host: Ipv4Addr,
     /// The port to open for requests
-    #[clap(short, long, default_value_t = 8000)]
+    #[clap(short, long, default_value_t = 8000, env = "NUMTRACKER_PORT")]
     port: u16,
 }
 
