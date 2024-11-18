@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::env;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
@@ -66,13 +67,28 @@ impl Cli {
     }
     pub fn log_level(&self) -> Option<Level> {
         use clap_verbosity_flag::Level as ClapLevel;
-        self.verbose.log_level().map(|lvl| match lvl {
-            ClapLevel::Error => Level::ERROR,
-            ClapLevel::Warn => Level::WARN,
-            ClapLevel::Info => Level::INFO,
-            ClapLevel::Debug => Level::DEBUG,
-            ClapLevel::Trace => Level::TRACE,
-        })
+        match self.verbose.log_level() {
+            Some(lvl) => Some(match lvl {
+                ClapLevel::Error => Level::ERROR,
+                ClapLevel::Warn => Level::WARN,
+                ClapLevel::Info => Level::INFO,
+                ClapLevel::Debug => Level::DEBUG,
+                ClapLevel::Trace => Level::TRACE,
+            }),
+            None => Some(
+                match env::var("NUMTRACKER_LOG_LEVEL")
+                    .map(|lvl| lvl.to_ascii_lowercase())
+                    .as_deref()
+                {
+                    Ok("info") => Level::INFO,
+                    Ok("debug") => Level::DEBUG,
+                    Ok("trace") => Level::TRACE,
+                    Ok("warn") => Level::WARN,
+                    Ok("error") => Level::ERROR,
+                    _ => return None,
+                },
+            ),
+        }
     }
     pub fn tracing(&self) -> &TracingOptions {
         &self.tracing
