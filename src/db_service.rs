@@ -17,7 +17,6 @@ use std::marker::PhantomData;
 use std::path::Path;
 
 use error::{ConfigurationError, NewConfigurationError};
-use futures::{Stream, TryStreamExt as _};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
 use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
@@ -320,12 +319,6 @@ impl SqliteScanPathService {
         .await?
         .map(BeamlineConfiguration::from)
         .ok_or(ConfigurationError::MissingBeamline(beamline))
-    }
-
-    pub fn all_beamlines(&self) -> impl Stream<Item = sqlx::Result<BeamlineConfiguration>> + '_ {
-        query_as!(DbBeamlineConfig, "SELECT * FROM beamline")
-            .fetch(&self.pool)
-            .map_ok(BeamlineConfiguration::from)
     }
 
     #[cfg(test)]
