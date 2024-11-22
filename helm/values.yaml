@@ -1,0 +1,70 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/diamondlightsource/data-endpoint-lookup
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+numtracker:
+  port: 80
+  dbLocation: /data/numtracker.db
+  storage:
+    size: 10M
+    pvc_name: daq-numtracker-db-volume
+  auth:
+    enabled: true
+    host: authz.diamond.ac.uk
+    admin: /v1/data/diamond/policy/admin/configure_beamline
+    access: /v1/data/diamond/policy/session/write_to_beamline_visit
+  tracing:
+    enabled: true
+    host: "https://jaeger.diamond.ac.uk"
+    level: DEBUG
+
+#This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Automatically mount a ServiceAccount's API credentials?
+  automount: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: chart-example.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+
+resources: {}
+
+autoscaling:
+  enabled: false
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
