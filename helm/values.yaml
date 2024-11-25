@@ -1,21 +1,17 @@
-replicaCount: 1
-
 image:
-  repository: ghcr.io/diamondlightsource/data-endpoint-lookup
+  # repository: ghcr.io/diamondlightsource/data-endpoint-lookup
+  repository: localhost/numtracker
+  tag: "latest"
   pullPolicy: IfNotPresent
 
-imagePullSecrets: []
-nameOverride: ""
-fullnameOverride: ""
-
 numtracker:
-  port: 80
+  port: "80"
   dbLocation: /data/numtracker.db
   storage:
     size: 10M
-    pvc_name: daq-numtracker-db-volume
+    pvcName: daq-numtracker-db-volume
   auth:
-    enabled: true
+    enabled: false
     host: authz.diamond.ac.uk
     admin: /v1/data/diamond/policy/admin/configure_beamline
     access: /v1/data/diamond/policy/session/write_to_beamline_visit
