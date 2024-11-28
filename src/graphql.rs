@@ -32,7 +32,7 @@ use axum::routing::{get, post};
 use axum::{Extension, Router};
 use chrono::{Datelike, Local};
 use tokio::net::TcpListener;
-use tracing::{instrument, trace, warn};
+use tracing::{info, instrument, trace, warn};
 
 use crate::cli::ServeOptions;
 use crate::db_service::{
@@ -49,6 +49,7 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
     let db = SqliteScanPathService::connect(db)
         .await
         .expect("Unable to open DB");
+    info!("Serving graphql endpoints on {:?}", opts.addr());
     let schema = Schema::build(Query, Mutation, EmptySubscription)
         .extension(Tracing)
         .data(db)
