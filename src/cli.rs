@@ -16,8 +16,7 @@ use std::env;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
-use clap_verbosity_flag::{InfoLevel, Verbosity};
+use clap::{ArgAction, Args, Parser, Subcommand};
 use tracing::Level;
 use url::Url;
 
@@ -26,7 +25,7 @@ pub struct Cli {
     #[clap(short, long, default_value = "numtracker.db", env = "NUMTRACKER_DB")]
     pub(crate) db: PathBuf,
     #[clap(flatten, next_help_heading = "Logging/Debug")]
-    verbose: Verbosity<InfoLevel>,
+    verbose: Verbosity,
     #[clap(flatten, next_help_heading = "Tracing and Logging")]
     tracing: TracingOptions,
     #[clap(subcommand)]
@@ -61,37 +60,49 @@ pub struct ServeOptions {
     port: u16,
 }
 
+#[derive(Debug, Args)]
+struct Verbosity {
+    /// Increase the level of logs written to stderr
+    #[clap(short, long, global = true, action = ArgAction::Count)]
+    verbose: u8,
+    /// Disable all output to stderr/stdout
+    #[clap(short, long, global = true, conflicts_with = "verbose")]
+    quiet: bool,
+}
+
 impl Cli {
     pub fn init() -> Self {
         Self::parse()
     }
-    pub fn log_level(&self) -> Option<Level> {
-        use clap_verbosity_flag::Level as ClapLevel;
-        match self.verbose.log_level() {
-            Some(lvl) => Some(match lvl {
-                ClapLevel::Error => Level::ERROR,
-                ClapLevel::Warn => Level::WARN,
-                ClapLevel::Info => Level::INFO,
-                ClapLevel::Debug => Level::DEBUG,
-                ClapLevel::Trace => Level::TRACE,
-            }),
-            None => Some(
-                match env::var("NUMTRACKER_LOG_LEVEL")
-                    .map(|lvl| lvl.to_ascii_lowercase())
-                    .as_deref()
-                {
-                    Ok("info") => Level::INFO,
-                    Ok("debug") => Level::DEBUG,
-                    Ok("trace") => Level::TRACE,
-                    Ok("warn") => Level::WARN,
-                    Ok("error") => Level::ERROR,
-                    _ => return None,
-                },
-            ),
-        }
-    }
     pub fn tracing(&self) -> &TracingOptions {
         &self.tracing
+    }
+    pub fn log_level(&self) -> Option<Level> {
+        self.verbose.log_level()
+    }
+}
+impl Verbosity {
+    pub fn log_level(&self) -> Option<Level> {
+        if self.quiet {
+            return None;
+        }
+        match self.verbose {
+            0 => match env::var("NUMTRACKER_LOG_LEVEL")
+                .map(|lvl| lvl.to_ascii_lowercase())
+                .as_deref()
+            {
+                Ok("info") => Level::INFO,
+                Ok("debug") => Level::DEBUG,
+                Ok("trace") => Level::TRACE,
+                Ok("warn") => Level::WARN,
+                Ok("error") => Level::ERROR,
+                _ => Level::ERROR,
+            },
+            1 => Level::INFO,
+            2 => Level::DEBUG,
+            _ => Level::TRACE,
+        }
+        .into()
     }
 }
 
