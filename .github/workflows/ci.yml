@@ -1,0 +1,62 @@
+name: Numtracker CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: nightly
+          components: rustfmt, clippy
+    - uses: Swatinem/rust-cache@v2
+    - name: Check formatting
+      # Use nightly for formatting to enable unstable formatting styles
+      # * group imports
+      # * import_granularity
+      run: cargo +nightly fmt -- --check
+    - name: Clippy
+      run: |
+        cargo --version
+        cargo clippy --version
+        cargo clippy --all-targets --all-features -- --deny warnings
+
+  sqlx_offline:
+    name: Check prepared offline query data
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: stable
+    - uses: Swatinem/rust-cache@v2
+    - name: Install sqlx CLI
+      run: cargo install sqlx-cli@0.8.2
+    - name: Check Prepared Queries
+      run: |
+        touch numtracker.db
+        cargo sqlx migrate run
+        cargo sqlx prepare --check
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: stable
+    - uses: Swatinem/rust-cache@v2
+
+    - name: Build Everything
+      run: cargo build --all-targets
+    - name: Run tests
+      run: cargo test --all-targets --verbose
