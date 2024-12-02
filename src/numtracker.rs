@@ -12,32 +12,94 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+use std::fmt::Display;
 use std::io::Error;
 use std::path::{Path, PathBuf};
 
 use tokio::fs as async_fs;
+use tokio::sync::{Mutex, MutexGuard};
 use tracing::{instrument, trace};
 
-#[derive(Debug)]
-pub struct GdaNumTracker<'e> {
-    ext: &'e str,
-    directory: &'e Path,
+pub struct NumTracker {
+    bl_locks: HashMap<String, Mutex<PathBuf>>,
 }
 
-impl<'e> GdaNumTracker<'e> {
-    /// Create a new num tracker for the given directory and extension
-    pub fn new<P: AsRef<Path>>(directory: &'e P, ext: &'e str) -> Result<Self, Error> {
-        let directory = directory.as_ref();
-        if ext.chars().all(char::is_alphanumeric) {
-            Ok(Self { ext, directory })
-        } else {
-            Err(Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("{ext:?} is not a valid extension"),
-            ))
+pub enum DirectoryTracker<'nt, 'bl> {
+    NoDirectory,
+    GdaDirectory(GdaNumTracker<'nt, 'bl>),
+}
+
+impl DirectoryTracker<'_, '_> {
+    pub async fn prev(&self) -> Result<Option<u32>, std::io::Error> {
+        match self {
+            DirectoryTracker::NoDirectory => Ok(None),
+            DirectoryTracker::GdaDirectory(gnt) => Some(gnt.latest_scan_number().await).transpose(),
         }
     }
 
+    pub async fn set(&self, num: u32) -> Result<(), std::io::Error> {
+        match self {
+            DirectoryTracker::NoDirectory => Ok(()),
+            DirectoryTracker::GdaDirectory(gnt) => gnt.create_num_file(num).await,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct InvalidExtension;
+impl Display for InvalidExtension {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Extension is not valid")
+    }
+}
+impl std::error::Error for InvalidExtension {}
+
+impl NumTracker {
+    pub fn for_root_directory(root: Option<PathBuf>) -> Result<Self, std::io::Error> {
+        let mut bl_locks: HashMap<String, Mutex<PathBuf>> = Default::default();
+        if let Some(dir) = root {
+            for entry in dir.read_dir()? {
+                let dir = entry?;
+                if dir.file_type()?.is_dir() {
+                    if let Ok(name) = dir.file_name().into_string() {
+                        bl_locks.insert(name, Mutex::new(dir.path()));
+                    }
+                }
+            }
+        }
+
+        Ok(Self { bl_locks })
+    }
+    pub async fn for_beamline<'nt, 'bl>(
+        &'nt self,
+        bl: &'bl str,
+        ext: Option<&'bl str>,
+    ) -> Result<DirectoryTracker<'nt, 'bl>, InvalidExtension> {
+        if !ext.is_none_or(valid_extension) {
+            return Err(InvalidExtension);
+        }
+        Ok(match self.bl_locks.get(bl) {
+            Some(dir) => DirectoryTracker::GdaDirectory(GdaNumTracker {
+                ext: ext.unwrap_or(bl),
+                directory: dir.lock().await,
+            }),
+            None => DirectoryTracker::NoDirectory,
+        })
+    }
+}
+
+fn valid_extension(name: &str) -> bool {
+    name.chars().all(|c| char::is_alphanumeric(c) || c == '_')
+}
+
+#[derive(Debug)]
+pub struct GdaNumTracker<'nt, 'bl> {
+    ext: &'bl str,
+    directory: MutexGuard<'nt, PathBuf>,
+}
+
+impl<'nt, 'bl> GdaNumTracker<'nt, 'bl> {
     /// Build the path of the file that would correspond to the given number
     fn file_name(&self, num: u32) -> PathBuf {
         self.directory
@@ -79,7 +141,7 @@ impl<'e> GdaNumTracker<'e> {
     /// Find the highest number that has a corresponding number file in this tracker's directory
     pub async fn latest_scan_number(&self) -> Result<u32, Error> {
         let mut high = 0;
-        let mut dir = async_fs::read_dir(&self.directory).await?;
+        let mut dir = async_fs::read_dir(&*self.directory).await?;
         while let Some(file) = dir.next_entry().await? {
             if !file.file_type().await?.is_file() {
                 continue;
