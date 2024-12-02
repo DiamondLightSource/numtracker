@@ -91,7 +91,7 @@ beamline.
 Get the visit directory for a beamline and visit
 
 ##### Query
-```json
+```graphql
 {
   paths(beamline: "i22", visit: "cm12345-6") {
     directory
@@ -142,7 +142,7 @@ Get the current configuration values for the given beamline
 
 ##### Query
 
-```
+```graphql
 mutation {
   scan(beamline: "i22", visit: "cm12345-2", subdirectory: "sub/tree") {
       scanFile
@@ -170,14 +170,14 @@ mutation {
         "name": "det2",
         "path": "sub/tree/i22-20840-det2"
       }
-    ]"
+    ]
   }
 }
 ```
 
 #### configure
 ##### Query
-```
+```graphql
 mutation {
   configure(beamline: "i11", config: {
       visit:"/tmp/{instrument}/data/{year}/{visit}"
@@ -201,7 +201,7 @@ mutation {
     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
     "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
     "latestScanNumber": 12345
-  }``
+  }
 }
 ```
 
