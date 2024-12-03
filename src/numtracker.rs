@@ -49,15 +49,6 @@ impl DirectoryTracker<'_, '_> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct InvalidExtension;
-impl Display for InvalidExtension {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Extension is not valid")
-    }
-}
-impl std::error::Error for InvalidExtension {}
-
 impl NumTracker {
     /// Build a numtracker than will provide locked access to subdirectories that exists and no-op
     /// trackers for beamlines that do not have subdirectories.
@@ -98,7 +89,8 @@ impl NumTracker {
 }
 
 fn valid_extension(name: &str) -> bool {
-    name.chars().all(|c| char::is_alphanumeric(c) || c == '_')
+    name.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
 #[derive(Debug)]
@@ -161,3 +153,14 @@ impl<'nt, 'bl> GdaNumTracker<'nt, 'bl> {
         Ok(high)
     }
 }
+
+/// Error returned when an extension would result in directory traversal - eg '.foo/../../bar'
+#[derive(Debug, Clone, Copy)]
+pub struct InvalidExtension;
+
+impl Display for InvalidExtension {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Extension is not valid")
+    }
+}
+impl std::error::Error for InvalidExtension {}
