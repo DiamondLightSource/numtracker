@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::fmt::{self, Display};
 use std::io::Error;
 use std::path::{Path, PathBuf};
 
@@ -21,24 +21,27 @@ use tokio::fs as async_fs;
 use tokio::sync::{Mutex, MutexGuard};
 use tracing::{instrument, trace};
 
+/// Central controller to access external directory trackers. Prevents concurrent access to the same
+/// beamline's directory.
 pub struct NumTracker {
     bl_locks: HashMap<String, Mutex<PathBuf>>,
 }
 
+/// Number tracker for a directory that may or may not exist
 pub enum DirectoryTracker<'nt, 'bl> {
     NoDirectory,
     GdaDirectory(GdaNumTracker<'nt, 'bl>),
 }
 
 impl DirectoryTracker<'_, '_> {
-    pub async fn prev(&self) -> Result<Option<u32>, std::io::Error> {
+    pub async fn prev(&self) -> Result<Option<u32>, Error> {
         match self {
             DirectoryTracker::NoDirectory => Ok(None),
             DirectoryTracker::GdaDirectory(gnt) => Some(gnt.latest_scan_number().await).transpose(),
         }
     }
 
-    pub async fn set(&self, num: u32) -> Result<(), std::io::Error> {
+    pub async fn set(&self, num: u32) -> Result<(), Error> {
         match self {
             DirectoryTracker::NoDirectory => Ok(()),
             DirectoryTracker::GdaDirectory(gnt) => gnt.create_num_file(num).await,
@@ -49,14 +52,16 @@ impl DirectoryTracker<'_, '_> {
 #[derive(Debug, Clone, Copy)]
 pub struct InvalidExtension;
 impl Display for InvalidExtension {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("Extension is not valid")
     }
 }
 impl std::error::Error for InvalidExtension {}
 
 impl NumTracker {
-    pub fn for_root_directory(root: Option<PathBuf>) -> Result<Self, std::io::Error> {
+    /// Build a numtracker than will provide locked access to subdirectories that exists and no-op
+    /// trackers for beamlines that do not have subdirectories.
+    pub fn for_root_directory(root: Option<PathBuf>) -> Result<Self, Error> {
         let mut bl_locks: HashMap<String, Mutex<PathBuf>> = Default::default();
         if let Some(dir) = root {
             for entry in dir.read_dir()? {
@@ -71,6 +76,9 @@ impl NumTracker {
 
         Ok(Self { bl_locks })
     }
+
+    /// Create a wrapper around a subdirectory if one exists for the given beamline, or a no-op
+    /// tracker if a directory does not exist.
     pub async fn for_beamline<'nt, 'bl>(
         &'nt self,
         bl: &'bl str,
@@ -110,7 +118,7 @@ impl<'nt, 'bl> GdaNumTracker<'nt, 'bl> {
     /// Create a file named for the given number and, if present, remove the file for the previous
     /// number.
     #[instrument]
-    pub async fn create_num_file(&self, num: u32) -> Result<(), Error> {
+    async fn create_num_file(&self, num: u32) -> Result<(), Error> {
         trace!("Creating new scan number file: {num}.{}", self.ext);
         let next = self.file_name(num);
         async_fs::OpenOptions::new()
@@ -139,7 +147,7 @@ impl<'nt, 'bl> GdaNumTracker<'nt, 'bl> {
     }
 
     /// Find the highest number that has a corresponding number file in this tracker's directory
-    pub async fn latest_scan_number(&self) -> Result<u32, Error> {
+    async fn latest_scan_number(&self) -> Result<u32, Error> {
         let mut high = 0;
         let mut dir = async_fs::read_dir(&*self.directory).await?;
         while let Some(file) = dir.next_entry().await? {
