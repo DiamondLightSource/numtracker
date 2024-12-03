@@ -27,28 +27,6 @@ pub struct NumTracker {
     bl_locks: HashMap<String, Mutex<PathBuf>>,
 }
 
-/// Number tracker for a directory that may or may not exist
-pub enum DirectoryTracker<'nt, 'bl> {
-    NoDirectory,
-    GdaDirectory(GdaNumTracker<'nt, 'bl>),
-}
-
-impl DirectoryTracker<'_, '_> {
-    pub async fn prev(&self) -> Result<Option<u32>, Error> {
-        match self {
-            DirectoryTracker::NoDirectory => Ok(None),
-            DirectoryTracker::GdaDirectory(gnt) => Some(gnt.latest_scan_number().await).transpose(),
-        }
-    }
-
-    pub async fn set(&self, num: u32) -> Result<(), Error> {
-        match self {
-            DirectoryTracker::NoDirectory => Ok(()),
-            DirectoryTracker::GdaDirectory(gnt) => gnt.create_num_file(num).await,
-        }
-    }
-}
-
 impl NumTracker {
     /// Build a numtracker than will provide locked access to subdirectories that exists and no-op
     /// trackers for beamlines that do not have subdirectories.
@@ -90,6 +68,28 @@ impl NumTracker {
     fn valid_extension(name: &str) -> bool {
         name.chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    }
+}
+
+/// Number tracker for a directory that may or may not exist
+pub enum DirectoryTracker<'nt, 'bl> {
+    NoDirectory,
+    GdaDirectory(GdaNumTracker<'nt, 'bl>),
+}
+
+impl DirectoryTracker<'_, '_> {
+    pub async fn prev(&self) -> Result<Option<u32>, Error> {
+        match self {
+            DirectoryTracker::NoDirectory => Ok(None),
+            DirectoryTracker::GdaDirectory(gnt) => Some(gnt.latest_scan_number().await).transpose(),
+        }
+    }
+
+    pub async fn set(&self, num: u32) -> Result<(), Error> {
+        match self {
+            DirectoryTracker::NoDirectory => Ok(()),
+            DirectoryTracker::GdaDirectory(gnt) => gnt.create_num_file(num).await,
+        }
     }
 }
 
@@ -163,4 +163,5 @@ impl Display for InvalidExtension {
         f.write_str("Extension is not valid")
     }
 }
+
 impl std::error::Error for InvalidExtension {}
