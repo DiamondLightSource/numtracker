@@ -75,7 +75,7 @@ impl NumTracker {
         bl: &'bl str,
         ext: Option<&'bl str>,
     ) -> Result<DirectoryTracker<'nt, 'bl>, InvalidExtension> {
-        if !ext.is_none_or(valid_extension) {
+        if !ext.is_none_or(Self::valid_extension) {
             return Err(InvalidExtension);
         }
         Ok(match self.bl_locks.get(bl) {
@@ -86,11 +86,11 @@ impl NumTracker {
             None => DirectoryTracker::NoDirectory,
         })
     }
-}
 
-fn valid_extension(name: &str) -> bool {
-    name.chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    fn valid_extension(name: &str) -> bool {
+        name.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+    }
 }
 
 #[derive(Debug)]
