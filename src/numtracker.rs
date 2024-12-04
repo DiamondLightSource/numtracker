@@ -99,7 +99,7 @@ pub struct GdaNumTracker<'nt, 'bl> {
     directory: MutexGuard<'nt, PathBuf>,
 }
 
-impl<'nt, 'bl> GdaNumTracker<'nt, 'bl> {
+impl GdaNumTracker<'_, '_> {
     /// Build the path of the file that would correspond to the given number
     fn file_name(&self, num: u32) -> PathBuf {
         self.directory
