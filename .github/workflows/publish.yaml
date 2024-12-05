@@ -2,9 +2,12 @@ name: Image Checks
 
 on:
   push:
-    # Run only on release pushes
+    # Run only on release tags
     tags:
       - v*
+    # or commits to main (when PRs are merged)
+    branches:
+      - main
   # but all PRs
   pull_request:
 
