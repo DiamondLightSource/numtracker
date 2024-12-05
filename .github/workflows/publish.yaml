@@ -25,6 +25,7 @@ jobs:
           images: ghcr.io/${{ github.repository }}
           tags: |
             type=semver,pattern={{version}}
+            type=sha
 
       - name: Build image
         uses: docker/build-push-action@v6
