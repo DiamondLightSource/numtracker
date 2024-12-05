@@ -52,6 +52,7 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
     info!("Serving graphql endpoints on {:?}", opts.addr());
     let schema = Schema::build(Query, Mutation, EmptySubscription)
         .extension(Tracing)
+        .limit_directives(32)
         .data(db)
         .finish();
     let app = Router::new()
