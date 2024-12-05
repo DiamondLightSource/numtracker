@@ -288,10 +288,10 @@ impl SqliteScanPathService {
         Ok(Self { pool })
     }
 
-    pub async fn current_configuration<'bl>(
+    pub async fn current_configuration(
         &self,
-        beamline: &'bl str,
-    ) -> Result<BeamlineConfiguration, ConfigurationError<'bl>> {
+        beamline: &str,
+    ) -> Result<BeamlineConfiguration, ConfigurationError> {
         query_as!(
             DbBeamlineConfig,
             "SELECT * FROM beamline WHERE name = ?",
@@ -300,14 +300,14 @@ impl SqliteScanPathService {
         .fetch_optional(&self.pool)
         .await?
         .map(BeamlineConfiguration::from)
-        .ok_or(ConfigurationError::MissingBeamline(beamline))
+        .ok_or(ConfigurationError::MissingBeamline(beamline.into()))
     }
 
-    pub async fn next_scan_configuration<'bl>(
+    pub async fn next_scan_configuration(
         &self,
-        beamline: &'bl str,
+        beamline: &str,
         current_high: Option<u32>,
-    ) -> Result<BeamlineConfiguration, ConfigurationError<'bl>> {
+    ) -> Result<BeamlineConfiguration, ConfigurationError> {
         let exp = current_high.unwrap_or(0);
         query_as!(
             DbBeamlineConfig,
@@ -318,7 +318,7 @@ impl SqliteScanPathService {
         .fetch_optional(&self.pool)
         .await?
         .map(BeamlineConfiguration::from)
-        .ok_or(ConfigurationError::MissingBeamline(beamline))
+        .ok_or(ConfigurationError::MissingBeamline(beamline.into()))
     }
 
     #[cfg(test)]
@@ -352,12 +352,12 @@ mod error {
     use std::fmt::{self, Display};
 
     #[derive(Debug)]
-    pub enum ConfigurationError<'bl> {
-        MissingBeamline(&'bl str),
+    pub enum ConfigurationError {
+        MissingBeamline(String),
         Db(sqlx::Error),
     }
 
-    impl Display for ConfigurationError<'_> {
+    impl Display for ConfigurationError {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 ConfigurationError::MissingBeamline(bl) => {
@@ -368,7 +368,7 @@ mod error {
         }
     }
 
-    impl Error for ConfigurationError<'_> {
+    impl Error for ConfigurationError {
         fn source(&self) -> Option<&(dyn Error + 'static)> {
             match self {
                 ConfigurationError::MissingBeamline(_) => None,
@@ -377,7 +377,7 @@ mod error {
         }
     }
 
-    impl From<sqlx::Error> for ConfigurationError<'_> {
+    impl From<sqlx::Error> for ConfigurationError {
         fn from(value: sqlx::Error) -> Self {
             Self::Db(value)
         }
