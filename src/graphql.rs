@@ -207,6 +207,10 @@ impl ScanPaths {
 
 #[Object]
 impl BeamlineConfiguration {
+    pub async fn instrument(&self) -> async_graphql::Result<String> {
+        Ok(self.name().to_owned())
+    }
+
     pub async fn visit_template(&self) -> async_graphql::Result<String> {
         Ok(self.visit()?.to_string())
     }
