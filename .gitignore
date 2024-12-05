@@ -2,5 +2,5 @@
 Cargo.lock
 
 # Demo database and file number directories
-demo.db
+*.db
 trackers/
