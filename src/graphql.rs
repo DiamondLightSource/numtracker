@@ -388,6 +388,7 @@ where
             inaccessible: false,
             tags: vec![],
             specified_by_url: None,
+            directive_invocations: vec![],
         })
     }
 
