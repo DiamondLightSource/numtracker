@@ -31,5 +31,6 @@ url = "2.5.4"
 
 [dev-dependencies]
 async-std = { version = "1.13.0", features = ["attributes"], default-features = false }
+httpmock = { version = "0.7.0", default-features = false }
 rstest = "0.23.0"
 tempfile = "3.14.0"
