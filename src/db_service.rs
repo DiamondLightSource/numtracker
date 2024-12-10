@@ -356,7 +356,7 @@ impl fmt::Debug for SqliteScanPathService {
     }
 }
 
-mod error {
+pub(crate) mod error {
     use std::error::Error;
     use std::fmt::{self, Display};
 

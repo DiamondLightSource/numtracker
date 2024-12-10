@@ -38,6 +38,7 @@ use crate::cli::ServeOptions;
 use crate::db_service::{
     BeamlineConfiguration, BeamlineConfigurationUpdate, SqliteScanPathService,
 };
+use crate::db_service::error::ConfigurationError;
 use crate::numtracker::GdaNumTracker;
 use crate::paths::{
     BeamlineField, DetectorField, DetectorTemplate, PathSpec, ScanField, ScanTemplate,
@@ -265,17 +266,21 @@ impl Query {
         beamline_filter: Option<String>,
     ) -> async_graphql::Result<Vec<BeamlineConfiguration>> {
         let db = ctx.data::<SqliteScanPathService>()?;
-        match beamline_filter {
+        let matching = match beamline_filter {
             Some(filter) => {
                 trace!("Getting configs matching {filter:?}");
-                let singleton = db.current_configuration(&filter).await?;
-                Ok(vec![singleton])
+                match db.current_configuration(&filter).await {
+                    Ok(configuration) => vec![configuration],
+                    Err(ConfigurationError::MissingBeamline(_)) => vec![],
+                    Err(other) => Err(other)?
+                }
             }
             None => {
                 trace!("Getting all configs");
-                Ok(db.configurations().await?)
+                db.configurations().await?
             }
-        }
+        };
+        Ok(matching)
     }
 }
 
