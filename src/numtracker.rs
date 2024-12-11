@@ -176,7 +176,7 @@ mod tests {
     use tempfile::{tempdir, TempDir};
     use tokio::time::timeout;
 
-    use super::NumTracker;
+    use super::{InvalidExtension, NumTracker};
 
     /// Wrapper around a NumTracker to ensure the tempdir is not dropped while it is still required
     struct TempTracker(NumTracker, TempDir);
@@ -255,6 +255,7 @@ mod tests {
         if let Some(num) = i11.prev().await.unwrap() {
             panic!("Unmanaged beamline returned previous number: {num}");
         }
+        // setting an unmanaged beamline is a no-op
         i11.set(111).await.unwrap();
         if let Some(num) = i11.prev().await.unwrap() {
             panic!("Unmanaged beamline returned previous number: {num}");
@@ -287,8 +288,48 @@ mod tests {
         );
     }
 
-    // TODO:
-    // * different extensions
-    // * unrelated files ignored
-    // * invalid extensions
+    #[rstest]
+    #[tokio::test]
+    async fn alternative_extensions(nt: TempTracker) {
+        let i22 = nt.for_beamline("i22", None).await.unwrap(); // default i22 extension
+        assert_eq!(i22.prev().await.unwrap(), Some(122));
+        drop(i22);
+        let i22 = nt.for_beamline("i22", Some("alt")).await.unwrap();
+        assert_eq!(i22.prev().await.unwrap(), Some(0));
+        i22.set(1234).await.unwrap();
+        assert!(
+            fs::exists(nt.1.as_ref().join("i22").join("122.i22")).unwrap(),
+            "Existing extension file was removed"
+        );
+        assert!(
+            fs::exists(nt.1.as_ref().join("i22").join("1234.alt")).unwrap(),
+            "New alternative extension file was not created"
+        );
+        drop(i22);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn invalid_extensions(nt: TempTracker) {
+        let Err(InvalidExtension) = nt.for_beamline("i22", Some("ext space")).await else {
+            panic!("Invalid extension was accepted");
+        };
+
+        let Err(InvalidExtension) = nt.for_beamline("i22", Some("in:valid@chars")).await else {
+            panic!("Invalid extension was accepted");
+        };
+
+        let Err(InvalidExtension) = nt.for_beamline("i22", Some("i22/../beamline")).await else {
+            panic!("Invalid extension was accepted");
+        };
+        assert_eq!(InvalidExtension.to_string(), "Extension is not valid");
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn non_number_files(nt: TempTracker) {
+        fs::File::create(nt.1.as_ref().join("i22").join("string.i22")).unwrap();
+        let i22 = nt.for_beamline("i22", None).await.unwrap();
+        assert_eq!(i22.prev().await.unwrap(), Some(122));
+    }
 }
