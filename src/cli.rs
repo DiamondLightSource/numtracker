@@ -158,12 +158,22 @@ mod tests {
 
     #[test]
     fn serve_options() {
-        let cli =
-            Cli::try_parse_from([APP, "serve", "--port", "8765", "--host", "127.0.0.1"]).unwrap();
+        let cli = Cli::try_parse_from([
+            APP,
+            "serve",
+            "--port",
+            "8765",
+            "--host",
+            "127.0.0.1",
+            "--root-directory",
+            "/tmp/trackers",
+        ])
+        .unwrap();
         let Command::Serve(cmd) = cli.command else {
             panic!("Unexpected subcommand: {:?}", cli.command);
         };
         assert_eq!(cmd.addr(), ("127.0.0.1".parse().unwrap(), 8765));
+        assert_eq!(cmd.root_directory, Some("/tmp/trackers".into()));
     }
 
     #[test]
