@@ -74,6 +74,8 @@ impl<'r> AdminRequest<'r> {
 
 #[derive(Debug)]
 struct InvalidVisit;
+
+#[cfg_attr(test, derive(Debug))]
 struct Visit {
     proposal: u32,
     session: u16,
@@ -179,6 +181,7 @@ impl From<reqwest::Error> for AuthError {
 mod tests {
     use std::str::FromStr as _;
 
+    use assert_matches::assert_matches;
     use axum::http::HeaderValue;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
@@ -211,7 +214,7 @@ mod tests {
     #[case::invalid_proposal("cm123abc-12")]
     #[case::negative_session("cm1234--12")]
     fn invalid_visit(#[case] visit: &str) {
-        assert!(matches!(Visit::from_str(visit), Err(InvalidVisit)))
+        assert_matches!(Visit::from_str(visit), Err(InvalidVisit))
     }
 
     #[tokio::test]
