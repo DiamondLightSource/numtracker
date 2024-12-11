@@ -584,17 +584,25 @@ mod detector_tests {
 
 #[cfg(test)]
 mod input_template_tests {
-    use async_graphql::{InputType as _, Value};
+    use async_graphql::{InputType, Value};
 
     use super::InputTemplate;
     use crate::paths::{DetectorTemplate, ScanTemplate, VisitTemplate};
 
     #[test]
     fn valid_visit_template() {
-        InputTemplate::<VisitTemplate>::parse(Some(Value::String(
+        let template = InputTemplate::<VisitTemplate>::parse(Some(Value::String(
             "/tmp/{instrument}/data/{visit}".into(),
         )))
         .unwrap();
+        assert_eq!(
+            template.as_raw_value().unwrap().to_string(),
+            "/tmp/{instrument}/data/{visit}"
+        );
+        assert_eq!(
+            template.to_value(),
+            Value::String("/tmp/{instrument}/data/{visit}".into())
+        )
     }
 
     #[rstest::rstest]
@@ -621,5 +629,13 @@ mod input_template_tests {
     #[case::invalid_template("tmp/{nested{placeholder}}")]
     fn invalid_detector_template(#[case] path: String) {
         InputTemplate::<DetectorTemplate>::parse(Some(Value::String(path))).unwrap_err();
+    }
+
+    #[rstest::rstest]
+    #[case::integer(Some(Value::Number(42.into())))]
+    #[case::list(Some(Value::List(vec![Value::Number(211.into())])))]
+    #[case::none(None)]
+    fn invalid_value_type(#[case] value: Option<Value>) {
+        InputTemplate::<ScanTemplate>::parse(value).unwrap_err();
     }
 }
