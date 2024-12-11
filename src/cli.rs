@@ -157,6 +157,16 @@ mod tests {
     }
 
     #[test]
+    fn serve_options() {
+        let cli =
+            Cli::try_parse_from([APP, "serve", "--port", "8765", "--host", "127.0.0.1"]).unwrap();
+        let Command::Serve(cmd) = cli.command else {
+            panic!("Unexpected subcommand: {:?}", cli.command);
+        };
+        assert_eq!(cmd.addr(), ("127.0.0.1".parse().unwrap(), 8765));
+    }
+
+    #[test]
     fn global_verbose() {
         let cli = Cli::try_parse_from([APP, "-vv", "serve"]).unwrap();
         assert_eq!(cli.log_level(), Some(Level::DEBUG));
