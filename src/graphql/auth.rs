@@ -105,12 +105,12 @@ impl PolicyCheck {
     pub fn new(endpoint: PolicyOptions) -> Self {
         info!(
             "Checking authorization against {:?} using {:?} for admin and {:?} for access",
-            endpoint.policy_host, endpoint.admin_query, endpoint.visit_query
+            endpoint.policy_host, endpoint.admin_query, endpoint.access_query
         );
         Self {
             client: reqwest::Client::new(),
             admin: format!("{}/{}", endpoint.policy_host, endpoint.admin_query),
-            access: format!("{}/{}", endpoint.policy_host, &endpoint.visit_query),
+            access: format!("{}/{}", endpoint.policy_host, &endpoint.access_query),
         }
     }
     pub async fn check_access(
@@ -233,7 +233,7 @@ mod tests {
             .await;
         let check = PolicyCheck::new(PolicyOptions {
             policy_host: server.url(""),
-            visit_query: "demo/access".into(),
+            access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
         check
@@ -260,7 +260,7 @@ mod tests {
             .await;
         let check = PolicyCheck::new(PolicyOptions {
             policy_host: server.url(""),
-            visit_query: "demo/access".into(),
+            access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
         check
@@ -289,7 +289,7 @@ mod tests {
             .await;
         let check = PolicyCheck::new(PolicyOptions {
             policy_host: server.url(""),
-            visit_query: "demo/access".into(),
+            access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
 
@@ -319,7 +319,7 @@ mod tests {
             .await;
         let check = PolicyCheck::new(PolicyOptions {
             policy_host: server.url(""),
-            visit_query: "demo/access".into(),
+            access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
         let result = check.check_admin(token("token").as_ref(), "i22").await;
@@ -339,7 +339,7 @@ mod tests {
             .await;
         let check = PolicyCheck::new(PolicyOptions {
             policy_host: server.url(""),
-            visit_query: "demo/access".into(),
+            access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
         let result = check.check_access(None, "i22", "cm1234-4").await;
@@ -359,7 +359,7 @@ mod tests {
             .await;
         let check = PolicyCheck::new(PolicyOptions {
             policy_host: server.url(""),
-            visit_query: "demo/access".into(),
+            access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
         let result = check.check_admin(None, "i22").await;
@@ -380,7 +380,7 @@ mod tests {
             .await;
         let check = PolicyCheck::new(PolicyOptions {
             policy_host: server.url(""),
-            visit_query: "demo/access".into(),
+            access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
         let result = check.check_admin(token("token").as_ref(), "i22").await;

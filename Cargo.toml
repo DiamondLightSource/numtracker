@@ -30,6 +30,7 @@ tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
 url = "2.5.4"
 
 [dev-dependencies]
+assert_matches = "1.5.0"
 async-std = { version = "1.13.0", features = ["attributes"], default-features = false }
 httpmock = { version = "0.7.0", default-features = false }
 rstest = "0.23.0"
