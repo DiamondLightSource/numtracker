@@ -8,23 +8,23 @@ license = "Apache-2.0"
 unwrap_used = "deny"
 
 [dependencies]
-async-graphql = { version = "7.0.12", features = ["tracing"] }
-async-graphql-axum = "7.0.12"
-axum = "0.7.5"
-chrono = "0.4.38"
-clap = { version = "4.5.16", features = ["cargo", "derive", "env"] }
-futures = "0.3.30"
-opentelemetry = "0.24.0"
-opentelemetry-otlp = "0.17.0"
-opentelemetry-semantic-conventions = "0.16.0"
-opentelemetry-stdout = "0.5.0"
-opentelemetry_sdk = { version = "0.24.1", features = ["rt-tokio"] }
-sqlx = { version = "0.8.0", features = ["runtime-tokio", "sqlite"] }
-tokio = { version = "1.39.2", features = ["full"] }
-tracing = "0.1.40"
-tracing-opentelemetry = "0.25.0"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
-url = "2.5.2"
+async-graphql = { version = "7.0.13", features = ["tracing"] }
+async-graphql-axum = "7.0.13"
+axum = "0.7.9"
+chrono = "0.4.39"
+clap = { version = "4.5.23", features = ["cargo", "derive", "env"] }
+futures = "0.3.31"
+opentelemetry = "0.27.1"
+opentelemetry-otlp = "0.27.0"
+opentelemetry-semantic-conventions = "0.27.0"
+opentelemetry-stdout = "0.27.0"
+opentelemetry_sdk = { version = "0.27.1", features = ["rt-tokio"] }
+sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite"] }
+tokio = { version = "1.42.0", features = ["full"] }
+tracing = "0.1.41"
+tracing-opentelemetry = "0.28.0"
+tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
+url = "2.5.4"
 
 [dev-dependencies]
 async-std = { version = "1.13.0", features = ["attributes"], default-features = false }
