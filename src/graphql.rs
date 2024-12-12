@@ -527,6 +527,50 @@ impl Detector {
 }
 
 #[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use async_graphql::{EmptySubscription, Schema, Value};
+
+    use super::{Mutation, Query};
+    use crate::db_service::SqliteScanPathService;
+    use crate::numtracker::TempTracker;
+
+    async fn build_schema() -> Schema<Query, Mutation, EmptySubscription> {
+        Schema::build(Query, Mutation, EmptySubscription)
+            .data(SqliteScanPathService::memory().await)
+            .data(Some(TempTracker::new(|p| {
+                fs::create_dir(p.join("i22"))?;
+                fs::create_dir(p.join("b21"))?;
+                Ok(())
+            })))
+            .finish()
+    }
+
+    #[tokio::test]
+    async fn missing_config() {
+        let schema = build_schema().await;
+        let result = schema
+            .execute(
+                r#"{
+                paths(beamline: "i22", visit: "cm1234-5") {
+                    directory
+                }
+            }"#,
+            )
+            .await;
+
+        assert_eq!(result.data, Value::Null);
+        println!("{result:?}");
+        let mut errs = result.errors;
+        let err = errs.pop().unwrap();
+        assert_eq!(
+            err.message,
+            r#"No configuration available for beamline "i22""#
+        );
+    }
+}
+#[cfg(test)]
 mod subdirectory_tests {
     use async_graphql::{InputType as _, InputValueResult, Number, Value};
 

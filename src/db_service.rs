@@ -300,7 +300,7 @@ impl SqliteScanPathService {
     }
 
     #[cfg(test)]
-    async fn ro_memory() -> Self {
+    pub(crate) async fn ro_memory() -> Self {
         let db = Self::memory().await;
         db.pool
             .set_connect_options(SqliteConnectOptions::new().read_only(true));
@@ -308,7 +308,7 @@ impl SqliteScanPathService {
     }
 
     #[cfg(test)]
-    async fn memory() -> Self {
+    pub(crate) async fn memory() -> Self {
         let pool = SqlitePool::connect(":memory:").await.unwrap();
         sqlx::migrate!().run(&pool).await.unwrap();
         Self { pool }
