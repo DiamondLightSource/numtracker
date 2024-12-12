@@ -14,12 +14,10 @@
 
 use opentelemetry::trace::{TraceError, TracerProvider as _};
 use opentelemetry::{global, KeyValue};
-use opentelemetry_otlp::{new_pipeline, WithExportConfig};
-use opentelemetry_sdk::trace::Config;
+use opentelemetry_otlp::{SpanExporter, WithExportConfig as _};
+use opentelemetry_sdk::trace::TracerProvider;
 use opentelemetry_sdk::{runtime, Resource};
-use opentelemetry_semantic_conventions::resource::{
-    DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, SERVICE_VERSION,
-};
+use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_VERSION};
 use opentelemetry_semantic_conventions::SCHEMA_URL;
 use tracing::{Level, Subscriber};
 use tracing_opentelemetry::OpenTelemetryLayer;
@@ -37,7 +35,6 @@ fn resource() -> Resource {
         [
             KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
             KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
-            KeyValue::new(DEPLOYMENT_ENVIRONMENT, "dev"),
         ],
         SCHEMA_URL,
     )
@@ -59,15 +56,16 @@ where
     S: Subscriber + for<'s> LookupSpan<'s>,
 {
     if let Some(endpoint) = endpoint {
-        let provider = new_pipeline()
-            .tracing()
-            .with_trace_config(Config::default().with_resource(resource()))
-            .with_exporter(
-                opentelemetry_otlp::new_exporter()
-                    .tonic()
-                    .with_endpoint(endpoint),
+        let provider = TracerProvider::builder()
+            .with_batch_exporter(
+                SpanExporter::builder()
+                    .with_tonic()
+                    .with_endpoint(endpoint)
+                    .build()?,
+                runtime::Tokio,
             )
-            .install_batch(runtime::Tokio)?;
+            .with_resource(resource())
+            .build();
         global::set_tracer_provider(provider.clone());
         let tracer = provider.tracer("visit-service");
         Ok(Some(
