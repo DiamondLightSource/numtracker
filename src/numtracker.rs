@@ -184,7 +184,7 @@ mod tests {
     /// Wrapper around a NumTracker to ensure the tempdir is not dropped while it is still required
     pub struct TempTracker(NumTracker, TempDir);
     impl TempTracker {
-        pub async fn new<F>(init: F) -> Self
+        pub fn new<F>(init: F) -> Self
         where
             F: for<'f> FnOnce(&'f Path) -> io::Result<()>,
         {

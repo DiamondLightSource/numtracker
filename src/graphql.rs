@@ -17,6 +17,7 @@ use std::borrow::Cow;
 use std::error::Error;
 use std::fmt::Display;
 use std::future::Future;
+use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
@@ -79,9 +80,9 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
         .expect("Can't serve graphql endpoint");
 }
 
-pub fn graphql_schema() {
+pub fn graphql_schema<W: Write>(mut out: W) -> Result<(), std::io::Error> {
     let schema = Schema::new(Query, Mutation, EmptySubscription);
-    println!("{}", schema.sdl());
+    write!(out, "{}", schema.sdl())
 }
 
 async fn graphiql() -> impl IntoResponse {
@@ -530,33 +531,79 @@ impl Detector {
 mod tests {
     use std::fs;
 
-    use async_graphql::{EmptySubscription, Schema, Value};
+    use async_graphql::{EmptySubscription, InputType as _, Schema, Value};
+    use rstest::{fixture, rstest};
 
-    use super::{Mutation, Query};
+    use super::{ConfigurationUpdates, InputTemplate, Mutation, Query};
     use crate::db_service::SqliteScanPathService;
+    use crate::graphql::graphql_schema;
     use crate::numtracker::TempTracker;
 
-    async fn build_schema() -> Schema<Query, Mutation, EmptySubscription> {
+    type NtSchema = Schema<Query, Mutation, EmptySubscription>;
+
+    fn updates(
+        visit: Option<&str>,
+        scan: Option<&str>,
+        det: Option<&str>,
+        num: Option<u32>,
+        ext: Option<&str>,
+    ) -> ConfigurationUpdates {
+        ConfigurationUpdates {
+            visit: visit.map(|v| InputTemplate::parse(Some(Value::String(v.into()))).unwrap()),
+            scan: scan.map(|s| InputTemplate::parse(Some(Value::String(s.into()))).unwrap()),
+            detector: det.map(|d| InputTemplate::parse(Some(Value::String(d.into()))).unwrap()),
+            scan_number: num,
+            extension: ext.map(|e| e.into()),
+        }
+    }
+
+    #[fixture]
+    async fn db() -> SqliteScanPathService {
+        let db = SqliteScanPathService::memory().await;
+        let cfg = updates(
+            Some("/tmp/{instrument}/data/{visit}/"),
+            Some("{subdirectory}/{instrument}-{scan_number}"),
+            Some("{subdirectory}/{instrument}-{scan_number}-{detector}"),
+            Some(122),
+            None,
+        );
+        cfg.into_update("i22".into()).insert_new(&db).await.unwrap();
+        let cfg = updates(
+            Some("/tmp/{instrument}/data/{visit}/"),
+            Some("{subdirectory}/{instrument}-{scan_number}"),
+            Some("{subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}"),
+            Some(621),
+            Some("b21_ext"),
+        );
+        cfg.into_update("b21".into()).insert_new(&db).await.unwrap();
+        db
+    }
+    #[fixture]
+    async fn schema(#[future(awt)] db: SqliteScanPathService) -> NtSchema {
         Schema::build(Query, Mutation, EmptySubscription)
-            .data(SqliteScanPathService::memory().await)
+            .data(db)
+            // Ignore that this is blocking code in an async method - it's easier than figuring out the
+            // HRTB needed to make an async init function compile
             .data(Some(TempTracker::new(|p| {
                 fs::create_dir(p.join("i22"))?;
+                fs::File::create_new(p.join("i22").join("122.i22"))?;
                 fs::create_dir(p.join("b21"))?;
+                fs::File::create_new(p.join("b21").join("211.b21_ext"))?;
                 Ok(())
             })))
             .finish()
     }
 
+    #[rstest]
     #[tokio::test]
-    async fn missing_config() {
-        let schema = build_schema().await;
+    async fn missing_config(#[future(awt)] schema: NtSchema) {
         let result = schema
             .execute(
                 r#"{
-                paths(beamline: "i22", visit: "cm1234-5") {
-                    directory
-                }
-            }"#,
+                    paths(beamline: "i11", visit: "cm1234-5") {
+                        directory
+                    }
+                }"#,
             )
             .await;
 
@@ -566,7 +613,113 @@ mod tests {
         let err = errs.pop().unwrap();
         assert_eq!(
             err.message,
-            r#"No configuration available for beamline "i22""#
+            r#"No configuration available for beamline "i11""#
+        );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn paths(#[future(awt)] schema: NtSchema) {
+        let result = schema
+            .execute(
+                r#"{
+                    paths(beamline: "i22", visit: "cm12345-3") {
+                        directory visit
+                    }
+                }"#,
+            )
+            .await;
+        println!("{result:#?}");
+        assert!(result.errors.is_empty());
+        let Value::Object(data) = result.data else {
+            panic!("Unexpected data from paths request: {:?}", result.data);
+        };
+        let Some(Value::Object(conf)) = data.get("paths") else {
+            panic!("Invalid paths result: {data:?}");
+        };
+        assert_eq!(
+            Some(&"/tmp/i22/data/cm12345-3".into()),
+            conf.get("directory")
+        );
+        assert_eq!(Some(&"cm12345-3".into()), conf.get("visit"));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn scan(#[future(awt)] schema: NtSchema) {
+        let result = schema
+            .execute(
+                r#"mutation {
+                    scan(beamline: "i22", visit: "cm12345-3", sub: "foo/bar") {
+                        visit {directory} scanFile scanNumber
+                        detectors(names: ["det_one", "det_two"]) {
+                            name path
+                        }
+                    }
+                }"#,
+            )
+            .await;
+        println!("{result:#?}");
+        assert!(result.errors.is_empty());
+        let Value::Object(data) = result.data else {
+            panic!("Unexpected data from scan request: {:?}", result.data);
+        };
+        let Some(Value::Object(conf)) = data.get("scan") else {
+            panic!("Invalid scan result: {data:?}");
+        };
+        assert_eq!(
+            Some(&"/tmp/i22/data/cm12345-3".into()),
+            conf.get("visit.directory")
+        );
+        assert_eq!(Some(&"cm12345-3".into()), conf.get("visit"));
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn configuration(#[future(awt)] schema: NtSchema) {
+        let result = schema
+            .execute(
+                r#"{
+                    configuration(beamline: "i22") {
+                        visitTemplate scanTemplate detectorTemplate latestScanNumber
+                    }
+                }"#,
+            )
+            .await;
+        assert!(result.errors.is_empty());
+        let Value::Object(data) = result.data else {
+            panic!(
+                "Unexpected data from configuration request: {:?}",
+                result.data
+            );
+        };
+        let Some(Value::Object(conf)) = data.get("configuration") else {
+            panic!("Invalid configuration result: {data:?}");
+        };
+        assert_eq!(
+            Some(&"/tmp/{instrument}/data/{visit}".into()),
+            conf.get("visitTemplate")
+        );
+        assert_eq!(
+            Some(&"{subdirectory}/{instrument}-{scan_number}".into()),
+            conf.get("scanTemplate")
+        );
+        assert_eq!(
+            Some(&"{subdirectory}/{instrument}-{scan_number}-{detector}".into()),
+            conf.get("detectorTemplate")
+        );
+        assert_eq!(Some(&Value::from(122)), conf.get("latestScanNumber"));
+    }
+
+    /// Ensure that the schema has not changed unintentionally. Might end up being a pain to
+    /// maintain but should hopefully be fairly stable once the API has stabilised.
+    #[test]
+    fn schema_sdl() {
+        let mut buf = Vec::new();
+        graphql_schema(&mut buf).unwrap();
+        assert_eq!(
+            String::from_utf8(buf).unwrap(),
+            include_str!("../static/service_schema")
         );
     }
 }
