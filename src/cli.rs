@@ -61,6 +61,28 @@ pub struct ServeOptions {
     /// The root directory for external number tracking
     #[clap(long, env = "NUMTRACKER_ROOT_DIRECTORY")]
     root_directory: Option<PathBuf>,
+    #[clap(flatten, next_help_heading = "Authorization")]
+    pub policy: Option<PolicyOptions>,
+}
+
+#[derive(Debug, Default, Parser)]
+#[group(requires = "policy_host")]
+pub struct PolicyOptions {
+    /// Beamline Policy Endpoint
+    ///
+    /// eg, https://authz.diamond.ac.uk
+    #[clap(long = "policy", required = false)]
+    pub policy_host: String,
+    /// The Rego rule used to generate visit access data
+    ///
+    /// eg. v1/data/diamond/policy/session/write_to_beamline_visit
+    #[clap(long, required = false)]
+    pub access_query: String,
+    /// The Rego rule used to generate admin access data
+    ///
+    /// eg. v1/data/diamond/policy/admin/configure_beamline
+    #[clap(long, required = false)]
+    pub admin_query: String,
 }
 
 #[derive(Debug, Args)]
@@ -132,6 +154,7 @@ impl TracingOptions {
 mod tests {
     use std::path::PathBuf;
 
+    use assert_matches::assert_matches;
     use clap::error::ErrorKind;
     use clap::Parser;
     use tracing::Level;
@@ -154,6 +177,8 @@ mod tests {
         };
         assert_eq!(cmd.addr(), ("0.0.0.0".parse().unwrap(), 8000));
         assert_eq!(cmd.root_directory(), None);
+
+        assert_matches!(cmd.policy, None);
     }
 
     #[test]
@@ -174,6 +199,70 @@ mod tests {
         };
         assert_eq!(cmd.addr(), ("127.0.0.1".parse().unwrap(), 8765));
         assert_eq!(cmd.root_directory, Some("/tmp/trackers".into()));
+        assert_matches!(cmd.policy, None);
+    }
+
+    #[test]
+    fn policy_arguments() {
+        let cli = Cli::try_parse_from([
+            APP,
+            "serve",
+            "--policy",
+            "opa.example.com",
+            "--admin-query",
+            "demo/admin_check",
+            "--access-query",
+            "demo/access_check",
+        ])
+        .unwrap();
+        let cmd = assert_matches!(cli.command, Command::Serve(cmd) => cmd);
+        let policy = assert_matches!(cmd.policy, Some(plc) => plc);
+
+        assert_eq!(policy.policy_host, "opa.example.com");
+        assert_eq!(policy.admin_query, "demo/admin_check");
+        assert_eq!(policy.access_query, "demo/access_check");
+    }
+
+    #[test]
+    fn missing_admin_query() {
+        let err = Cli::try_parse_from([
+            APP,
+            "serve",
+            "--policy",
+            "opa.example.com",
+            "--access-query",
+            "demo/access-query",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn missing_access_query() {
+        let err = Cli::try_parse_from([
+            APP,
+            "serve",
+            "--policy",
+            "opa.example.com",
+            "--admin-query",
+            "demo/admin-query",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
+    }
+
+    #[test]
+    fn policy_queries_without_host() {
+        let err = Cli::try_parse_from([
+            APP,
+            "serve",
+            "--access-query",
+            "demo/access-query",
+            "--admin-query",
+            "demo/admin-query",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
     }
 
     #[test]
