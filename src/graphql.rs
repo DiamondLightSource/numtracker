@@ -347,12 +347,13 @@ where
 {
     if let Some(policy) = ctx.data::<Option<PolicyCheck>>()? {
         trace!("Auth enabled: checking token");
-        let token = ctx.data::<Authorization<Bearer>>().ok();
-        check(policy, token)
+        let token = ctx.data::<Option<Authorization<Bearer>>>()?;
+        check(policy, token.as_ref())
             .await
             .inspect_err(|e| info!("Authorization failed: {e:?}"))
             .map_err(async_graphql::Error::from)
     } else {
+        trace!("No authorization configured");
         Ok(())
     }
 }
