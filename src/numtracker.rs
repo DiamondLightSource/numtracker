@@ -182,7 +182,7 @@ mod tests {
     use super::{InvalidExtension, NumTracker};
 
     /// Wrapper around a NumTracker to ensure the tempdir is not dropped while it is still required
-    pub struct TempTracker(NumTracker, TempDir);
+    pub struct TempTracker(pub NumTracker, pub TempDir);
     impl TempTracker {
         pub fn new<F>(init: F) -> Self
         where

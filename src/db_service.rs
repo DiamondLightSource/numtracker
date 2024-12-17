@@ -16,7 +16,8 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::path::Path;
 
-use error::{ConfigurationError, NewConfigurationError};
+pub use error::ConfigurationError;
+use error::NewConfigurationError;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
 use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
