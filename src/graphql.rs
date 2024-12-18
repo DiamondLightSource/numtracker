@@ -833,8 +833,7 @@ mod tests {
     async fn denied_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
         let query = r#"mutation{ scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
         let token = Some(Authorization(
-            Bearer::decode(&HeaderValue::from_str(&format!("Bearer token_value")).unwrap())
-                .unwrap(),
+            Bearer::decode(&HeaderValue::from_str("Bearer token_value").unwrap()).unwrap(),
         ));
         let auth = auth_env
             .server
@@ -870,8 +869,7 @@ mod tests {
     async fn authorized_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
         let query = r#"mutation{ scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
         let token = Some(Authorization(
-            Bearer::decode(&HeaderValue::from_str(&format!("Bearer token_value")).unwrap())
-                .unwrap(),
+            Bearer::decode(&HeaderValue::from_str("Bearer token_value").unwrap()).unwrap(),
         ));
         let auth = auth_env
             .server

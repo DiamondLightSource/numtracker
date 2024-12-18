@@ -189,7 +189,7 @@ mod tests {
             F: for<'f> FnOnce(&'f Path) -> io::Result<()>,
         {
             let root = tempdir().unwrap();
-            init(&root.as_ref()).unwrap();
+            init(root.as_ref()).unwrap();
             Self(NumTracker::for_root_directory(Some(&root)).unwrap(), root)
         }
     }
