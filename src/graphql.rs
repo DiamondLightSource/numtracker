@@ -529,6 +529,7 @@ impl Detector {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error;
     use std::fs;
 
     use async_graphql::{EmptySubscription, InputType as _, Request, Schema, SchemaBuilder, Value};
@@ -577,6 +578,13 @@ mod tests {
             scan_number: num,
             extension: ext.map(|e| e.into()),
         }
+    }
+
+    /// Helper for creating graphql values from literals
+    macro_rules! value {
+        ($tree:tt) => {
+            Value::from_json(json!($tree)).unwrap()
+        };
     }
 
     #[fixture]
@@ -655,13 +663,7 @@ mod tests {
     async fn missing_config(#[future(awt)] env: TestEnv) {
         let result = env
             .schema
-            .execute(
-                r#"{
-                    paths(beamline: "i11", visit: "cm1234-5") {
-                        directory
-                    }
-                }"#,
-            )
+            .execute(r#"{paths(beamline: "i11", visit: "cm1234-5") {directory}}"#)
             .await;
 
         assert_eq!(result.data, Value::Null);
@@ -677,22 +679,10 @@ mod tests {
     async fn paths(#[future(awt)] env: TestEnv) {
         let result = env
             .schema
-            .execute(
-                r#"{
-                    paths(beamline: "i22", visit: "cm12345-3") {
-                        directory visit
-                    }
-                }"#,
-            )
+            .execute(r#"{paths(beamline: "i22", visit: "cm12345-3") {directory visit}}"#)
             .await;
         println!("{result:#?}");
-        let exp = Value::from_json(json!({
-            "paths": {
-                "visit": "cm12345-3",
-                "directory": "/tmp/i22/data/cm12345-3"
-            }
-        }))
-        .unwrap();
+        let exp = value!({"paths": {"visit": "cm12345-3", "directory": "/tmp/i22/data/cm12345-3"}});
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
     }
@@ -700,23 +690,17 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn scan(#[future(awt)] env: TestEnv) {
-        let result = env
-            .schema
-            .execute(
-                r#"mutation {
-                    scan(beamline: "i22", visit: "cm12345-3", sub: "foo/bar") {
-                        visit {directory visit} scanFile scanNumber
-                        detectors(names: ["det_one", "det_two"]) {
-                            name path
-                        }
-                    }
-                }"#,
-            )
-            .await;
+        let query = r#"mutation {
+            scan(beamline: "i22", visit: "cm12345-3", sub: "foo/bar") {
+                visit {directory visit} scanFile scanNumber
+                detectors(names: ["det_one", "det_two"]) { name path }
+            }
+        }"#;
+        let result = env.schema.execute(query).await;
 
         println!("{result:#?}");
         assert!(result.errors.is_empty());
-        let exp = Value::from_json(json!({
+        let exp = value!({
         "scan": {
             "visit": {"visit": "cm12345-3", "directory": "/tmp/i22/data/cm12345-3"},
             "scanFile": "foo/bar/i22-123",
@@ -725,32 +709,25 @@ mod tests {
                 {"path": "foo/bar/i22-123-det_one", "name": "det_one"},
                 {"path": "foo/bar/i22-123-det_two", "name": "det_two"}
             ]
-        }}))
-        .unwrap();
+        }});
         assert_eq!(result.data, exp);
     }
 
     #[rstest]
     #[tokio::test]
     async fn configuration(#[future(awt)] env: TestEnv) {
-        let result = env
-            .schema
-            .execute(
-                r#"{
-                    configuration(beamline: "i22") {
-                        visitTemplate scanTemplate detectorTemplate latestScanNumber
-                    }
-                }"#,
-            )
-            .await;
-        let exp = Value::from_json(json!({
+        let query = r#"{
+        configuration(beamline: "i22") {
+            visitTemplate scanTemplate detectorTemplate latestScanNumber
+        }}"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({
         "configuration": {
             "visitTemplate": "/tmp/{instrument}/data/{visit}",
             "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
             "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
             "latestScanNumber": 122
-        }}))
-        .unwrap();
+        }});
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
     }
@@ -758,25 +735,20 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn empty_configure_for_existing(#[future(awt)] env: TestEnv) {
-        let result = env
-            .schema
-            .execute(
-                r#"mutation {
-                    configure(beamline: "i22", config: {}) {
-                        visitTemplate scanTemplate detectorTemplate latestScanNumber
-                    }
-                }"#,
-            )
-            .await;
-        let exp = Value::from_json(json!({
+        let query = r#"mutation {
+            configure(beamline: "i22", config: {}) {
+                visitTemplate scanTemplate detectorTemplate latestScanNumber
+            }
+        }"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({
             "configure": {
                 "visitTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                 "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                 "latestScanNumber": 122
             }
-        }))
-        .unwrap();
+        });
         println!("{result:#?}");
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
@@ -784,33 +756,26 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn configure_template_for_existing(#[future(awt)] env: TestEnv) {
-        let result = env
-            .schema
-            .execute(
-                r#"mutation {
-                    configure(beamline: "i22", config: { scan: "{instrument}-{scan_number}"}) {
-                        scanTemplate
-                    }
-                }"#,
-            )
-            .await;
-        let exp = Value::from_json(
-            json!({ "configure": { "scanTemplate": "{instrument}-{scan_number}", } }),
-        )
-        .unwrap();
+    async fn configure_template_for_existing(
+        #[future(awt)] env: TestEnv,
+    ) -> Result<(), Box<dyn Error>> {
+        let query = r#"mutation {
+        configure(beamline: "i22", config: { scan: "{instrument}-{scan_number}"}) {
+            scanTemplate
+        }}"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({"configure": { "scanTemplate": "{instrument}-{scan_number}"}});
         println!("{result:#?}");
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
         let new = env
             .db
             .current_configuration("i22")
-            .await
-            .unwrap()
-            .scan()
-            .unwrap()
+            .await?
+            .scan()?
             .to_string();
-        assert_eq!(new, "{instrument}-{scan_number}")
+        assert_eq!(new, "{instrument}-{scan_number}");
+        Ok(())
     }
 
     #[rstest]
@@ -835,13 +800,12 @@ mod tests {
                 }"#,
             )
             .await;
-        let exp = Value::from_json(json!({ "configure": {
+        let exp = value!({ "configure": {
                 "visitTemplate": "/tmp/{instrument}/{year}/{visit}",
                 "scanTemplate": "{instrument}-{scan_number}",
                 "detectorTemplate": "{scan_number}-{detector}",
                 "latestScanNumber": 0
-            } }))
-        .unwrap();
+            } });
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
         _ = env.db.current_configuration("i16").await.unwrap();
@@ -850,18 +814,10 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn unauthorised_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
+        let query = r#"mutation {scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
         let result = auth_env
             .schema
-            .execute(
-                Request::new(
-                    r#"mutation {
-                    scan(beamline: "i22", visit: "cm12345-3") {
-                        scanNumber
-                    }
-                }"#,
-                )
-                .data(Option::<Authorization<Bearer>>::None),
-            )
+            .execute(Request::new(query).data(Option::<Authorization<Bearer>>::None))
             .await;
 
         println!("{result:#?}");
@@ -875,7 +831,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn denied_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
-        let request = r#"mutation{ scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
+        let query = r#"mutation{ scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
         let token = Some(Authorization(
             Bearer::decode(&HeaderValue::from_str(&format!("Bearer token_value")).unwrap())
                 .unwrap(),
@@ -889,7 +845,7 @@ mod tests {
             .await;
         let result = auth_env
             .schema
-            .execute(Request::new(request).data(token))
+            .execute(Request::new(query).data(token))
             .await;
         auth.assert();
 
@@ -912,7 +868,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn authorized_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
-        let request = r#"mutation{ scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
+        let query = r#"mutation{ scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
         let token = Some(Authorization(
             Bearer::decode(&HeaderValue::from_str(&format!("Bearer token_value")).unwrap())
                 .unwrap(),
@@ -926,16 +882,13 @@ mod tests {
             .await;
         let result = auth_env
             .schema
-            .execute(Request::new(request).data(token))
+            .execute(Request::new(query).data(token))
             .await;
         auth.assert();
 
         println!("{result:#?}");
         assert!(result.errors.is_empty());
-        assert_eq!(
-            result.data,
-            Value::from_json(json!({"scan": {"scanNumber": 123}})).unwrap()
-        );
+        assert_eq!(result.data, value!({"scan": {"scanNumber": 123}}));
         // Ensure that the number was incremented
         assert_eq!(
             auth_env
@@ -959,9 +912,9 @@ mod tests {
         tokio::fs::File::create_new(env.dir.as_ref().join("i22").join("5678.i22"))
             .await
             .unwrap();
-        let request = r#"mutation { scan(beamline: "i22", visit:"cm12345-3") { scanNumber }}"#;
-        let result = env.schema.execute(request).await;
-        let exp = Value::from_json(json!({"scan": {"scanNumber": 5679}})).unwrap();
+        let query = r#"mutation { scan(beamline: "i22", visit:"cm12345-3") { scanNumber }}"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({"scan": {"scanNumber": 5679}});
 
         assert_eq!(result.data, exp);
 
