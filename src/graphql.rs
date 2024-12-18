@@ -692,7 +692,7 @@ mod tests {
     async fn scan(#[future(awt)] env: TestEnv) {
         let query = r#"mutation {
             scan(beamline: "i22", visit: "cm12345-3", sub: "foo/bar") {
-                visit {directory visit} scanFile scanNumber
+                visit { beamline directory visit} scanFile scanNumber
                 detectors(names: ["det_one", "det_two"]) { name path }
             }
         }"#;
@@ -702,7 +702,7 @@ mod tests {
         assert!(result.errors.is_empty());
         let exp = value!({
         "scan": {
-            "visit": {"visit": "cm12345-3", "directory": "/tmp/i22/data/cm12345-3"},
+            "visit": {"visit": "cm12345-3", "beamline": "i22", "directory": "/tmp/i22/data/cm12345-3"},
             "scanFile": "foo/bar/i22-123",
             "scanNumber": 123,
             "detectors": [
