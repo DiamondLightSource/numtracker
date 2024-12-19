@@ -15,7 +15,7 @@ RUN cargo build --release --target x86_64-unknown-linux-musl
 
 FROM scratch
 
-LABEL org.opencontainers.image.source=https://github.com/DiamondLightSource/data-endpoint-lookup.git
+LABEL org.opencontainers.image.source=https://github.com/DiamondLightSource/numtracker.git
 LABEL org.opencontainers.image.description="Central co-ordinator for scan numbers and file locations"
 LABEL org.opencontainers.image.licenses=Apache-2.0
 
