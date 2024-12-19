@@ -13,17 +13,17 @@ version of the compiler (1.81+). This is available from [rustup.rs][_rustup].
 1. Clone this repository
 
     ```
-    $ git clone git@github.com:DiamondLightSource/data-endpoint-lookup.git
-    Cloning into 'data-endpoint-lookup'...
+    $ git clone git@github.com:DiamondLightSource/numtracker.git
+    Cloning into 'numtracker'...
     ...
-    $ cd data-endpoint-lookup
+    $ cd numtracker
     ```
 
 2. Build the project
 
     ```
     $ cargo build
-    Compiling numtracker v0.1.0 (./path/to/data-endpoint-lookup)
+    Compiling numtracker v0.1.0 (./path/to/numtracker)
     ...
     Finished 'dev' profile [unoptimized + debuginfo] target(s) in 11.56s
     ```
