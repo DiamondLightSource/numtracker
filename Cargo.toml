@@ -7,6 +7,9 @@ license = "Apache-2.0"
 [lints.clippy]
 unwrap_used = "deny"
 
+[profile.release]
+strip = true
+
 [dependencies]
 async-graphql = { version = "7.0.13", features = ["tracing"] }
 async-graphql-axum = "7.0.13"
