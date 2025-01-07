@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "numtracker.fullname" . }}
   labels:
@@ -32,6 +32,25 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
         - name: {{ .Chart.Name }}
+          env:
+            - name: NUMTRACKER_DB
+              value: {{ .Values.numtracker.storage.mount }}/{{ .Values.numtracker.db.fileName }}
+            - name: NUMTRACKER_PORT
+              value: "{{- .Values.service.port -}}"
+            {{- if .Values.numtracker.tracing.enabled }}
+            - name: NUMTRACKER_TRACING
+              value: {{ .Values.numtracker.tracing.host }}
+            - name: NUMTRACKER_TRACING_LEVEL
+              value: {{ .Values.numtracker.tracing.level }}
+            {{- end }}
+            {{- if .Values.numtracker.auth.enabled }}
+            - name: NUMTRACKER_AUTH_HOST
+              value: {{ .Values.numtracker.auth.host }}
+            - name: NUMTRACKER_AUTH_ACCESS
+              value: {{ .Values.numtracker.auth.access }}
+            - name: NUMTRACKER_AUTH_ADMIN
+              value: {{ .Values.numtracker.auth.admin }}
+            {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
@@ -46,12 +65,17 @@ spec:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- with .Values.volumeMounts }}
           volumeMounts:
+            - name: numtracker-data
+              mountPath: /data
+          {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
-      {{- with .Values.volumes }}
       volumes:
+        - name: numtracker-data
+          persistentVolumeClaim:
+            claimName: {{ .Values.numtracker.storage.claimName }}
+      {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
       {{- with .Values.nodeSelector }}
