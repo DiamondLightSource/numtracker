@@ -68,6 +68,9 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
         .data(opts.policy.map(PolicyCheck::new))
         .finish();
     let app = Router::new()
+        // status check endpoint allows external processes to monitor status of server without
+        // making graphql queries
+        .route("/status", get(|| async {}))
         .route("/graphql", post(graphql_handler))
         .route("/graphiql", get(graphiql))
         .layer(Extension(schema));
