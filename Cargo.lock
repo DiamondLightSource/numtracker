@@ -1901,7 +1901,7 @@ dependencies = [
 
 [[package]]
 name = "numtracker"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "assert_matches",
  "async-graphql",
@@ -1921,6 +1921,7 @@ dependencies = [
  "reqwest",
  "rstest",
  "serde",
+ "serde_json",
  "sqlx",
  "tempfile",
  "tokio",
