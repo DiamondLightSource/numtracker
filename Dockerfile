@@ -5,8 +5,11 @@ RUN rustup target add x86_64-unknown-linux-musl && \
     apt-get install -y musl-tools musl-dev && \
     update-ca-certificates
 
+WORKDIR /build
+
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
+COPY ./build.rs ./build.rs
 COPY ./.env ./.env
 COPY ./src ./src
 COPY ./.sqlx ./.sqlx
@@ -20,7 +23,7 @@ LABEL org.opencontainers.image.source=https://github.com/DiamondLightSource/numt
 LABEL org.opencontainers.image.description="Central co-ordinator for scan numbers and file locations"
 LABEL org.opencontainers.image.licenses=Apache-2.0
 
-COPY --from=build ./target/x86_64-unknown-linux-musl/release/numtracker /app/numtracker
+COPY --from=build /build/target/x86_64-unknown-linux-musl/release/numtracker /app/numtracker
 
 CMD ["serve"]
 ENTRYPOINT ["/app/numtracker"]

@@ -17,6 +17,7 @@ use std::error::Error;
 use cli::{Cli, Command};
 use tracing::debug;
 
+mod build_info;
 mod cli;
 mod db_service;
 mod graphql;
