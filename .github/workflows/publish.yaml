@@ -29,6 +29,10 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
 
+      - name: Set application version
+        if: ${{ github.ref_type == 'tag' }}
+        run: sed -i 's/^version = ".*"$/version = "${{ steps.meta.outputs.version }}"/' Cargo.toml
+
       - name: Build image
         uses: docker/build-push-action@v6
         env:
