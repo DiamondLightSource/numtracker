@@ -1,6 +1,8 @@
 [package]
 name = "numtracker"
-version = "0.1.1"
+# This version is *not* used for the built container image. It is set during the
+# CI build process so that the version always matches the latest git tag.
+version = "0.0.0"
 edition = "2021"
 license = "Apache-2.0"
 
