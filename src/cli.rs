@@ -21,6 +21,8 @@ use tracing::Level;
 use url::Url;
 
 #[derive(Debug, Parser)]
+#[clap(version)]
+#[clap(long_version = crate::build_info::build_info())]
 pub struct Cli {
     #[clap(short, long, default_value = "numtracker.db", env = "NUMTRACKER_DB")]
     pub(crate) db: PathBuf,

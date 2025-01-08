@@ -32,7 +32,7 @@ use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
-use axum::{Extension, Router};
+use axum::{Extension, Json, Router};
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use axum_extra::TypedHeader;
@@ -40,6 +40,7 @@ use chrono::{Datelike, Local};
 use tokio::net::TcpListener;
 use tracing::{info, instrument, trace, warn};
 
+use crate::build_info::ServerStatus;
 use crate::cli::ServeOptions;
 use crate::db_service::{
     BeamlineConfiguration, BeamlineConfigurationUpdate, SqliteScanPathService,
@@ -54,6 +55,7 @@ use crate::template::{FieldSource, PathTemplate};
 mod auth;
 
 pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
+    let server_status = Json(ServerStatus::new());
     let db = SqliteScanPathService::connect(db)
         .await
         .expect("Unable to open DB");
@@ -71,7 +73,7 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
     let app = Router::new()
         // status check endpoint allows external processes to monitor status of server without
         // making graphql queries
-        .route("/status", get(|| async {}))
+        .route("/status", get(server_status))
         .route("/graphql", post(graphql_handler))
         .route("/graphiql", get(graphiql))
         .layer(Extension(schema));
