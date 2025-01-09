@@ -65,9 +65,7 @@ jobs:
 
 
       - name: Install Helm
-        uses: Azure/setup-helm@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+        uses: Azure/setup-helm@v4.2.0
         id: install
 
       - name: Helm login to GHCR
