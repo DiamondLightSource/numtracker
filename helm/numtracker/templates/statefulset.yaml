@@ -37,6 +37,10 @@ spec:
               value: {{ .Values.numtracker.storage.mount }}/{{ .Values.numtracker.db.fileName }}
             - name: NUMTRACKER_PORT
               value: "{{- .Values.service.port -}}"
+            {{- with .Values.numtracker.rootTrackerDirectory }}
+            - name: NUMTRACKER_ROOT_DIRECTORY
+              value: {{ . }}
+            {{ end }}
             {{- if .Values.numtracker.tracing.enabled }}
             - name: NUMTRACKER_TRACING
               value: {{ .Values.numtracker.tracing.host }}

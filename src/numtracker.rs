@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 pub use tests::TempTracker;
 use tokio::fs as async_fs;
 use tokio::sync::{Mutex, MutexGuard};
-use tracing::{instrument, trace};
+use tracing::{info, instrument, trace};
 
 /// Central controller to access external directory trackers. Prevents concurrent access to the same
 /// beamline's directory.
@@ -35,10 +35,18 @@ impl NumTracker {
     pub fn for_root_directory<P: AsRef<Path>>(root: Option<P>) -> Result<Self, Error> {
         let mut bl_locks: HashMap<String, Mutex<PathBuf>> = Default::default();
         if let Some(dir) = root {
+            info!(
+                "Managing external number tracker files in subdirectories of {:?}",
+                dir.as_ref()
+            );
             for entry in dir.as_ref().read_dir()? {
                 let dir = entry?;
                 if dir.file_type()?.is_dir() {
                     if let Ok(name) = dir.file_name().into_string() {
+                        info!(
+                            "Using {:?} as external tracker directory for {name}",
+                            dir.path()
+                        );
                         bl_locks.insert(name, Mutex::new(dir.path()));
                     }
                 }
