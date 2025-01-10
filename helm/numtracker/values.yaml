@@ -22,13 +22,13 @@ numtracker:
     size: 5M
   tracing:
     enabled: false
-    host: "https://jaeger.diamond.ac.uk"
     level: DEBUG
+    # host: OTEL compatible host
   auth:
     enabled: false
-    host: authz.diamond.ac.uk
-    admin: /v1/data/diamond/policy/admin/configure_beamline
-    access: /v1/data/diamond/policy/session/write_to_beamline_visit
+    # host: OPA instance
+    # admin: rule determining admin access to a beamline
+    # access: rule determining access to a beamline session
 
 
 
@@ -109,10 +109,10 @@ livenessProbe:
   httpGet:
     path: /status
     port: http
-readinessProbe: {}
-  # httpGet:
-  #   path: /
-  #   port: http
+readinessProbe:
+  httpGet:
+    path: /status
+    port: http
 
 #This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
@@ -124,11 +124,6 @@ autoscaling:
 
 # Additional volumes for GDA var directories
 extraVolumes: []
-
-# - name: foo
-#   secret:
-#     secretName: mysecret
-#     optional: false
 
 # Additional volumeMounts for GDA var directories
 extraVolumeMounts: []
