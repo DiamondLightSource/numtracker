@@ -19,7 +19,7 @@ numtracker:
   storage:
     claimName: daq-numtracker-db-volume
     mount: /data
-    size: 50M
+    size: 5M
   tracing:
     enabled: false
     host: "https://jaeger.diamond.ac.uk"
