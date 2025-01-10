@@ -77,7 +77,7 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
         .layer(Extension(schema));
     let listener = TcpListener::bind(addr)
         .await
-        .unwrap_or_else(|_| panic!("Port {:?} in use", addr));
+        .unwrap_or_else(|e| panic!("Could not listen on {:?}:{}: {e}", addr.0, addr.1));
     axum::serve(listener, app)
         .await
         .expect("Can't serve graphql endpoint");
