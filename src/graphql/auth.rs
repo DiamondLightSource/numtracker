@@ -26,6 +26,12 @@ const AUDIENCE: &str = "account";
 
 type Token = Authorization<Bearer>;
 
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
+struct Request<T> {
+    input: T,
+}
+
 #[derive(Debug, Deserialize)]
 #[cfg_attr(test, derive(Serialize))]
 struct Response {
@@ -136,7 +142,12 @@ impl PolicyCheck {
     }
 
     async fn authorise(&self, query: &str, input: impl Serialize) -> Result<(), AuthError> {
-        let response = self.client.post(query).json(&input).send().await?;
+        let response = self
+            .client
+            .post(query)
+            .json(&Request { input })
+            .send()
+            .await?;
         if response.json::<Response>().await?.result {
             Ok(())
         } else {
@@ -187,11 +198,9 @@ mod tests {
     use axum_extra::headers::Authorization;
     use httpmock::MockServer;
     use rstest::rstest;
+    use serde_json::json;
 
-    use super::{
-        AccessRequest, AdminRequest, AuthError, InvalidVisit, PolicyCheck, Response, Visit,
-        AUDIENCE,
-    };
+    use super::{AuthError, InvalidVisit, PolicyCheck, Visit};
     use crate::cli::PolicyOptions;
 
     fn token(name: &'static str) -> Option<Authorization<Bearer>> {
@@ -224,14 +233,16 @@ mod tests {
             .mock_async(|when, then| {
                 when.method("POST")
                     .path("/demo/access")
-                    .json_body_obj(&AccessRequest {
-                        token: "token",
-                        beamline: "i22",
-                        visit: 4,
-                        proposal: 1234,
-                        audience: AUDIENCE,
-                    });
-                then.status(200).json_body_obj(&Response { result: true });
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "beamline": "i22",
+                            "visit": 4,
+                            "proposal": 1234,
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": true}));
             })
             .await;
         let check = PolicyCheck::new(PolicyOptions {
@@ -253,12 +264,14 @@ mod tests {
             .mock_async(|when, then| {
                 when.method("POST")
                     .path("/demo/admin")
-                    .json_body_obj(&AdminRequest {
-                        token: "token",
-                        beamline: "i22",
-                        audience: AUDIENCE,
-                    });
-                then.status(200).json_body_obj(&Response { result: true });
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "beamline": "i22",
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": true}));
             })
             .await;
         let check = PolicyCheck::new(PolicyOptions {
@@ -280,14 +293,16 @@ mod tests {
             .mock_async(|when, then| {
                 when.method("POST")
                     .path("/demo/access")
-                    .json_body_obj(&AccessRequest {
-                        token: "token",
-                        beamline: "i22",
-                        proposal: 1234,
-                        visit: 4,
-                        audience: AUDIENCE,
-                    });
-                then.status(200).json_body_obj(&Response { result: false });
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "beamline": "i22",
+                            "proposal": 1234,
+                            "visit": 4,
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": false}));
             })
             .await;
         let check = PolicyCheck::new(PolicyOptions {
@@ -312,12 +327,14 @@ mod tests {
             .mock_async(|when, then| {
                 when.method("POST")
                     .path("/demo/admin")
-                    .json_body_obj(&AdminRequest {
-                        token: "token",
-                        beamline: "i22",
-                        audience: AUDIENCE,
-                    });
-                then.status(200).json_body_obj(&Response { result: false });
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "beamline": "i22",
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": false}));
             })
             .await;
         let check = PolicyCheck::new(PolicyOptions {
