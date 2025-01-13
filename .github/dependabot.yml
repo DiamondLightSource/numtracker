@@ -6,7 +6,7 @@ updates:
       interval: weekly
     allow:
       # include indirect dependencies
-      dependency-type: all
+      - dependency-type: all
     groups:
       tracing:
         patterns:
