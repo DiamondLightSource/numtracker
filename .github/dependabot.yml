@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    allow:
+      # include indirect dependencies
+      dependency-type: all
+    groups:
+      tracing:
+        patterns:
+          - opentelemetry*
+          - tracing*
+      patch:
+        update-types:
+          - patch
