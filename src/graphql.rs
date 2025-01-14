@@ -302,8 +302,16 @@ impl Query {
     ) -> async_graphql::Result<BeamlineConfiguration> {
         check_auth(ctx, |policy, token| policy.check_admin(token, &beamline)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
+        let nt = ctx.data::<NumTracker>()?;
         trace!("Getting config for {beamline:?}");
-        Ok(db.current_configuration(&beamline).await?)
+        let conf = db.current_configuration(&beamline).await?;
+        let dir = nt.for_beamline(&beamline, conf.extension()).await?;
+        if let Some(high) = dir.prev().await?.filter(|n| n > &conf.scan_number()) {
+            // high file number in directory is higher than the configured value in the DB
+            Ok(conf.with_scan_number(high))
+        } else {
+            Ok(conf)
+        }
     }
 }
 
