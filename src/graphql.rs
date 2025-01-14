@@ -775,6 +775,37 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
+    async fn configuration_with_mismatched_numbers(
+        #[future(awt)] env: TestEnv,
+    ) -> Result<(), Box<dyn Error>> {
+        tokio::fs::File::create_new(env.dir.as_ref().join("i22").join("5678.i22"))
+            .await
+            .unwrap();
+        let query = r#"{
+            configuration(beamline: "i22") {
+                latestScanNumber
+            }
+        }"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({
+            "configuration": {
+                "latestScanNumber": 5678
+            }
+        });
+        assert!(result.errors.is_empty());
+        assert_eq!(result.data, exp);
+
+        let db_num = env.db.current_configuration("i22").await?.scan_number();
+        let file_num = env.dir.as_ref().join("i22").join("5678.i22");
+        let next_file_num = env.dir.as_ref().join("i22").join("5679.i22");
+        assert_eq!(db_num, 122);
+        assert!(file_num.exists());
+        assert!(!next_file_num.exists());
+        Ok(())
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn empty_configure_for_existing(#[future(awt)] env: TestEnv) {
         let query = r#"mutation {
             configure(beamline: "i22", config: {}) {
