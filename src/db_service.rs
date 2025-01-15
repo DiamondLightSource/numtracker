@@ -89,13 +89,6 @@ impl BeamlineConfiguration {
     pub fn detector(&self) -> SqliteTemplateResult<DetectorField> {
         self.detector.as_template()
     }
-
-    pub fn with_scan_number(self, new_number: u32) -> Self {
-        Self {
-            scan_number: new_number,
-            ..self
-        }
-    }
 }
 
 impl<'r> FromRow<'r, SqliteRow> for BeamlineConfiguration {

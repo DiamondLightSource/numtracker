@@ -1,17 +1,18 @@
-type BeamlineConfiguration {
-	visitTemplate: String!
-	scanTemplate: String!
-	detectorTemplate: String!
-	latestScanNumber: Int!
-	trackerFileExtension: String
-}
-
 
 input ConfigurationUpdates {
 	visit: VisitTemplate
 	scan: ScanTemplate
 	detector: DetectorTemplate
 	scanNumber: Int
+	trackerFileExtension: String
+}
+
+type CurrentConfiguration {
+	visitTemplate: String!
+	scanTemplate: String!
+	detectorTemplate: String!
+	dbScanNumber: Int!
+	fileScanNumber: Int
 	trackerFileExtension: String
 }
 
@@ -40,12 +41,12 @@ type Mutation {
 	Access scan file locations for the next scan
 	"""
 	scan(beamline: String!, visit: String!, sub: Subdirectory): ScanPaths!
-	configure(beamline: String!, config: ConfigurationUpdates!): BeamlineConfiguration!
+	configure(beamline: String!, config: ConfigurationUpdates!): CurrentConfiguration!
 }
 
 type Query {
 	paths(beamline: String!, visit: String!): VisitPath!
-	configuration(beamline: String!): BeamlineConfiguration!
+	configuration(beamline: String!): CurrentConfiguration!
 }
 
 type ScanPaths {
