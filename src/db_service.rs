@@ -66,7 +66,7 @@ pub struct BeamlineConfiguration {
     visit: RawPathTemplate<VisitTemplate>,
     scan: RawPathTemplate<ScanTemplate>,
     detector: RawPathTemplate<DetectorTemplate>,
-    tracker_file_extension: Option<String>,
+    pub(crate) tracker_file_extension: Option<String>,
 }
 
 impl BeamlineConfiguration {
@@ -76,10 +76,6 @@ impl BeamlineConfiguration {
 
     pub fn scan_number(&self) -> u32 {
         self.scan_number
-    }
-
-    pub fn tracker_file_extension(&self) -> Option<&str> {
-        self.tracker_file_extension.as_deref()
     }
 
     pub fn visit(&self) -> SqliteTemplateResult<BeamlineField> {
@@ -565,7 +561,7 @@ mod db_tests {
             conf.detector().unwrap().to_string(),
             "{subdirectory}/{instrument}-{scan_number}-{detector}"
         );
-        let Some(ext) = conf.tracker_file_extension() else {
+        let Some(ext) = conf.tracker_file_extension else {
             panic!("Missing extension");
         };
         assert_eq!(ext, "ext");
@@ -588,7 +584,7 @@ mod db_tests {
             |u: BeamlineConfiguration| assert_eq!(u.scan_number(), 42))]
     #[case::extension(
             |u: &mut Update| u.tracker_file_extension = Some("new".into()),
-            |u: BeamlineConfiguration| assert_eq!(u.tracker_file_extension().unwrap(), "new"))]
+            |u: BeamlineConfiguration| assert_eq!(u.tracker_file_extension.unwrap(), "new"))]
     #[tokio::test]
     async fn update_existing(
         #[future(awt)] db: SqliteScanPathService,
