@@ -14,6 +14,7 @@ COPY ./.env ./.env
 COPY ./src ./src
 COPY ./.sqlx ./.sqlx
 COPY ./migrations ./migrations
+COPY ./static ./static
 
 RUN cargo build --release --target x86_64-unknown-linux-musl
 

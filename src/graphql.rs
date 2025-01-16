@@ -30,6 +30,7 @@ use async_graphql::{
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
+use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
 use axum::{Extension, Json, Router};
@@ -75,7 +76,22 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
         // making graphql queries
         .route("/status", get(server_status))
         .route("/graphql", post(graphql_handler))
+        // make it obvious that /graphql isn't expected to work when visiting from a browser
+        .route(
+            "/graphql",
+            get((
+                StatusCode::METHOD_NOT_ALLOWED,
+                [("Allow", "POST")],
+                Html(include_str!("../static/get_graphql_warning.html")),
+            )),
+        )
+        // Interactive graphiql playground
         .route("/graphiql", get(graphiql))
+        // Make it look less like something is broken when going to any other page
+        .fallback((
+            StatusCode::NOT_FOUND,
+            Html(include_str!("../static/404.html")),
+        ))
         .layer(Extension(schema));
     let listener = TcpListener::bind(addr)
         .await
