@@ -3,6 +3,7 @@ type BeamlineConfiguration {
 	scanTemplate: String!
 	detectorTemplate: String!
 	latestScanNumber: Int!
+	trackerFileExtension: String
 }
 
 

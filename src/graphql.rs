@@ -256,6 +256,9 @@ impl BeamlineConfiguration {
     pub async fn latest_scan_number(&self) -> async_graphql::Result<u32> {
         Ok(self.scan_number())
     }
+    pub async fn tracker_file_extension(&self) -> async_graphql::Result<Option<&str>> {
+        Ok(self.tracker_file_extension.as_deref())
+    }
 }
 
 impl FieldSource<ScanField> for ScanPaths {
@@ -326,7 +329,7 @@ impl Mutation {
         // isn't much we can do from here.
         let current = db.current_configuration(&beamline).await?;
         let dir = nt
-            .for_beamline(&beamline, current.tracker_file_extension())
+            .for_beamline(&beamline, current.tracker_file_extension.as_deref())
             .await?;
 
         let next_scan = db
@@ -741,7 +744,7 @@ mod tests {
     async fn configuration(#[future(awt)] env: TestEnv) {
         let query = r#"{
         configuration(beamline: "i22") {
-            visitTemplate scanTemplate detectorTemplate latestScanNumber
+            visitTemplate scanTemplate detectorTemplate latestScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
@@ -749,10 +752,25 @@ mod tests {
             "visitTemplate": "/tmp/{instrument}/data/{visit}",
             "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
             "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
-            "latestScanNumber": 122
+            "latestScanNumber": 122,
+            "trackerFileExtension": Value::Null
         }});
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn custom_tracker_file_extension(#[future(awt)] env: TestEnv) {
+        let result = env
+            .schema
+            .execute(r#"{configuration(beamline: "b21") { trackerFileExtension }}"#)
+            .await;
+        assert!(result.errors.is_empty());
+        assert_eq!(
+            result.data,
+            value!({ "configuration": { "trackerFileExtension": "b21_ext" } })
+        );
     }
 
     #[rstest]
