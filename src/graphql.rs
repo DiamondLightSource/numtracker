@@ -131,7 +131,9 @@ struct Mutation;
 /// GraphQL type to mimic a key-value pair from the map type that GraphQL doesn't have
 #[derive(SimpleObject)]
 struct DetectorPath {
+    /// The name of the detector that should use this path
     name: String,
+    /// The path where the detector should write its data
     path: String,
 }
 
@@ -174,15 +176,19 @@ impl Display for NonUnicodePath {
 impl Error for NonUnicodePath {}
 
 #[Object]
+/// The path to a visit directory and the components used to build it
 impl VisitPath {
+    /// The visit for which this is the visit directory
     #[instrument(skip(self))]
     async fn visit(&self) -> &str {
         &self.visit
     }
+    /// This beamline for which this is the visit directory
     #[instrument(skip(self))]
     async fn beamline(&self) -> &str {
         &self.info.name()
     }
+    /// The absolute path to the visit directory
     #[instrument(skip(self))]
     async fn directory(&self) -> async_graphql::Result<String> {
         Ok(path_to_string(self.info.visit()?.render(self))?)
@@ -206,6 +212,7 @@ impl FieldSource<BeamlineField> for VisitPath {
 }
 
 #[Object]
+/// Paths and values related to a specific scan/data collection for a beamline
 impl ScanPaths {
     /// The visit used to generate this scan information. Should be the same as the visit passed in
     #[instrument(skip(self))]
@@ -249,22 +256,36 @@ impl ScanPaths {
 }
 
 #[Object]
+/// The current configuration for a beamline
 impl CurrentConfiguration {
+    /// The template used to build the path to the visit directory for a beamline
     pub async fn visit_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.visit()?.to_string())
     }
+    /// The template used to build the path of a scan file for a data acquisition, relative to the
+    /// root of the visit directory.
     pub async fn scan_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.scan()?.to_string())
     }
+    /// The template used to build the path of a detector's data file for a data acquisition,
+    /// relative to the root of the visit directory.
     pub async fn detector_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.detector()?.to_string())
     }
+    /// The latest scan number stored in the DB. This is the last scan number provided by this
+    /// service but may not reflect the most recent scan number for a beamline if an external
+    /// service (eg GDA) has incremented its own number tracker.
     pub async fn db_scan_number(&self) -> async_graphql::Result<u32> {
         Ok(self.db_config.scan_number())
     }
+    /// The highest matching number file for this beamline in the configured tracking directory.
+    /// May be null if no directory is available for this beamline or if there are no matching
+    /// number files.
     pub async fn file_scan_number(&self) -> async_graphql::Result<Option<u32>> {
         Ok(self.high_file)
     }
+    /// The file extension used for the file based tracking, eg using an extension of 'ext'
+    /// would create files `1.ext`, `2.ext` etc
     pub async fn tracker_file_extension(&self) -> async_graphql::Result<Option<&str>> {
         Ok(self.db_config.tracker_file_extension())
     }
@@ -290,7 +311,10 @@ impl FieldSource<DetectorField> for (&str, &ScanPaths) {
 }
 
 #[Object]
+/// Queries relating to numtracker configurations that have no side-effects
 impl Query {
+    /// Get the visit directory information for the given beamline and visit.
+    /// This information is not scan specific
     #[instrument(skip(self, ctx))]
     async fn paths(
         &self,
@@ -303,6 +327,7 @@ impl Query {
         Ok(VisitPath { visit, info })
     }
 
+    /// Get the current configuration for the given beamline
     #[instrument(skip(self, ctx))]
     async fn configuration(
         &self,
@@ -326,8 +351,9 @@ impl Query {
 }
 
 #[Object]
+/// Queries that modify the state of the numtracker configuration in some way
 impl Mutation {
-    /// Access scan file locations for the next scan
+    /// Generate scan file locations for the next scan
     #[instrument(skip(self, ctx))]
     async fn scan<'ctx>(
         &self,
@@ -367,6 +393,7 @@ impl Mutation {
         })
     }
 
+    /// Add or modify the stored configuration for a beamline
     #[instrument(skip(self, ctx))]
     async fn configure<'ctx>(
         &self,
@@ -412,12 +439,19 @@ where
     }
 }
 
+/// Changes that should be made to a beamline's configuration
 #[derive(Debug, InputObject)]
 struct ConfigurationUpdates {
+    /// New template used to determine the visit directory
     visit: Option<InputTemplate<VisitTemplate>>,
+    /// New template used to determine the relative path to the main scan file for a collection
     scan: Option<InputTemplate<ScanTemplate>>,
+    /// New template used to determine the relative path for detector data files
     detector: Option<InputTemplate<DetectorTemplate>>,
+    /// The highest scan number to have been allocated. The next scan files generated will use the
+    /// next number.
     scan_number: Option<u32>,
+    /// The extension of the files used to track scan numbers by GDA's numtracker facility
     tracker_file_extension: Option<String>,
 }
 
@@ -484,6 +518,8 @@ where
     }
 }
 
+/// Name of subdirectory within visit directory where data should be written.
+/// Can be nested (eg foo/bar) but cannot include links to parent directories (eg ../foo).
 // Derived Default is OK without validation as empty path is a valid subdirectory
 #[derive(Debug, Default)]
 pub struct Subdirectory(String);
@@ -544,6 +580,7 @@ impl Display for Subdirectory {
     }
 }
 
+/// Detector name
 #[derive(Debug)]
 pub struct Detector(String);
 

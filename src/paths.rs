@@ -193,7 +193,10 @@ impl PathSpec for VisitTemplate {
 
     const ABSOLUTE: bool = true;
     fn describe() -> &'static str {
-        "A template describing the path to the visit directory for a beamline"
+        concat!(
+            "A template describing the path to the visit directory for a beamline. ",
+            "It should be an absolute path and contain placeholders for {instrument} and {visit}."
+        )
     }
 }
 
@@ -204,7 +207,10 @@ impl PathSpec for ScanTemplate {
 
     const ABSOLUTE: bool = false;
     fn describe() -> &'static str {
-        "A template describing the location within a visit directory where the root scan file should be written"
+        concat!(
+            "A template describing the location within a visit directory where the root scan file should be written. ",
+            "It should be a relative path and contain a placeholder for {scan_number} to ensure files are unique."
+        )
     }
 }
 
