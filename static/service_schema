@@ -1,18 +1,65 @@
 
+"""
+Changes that should be made to a beamline's configuration
+"""
 input ConfigurationUpdates {
+	"""
+	New template used to determine the visit directory
+	"""
 	visit: VisitTemplate
+	"""
+	New template used to determine the relative path to the main scan file for a collection
+	"""
 	scan: ScanTemplate
+	"""
+	New template used to determine the relative path for detector data files
+	"""
 	detector: DetectorTemplate
+	"""
+	The highest scan number to have been allocated. The next scan files generated will use the
+	next number.
+	"""
 	scanNumber: Int
+	"""
+	The extension of the files used to track scan numbers by GDA's numtracker facility
+	"""
 	trackerFileExtension: String
 }
 
+"""
+The current configuration for a beamline
+"""
 type CurrentConfiguration {
+	"""
+	The template used to build the path to the visit directory for a beamline
+	"""
 	visitTemplate: String!
+	"""
+	The template used to build the path of a scan file for a data acquisition, relative to the
+	root of the visit directory.
+	"""
 	scanTemplate: String!
+	"""
+	The template used to build the path of a detector's data file for a data acquisition,
+	relative to the root of the visit directory.
+	"""
 	detectorTemplate: String!
+	"""
+	The latest scan number stored in the DB. This is the last scan number provided by this
+	service but may not reflect the most recent scan number for a beamline if an external
+	service (eg GDA) has incremented its own number tracker.
+	"""
 	dbScanNumber: Int!
+	"""
+	The highest matching number file for this beamline in the configured tracking directory.
+	May be null if no directory is available for this beamline or if there are no matching
+	number files.
+	"""
 	fileScanNumber: Int
+	"""
+	The file extension used for the file based tracking, eg using an extension of 'ext'
+	would create files `1.ext`, `2.ext` etc
+	"""
 	trackerFileExtension: String
 }
 
@@ -22,7 +69,13 @@ scalar Detector
 GraphQL type to mimic a key-value pair from the map type that GraphQL doesn't have
 """
 type DetectorPath {
+	"""
+	The name of the detector that should use this path
+	"""
 	name: String!
+	"""
+	The path where the detector should write its data
+	"""
 	path: String!
 }
 
@@ -36,19 +89,38 @@ scalar DetectorTemplate
 
 
 
+"""
+Queries that modify the state of the numtracker configuration in some way
+"""
 type Mutation {
 	"""
-	Access scan file locations for the next scan
+	Generate scan file locations for the next scan
 	"""
 	scan(beamline: String!, visit: String!, sub: Subdirectory): ScanPaths!
+	"""
+	Add or modify the stored configuration for a beamline
+	"""
 	configure(beamline: String!, config: ConfigurationUpdates!): CurrentConfiguration!
 }
 
+"""
+Queries relating to numtracker configurations that have no side-effects
+"""
 type Query {
+	"""
+	Get the visit directory information for the given beamline and visit.
+	This information is not scan specific
+	"""
 	paths(beamline: String!, visit: String!): VisitPath!
+	"""
+	Get the current configuration for the given beamline
+	"""
 	configuration(beamline: String!): CurrentConfiguration!
 }
 
+"""
+Paths and values related to a specific scan/data collection for a beamline
+"""
 type ScanPaths {
 	"""
 	The visit used to generate this scan information. Should be the same as the visit passed in
@@ -75,21 +147,33 @@ type ScanPaths {
 }
 
 """
-A template describing the location within a visit directory where the root scan file should be written
+A template describing the location within a visit directory where the root scan file should be written. It should be a relative path and contain a placeholder for {scan_number} to ensure files are unique.
 """
 scalar ScanTemplate
 
 
 scalar Subdirectory
 
+"""
+The path to a visit directory and the components used to build it
+"""
 type VisitPath {
+	"""
+	The visit for which this is the visit directory
+	"""
 	visit: String!
+	"""
+	This beamline for which this is the visit directory
+	"""
 	beamline: String!
+	"""
+	The absolute path to the visit directory
+	"""
 	directory: String!
 }
 
 """
-A template describing the path to the visit directory for a beamline
+A template describing the path to the visit directory for a beamline. It should be an absolute path and contain placeholders for {instrument} and {visit}.
 """
 scalar VisitTemplate
 

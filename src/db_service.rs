@@ -59,6 +59,7 @@ impl<F> From<String> for RawPathTemplate<F> {
     }
 }
 
+/// The current configuration for a beamline
 #[derive(Debug)]
 pub struct BeamlineConfiguration {
     name: String,
