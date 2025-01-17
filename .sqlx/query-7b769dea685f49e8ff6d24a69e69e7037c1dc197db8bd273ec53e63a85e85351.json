@@ -34,7 +34,7 @@
         "type_info": "Text"
       },
       {
-        "name": "fallback_extension",
+        "name": "tracker_file_extension",
         "ordinal": 6,
         "type_info": "Text"
       }
