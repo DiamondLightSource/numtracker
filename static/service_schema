@@ -11,7 +11,7 @@ input ConfigurationUpdates {
 	scan: ScanTemplate
 	detector: DetectorTemplate
 	scanNumber: Int
-	extension: String
+	trackerFileExtension: String
 }
 
 scalar Detector

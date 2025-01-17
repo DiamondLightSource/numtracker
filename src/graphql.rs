@@ -325,14 +325,16 @@ impl Mutation {
         // while the DB is being queried or between the two queries but there
         // isn't much we can do from here.
         let current = db.current_configuration(&beamline).await?;
-        let dir = nt.for_beamline(&beamline, current.extension()).await?;
+        let dir = nt
+            .for_beamline(&beamline, current.tracker_file_extension())
+            .await?;
 
         let next_scan = db
             .next_scan_configuration(&beamline, dir.prev().await?)
             .await?;
 
         if let Err(e) = dir.set(next_scan.scan_number()).await {
-            warn!("Failed to increment fallback tracker directory: {e}");
+            warn!("Failed to increment tracker file: {e}");
         }
 
         Ok(ScanPaths {
@@ -386,7 +388,7 @@ struct ConfigurationUpdates {
     scan: Option<InputTemplate<ScanTemplate>>,
     detector: Option<InputTemplate<DetectorTemplate>>,
     scan_number: Option<u32>,
-    extension: Option<String>,
+    tracker_file_extension: Option<String>,
 }
 
 impl ConfigurationUpdates {
@@ -397,7 +399,7 @@ impl ConfigurationUpdates {
             visit: self.visit.map(|t| t.0),
             scan: self.scan.map(|t| t.0),
             detector: self.detector.map(|t| t.0),
-            extension: self.extension,
+            tracker_file_extension: self.tracker_file_extension,
         }
     }
 }
@@ -597,7 +599,7 @@ mod tests {
             scan: scan.map(|s| InputTemplate::parse(Some(Value::String(s.into()))).unwrap()),
             detector: det.map(|d| InputTemplate::parse(Some(Value::String(d.into()))).unwrap()),
             scan_number: num,
-            extension: ext.map(|e| e.into()),
+            tracker_file_extension: ext.map(|e| e.into()),
         }
     }
 

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO beamline\n                (name, scan_number, visit, scan, detector, fallback_extension)\n            VALUES\n                (?,?,?,?,?,?)\n            RETURNING *",
+  "query": "INSERT INTO beamline\n                (name, scan_number, visit, scan, detector, tracker_file_extension)\n            VALUES\n                (?,?,?,?,?,?)\n            RETURNING *",
   "describe": {
     "columns": [
       {
@@ -34,7 +34,7 @@
         "type_info": "Text"
       },
       {
-        "name": "fallback_extension",
+        "name": "tracker_file_extension",
         "ordinal": 6,
         "type_info": "Text"
       }
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "77054c7c20195a2a7766eb83bf39add56ec84bb502ce39d26cd9394703bdd71a"
+  "hash": "1ad61bdc8babbb4403c535318ccf657b3ea98a04126539ccf08f8251d87ed32b"
 }
