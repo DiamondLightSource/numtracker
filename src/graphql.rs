@@ -266,7 +266,7 @@ impl CurrentConfiguration {
         Ok(self.high_file)
     }
     pub async fn tracker_file_extension(&self) -> async_graphql::Result<Option<&str>> {
-        Ok(self.db_config.tracker_file_extension.as_deref())
+        Ok(self.db_config.tracker_file_extension())
     }
 }
 
@@ -315,7 +315,7 @@ impl Query {
         trace!("Getting config for {beamline:?}");
         let conf = db.current_configuration(&beamline).await?;
         let dir = nt
-            .for_beamline(&beamline, conf.tracker_file_extension.as_deref())
+            .for_beamline(&beamline, conf.tracker_file_extension())
             .await?;
         let high_file = dir.prev().await?;
         Ok(CurrentConfiguration {
@@ -347,7 +347,7 @@ impl Mutation {
         // isn't much we can do from here.
         let current = db.current_configuration(&beamline).await?;
         let dir = nt
-            .for_beamline(&beamline, current.tracker_file_extension.as_deref())
+            .for_beamline(&beamline, current.tracker_file_extension())
             .await?;
 
         let next_scan = db
@@ -384,7 +384,7 @@ impl Mutation {
         };
         let dir = ctx
             .data::<NumTracker>()?
-            .for_beamline(&beamline, db_config.tracker_file_extension.as_deref())
+            .for_beamline(&beamline, db_config.tracker_file_extension())
             .await?;
         let high_file = dir.prev().await?;
         Ok(CurrentConfiguration {
