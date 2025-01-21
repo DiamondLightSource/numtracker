@@ -376,14 +376,14 @@ impl Mutation {
     ) -> async_graphql::Result<CurrentConfiguration> {
         check_auth(ctx, |pc, token| pc.check_admin(token, &beamline)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
+        let nt = ctx.data::<NumTracker>()?;
         trace!("Configuring: {beamline}: {config:?}");
         let upd = config.into_update(&beamline);
         let db_config = match upd.update_beamline(db).await? {
             Some(bc) => bc,
             None => upd.insert_new(db).await?,
         };
-        let dir = ctx
-            .data::<NumTracker>()?
+        let dir = nt
             .for_beamline(&beamline, db_config.tracker_file_extension())
             .await?;
         let high_file = dir.prev().await?;
