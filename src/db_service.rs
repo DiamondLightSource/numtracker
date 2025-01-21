@@ -66,7 +66,7 @@ pub struct BeamlineConfiguration {
     visit: RawPathTemplate<VisitTemplate>,
     scan: RawPathTemplate<ScanTemplate>,
     detector: RawPathTemplate<DetectorTemplate>,
-    pub(crate) tracker_file_extension: Option<String>,
+    tracker_file_extension: Option<String>,
 }
 
 impl BeamlineConfiguration {
@@ -88,6 +88,10 @@ impl BeamlineConfiguration {
 
     pub fn detector(&self) -> SqliteTemplateResult<DetectorField> {
         self.detector.as_template()
+    }
+
+    pub fn tracker_file_extension(&self) -> Option<&str> {
+        self.tracker_file_extension.as_deref()
     }
 }
 

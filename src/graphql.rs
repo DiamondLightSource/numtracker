@@ -147,6 +147,12 @@ struct ScanPaths {
     subdirectory: Subdirectory,
 }
 
+/// GraphQL type to provide current configuration for a beamline
+struct CurrentConfiguration {
+    db_config: BeamlineConfiguration,
+    high_file: Option<u32>,
+}
+
 /// Error to be returned when a path contains non-unicode characters
 #[derive(Debug)]
 struct NonUnicodePath;
@@ -243,21 +249,24 @@ impl ScanPaths {
 }
 
 #[Object]
-impl BeamlineConfiguration {
+impl CurrentConfiguration {
     pub async fn visit_template(&self) -> async_graphql::Result<String> {
-        Ok(self.visit()?.to_string())
+        Ok(self.db_config.visit()?.to_string())
     }
     pub async fn scan_template(&self) -> async_graphql::Result<String> {
-        Ok(self.scan()?.to_string())
+        Ok(self.db_config.scan()?.to_string())
     }
     pub async fn detector_template(&self) -> async_graphql::Result<String> {
-        Ok(self.detector()?.to_string())
+        Ok(self.db_config.detector()?.to_string())
     }
-    pub async fn latest_scan_number(&self) -> async_graphql::Result<u32> {
-        Ok(self.scan_number())
+    pub async fn db_scan_number(&self) -> async_graphql::Result<u32> {
+        Ok(self.db_config.scan_number())
+    }
+    pub async fn file_scan_number(&self) -> async_graphql::Result<Option<u32>> {
+        Ok(self.high_file)
     }
     pub async fn tracker_file_extension(&self) -> async_graphql::Result<Option<&str>> {
-        Ok(self.tracker_file_extension.as_deref())
+        Ok(self.db_config.tracker_file_extension())
     }
 }
 
@@ -299,11 +308,20 @@ impl Query {
         &self,
         ctx: &Context<'_>,
         beamline: String,
-    ) -> async_graphql::Result<BeamlineConfiguration> {
+    ) -> async_graphql::Result<CurrentConfiguration> {
         check_auth(ctx, |policy, token| policy.check_admin(token, &beamline)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
+        let nt = ctx.data::<NumTracker>()?;
         trace!("Getting config for {beamline:?}");
-        Ok(db.current_configuration(&beamline).await?)
+        let conf = db.current_configuration(&beamline).await?;
+        let dir = nt
+            .for_beamline(&beamline, conf.tracker_file_extension())
+            .await?;
+        let high_file = dir.prev().await?;
+        Ok(CurrentConfiguration {
+            db_config: conf,
+            high_file,
+        })
     }
 }
 
@@ -329,7 +347,7 @@ impl Mutation {
         // isn't much we can do from here.
         let current = db.current_configuration(&beamline).await?;
         let dir = nt
-            .for_beamline(&beamline, current.tracker_file_extension.as_deref())
+            .for_beamline(&beamline, current.tracker_file_extension())
             .await?;
 
         let next_scan = db
@@ -355,15 +373,24 @@ impl Mutation {
         ctx: &Context<'ctx>,
         beamline: String,
         config: ConfigurationUpdates,
-    ) -> async_graphql::Result<BeamlineConfiguration> {
+    ) -> async_graphql::Result<CurrentConfiguration> {
         check_auth(ctx, |pc, token| pc.check_admin(token, &beamline)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
+        let nt = ctx.data::<NumTracker>()?;
         trace!("Configuring: {beamline}: {config:?}");
-        let upd = config.into_update(beamline);
-        match upd.update_beamline(db).await? {
-            Some(bc) => Ok(bc),
-            None => Ok(upd.insert_new(db).await?),
-        }
+        let upd = config.into_update(&beamline);
+        let db_config = match upd.update_beamline(db).await? {
+            Some(bc) => bc,
+            None => upd.insert_new(db).await?,
+        };
+        let dir = nt
+            .for_beamline(&beamline, db_config.tracker_file_extension())
+            .await?;
+        let high_file = dir.prev().await?;
+        Ok(CurrentConfiguration {
+            db_config,
+            high_file,
+        })
     }
 }
 
@@ -395,9 +422,9 @@ struct ConfigurationUpdates {
 }
 
 impl ConfigurationUpdates {
-    fn into_update(self, name: String) -> BeamlineConfigurationUpdate {
+    fn into_update<S: Into<String>>(self, name: S) -> BeamlineConfigurationUpdate {
         BeamlineConfigurationUpdate {
-            name,
+            name: name.into(),
             scan_number: self.scan_number,
             visit: self.visit.map(|t| t.0),
             scan: self.scan.map(|t| t.0),
@@ -623,7 +650,7 @@ mod tests {
             Some(122),
             None,
         );
-        cfg.into_update("i22".into()).insert_new(&db).await.unwrap();
+        cfg.into_update("i22").insert_new(&db).await.unwrap();
         let cfg = updates(
             Some("/tmp/{instrument}/data/{visit}/"),
             Some("{subdirectory}/{instrument}-{scan_number}"),
@@ -631,7 +658,7 @@ mod tests {
             Some(621),
             Some("b21_ext"),
         );
-        cfg.into_update("b21".into()).insert_new(&db).await.unwrap();
+        cfg.into_update("b21").insert_new(&db).await.unwrap();
         db
     }
 
@@ -744,7 +771,7 @@ mod tests {
     async fn configuration(#[future(awt)] env: TestEnv) {
         let query = r#"{
         configuration(beamline: "i22") {
-            visitTemplate scanTemplate detectorTemplate latestScanNumber trackerFileExtension
+            visitTemplate scanTemplate detectorTemplate dbScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
@@ -752,7 +779,7 @@ mod tests {
             "visitTemplate": "/tmp/{instrument}/data/{visit}",
             "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
             "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
-            "latestScanNumber": 122,
+            "dbScanNumber": 122,
             "trackerFileExtension": Value::Null
         }});
         assert!(result.errors.is_empty());
@@ -775,10 +802,43 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
+    async fn configuration_with_mismatched_numbers(
+        #[future(awt)] env: TestEnv,
+    ) -> Result<(), Box<dyn Error>> {
+        tokio::fs::File::create_new(env.dir.as_ref().join("i22").join("5678.i22"))
+            .await
+            .unwrap();
+        let query = r#"{
+            configuration(beamline: "i22") {
+                dbScanNumber
+                fileScanNumber
+            }
+        }"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({
+            "configuration": {
+                "dbScanNumber": 122,
+                "fileScanNumber": 5678
+            }
+        });
+        assert!(result.errors.is_empty());
+        assert_eq!(result.data, exp);
+
+        let db_num = env.db.current_configuration("i22").await?.scan_number();
+        let file_num = env.dir.as_ref().join("i22").join("5678.i22");
+        let next_file_num = env.dir.as_ref().join("i22").join("5679.i22");
+        assert_eq!(db_num, 122);
+        assert!(file_num.exists());
+        assert!(!next_file_num.exists());
+        Ok(())
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn empty_configure_for_existing(#[future(awt)] env: TestEnv) {
         let query = r#"mutation {
             configure(beamline: "i22", config: {}) {
-                visitTemplate scanTemplate detectorTemplate latestScanNumber
+                visitTemplate scanTemplate detectorTemplate dbScanNumber
             }
         }"#;
         let result = env.schema.execute(query).await;
@@ -787,7 +847,7 @@ mod tests {
                 "visitTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                 "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
-                "latestScanNumber": 122
+                "dbScanNumber": 122
             }
         });
         println!("{result:#?}");
@@ -836,7 +896,7 @@ mod tests {
                         scan: "{instrument}-{scan_number}"
                         detector: "{scan_number}-{detector}"
                     }) {
-                        scanTemplate visitTemplate detectorTemplate latestScanNumber
+                        scanTemplate visitTemplate detectorTemplate dbScanNumber
                     }
                 }"#,
             )
@@ -845,7 +905,7 @@ mod tests {
                 "visitTemplate": "/tmp/{instrument}/{year}/{visit}",
                 "scanTemplate": "{instrument}-{scan_number}",
                 "detectorTemplate": "{scan_number}-{detector}",
-                "latestScanNumber": 0
+                "dbScanNumber": 0
             } });
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
