@@ -258,6 +258,9 @@ impl ScanPaths {
 #[Object]
 /// The current configuration for a beamline
 impl CurrentConfiguration {
+    pub async fn beamline(&self) -> async_graphql::Result<&str> {
+        Ok(self.db_config.name())
+    }
     /// The template used to build the path to the visit directory for a beamline
     pub async fn visit_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.visit()?.to_string())
@@ -347,6 +350,32 @@ impl Query {
             db_config: conf,
             high_file,
         })
+    }
+
+    // Get all current configurations
+    #[instrument(skip(self, ctx))]
+    async fn configurations(
+        &self,
+        ctx: &Context<'_>,
+    ) -> async_graphql::Result<Vec<CurrentConfiguration>> {
+        let db = ctx.data::<SqliteScanPathService>()?;
+        let nt = ctx.data::<NumTracker>()?;
+
+        let configurations = db.configurations().await?;
+
+        futures::future::join_all(configurations.into_iter().map(|cnf| async {
+            let dir = nt
+                .for_beamline(&cnf.name(), cnf.tracker_file_extension())
+                .await?;
+            let high_file = dir.prev().await?;
+            Ok(CurrentConfiguration {
+                db_config: cnf,
+                high_file,
+            })
+        }))
+        .await
+        .into_iter()
+        .collect::<Result<Vec<CurrentConfiguration>, async_graphql::Error>>()
     }
 }
 
@@ -921,7 +950,7 @@ mod tests {
     async fn configure_new_beamline(#[future(awt)] env: TestEnv) {
         assert_matches::assert_matches!(
             env.db.current_configuration("i16").await,
-            Err(crate::db_service::ConfigurationError::MissingBeamline(bl)) if bl == "i16"
+            Err(ConfigurationError::MissingBeamline(bl)) if bl == "i16"
         );
 
         let result = env
