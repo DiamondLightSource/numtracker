@@ -297,6 +297,15 @@ impl SqliteScanPathService {
         .ok_or(ConfigurationError::MissingBeamline(beamline.into()))
     }
 
+    pub async fn configurations(&self) -> Result<Vec<BeamlineConfiguration>, ConfigurationError> {
+        Ok(query_as!(DbBeamlineConfig, "SELECT * FROM beamline")
+            .fetch_all(&self.pool)
+            .await?
+            .into_iter()
+            .map(BeamlineConfiguration::from)
+            .collect())
+    }
+
     pub async fn next_scan_configuration(
         &self,
         beamline: &str,
@@ -341,7 +350,7 @@ impl fmt::Debug for SqliteScanPathService {
     }
 }
 
-mod error {
+pub mod error {
     use std::error::Error;
     use std::fmt::{self, Display};
 
