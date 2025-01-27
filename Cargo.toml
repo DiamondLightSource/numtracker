@@ -13,7 +13,7 @@ unwrap_used = "deny"
 [dependencies]
 async-graphql = { version = "7.0.13", features = ["tracing"] }
 async-graphql-axum = "7.0.13"
-axum = "0.7.9"
+axum = "0.8.1"
 axum-extra = { version = "0.9.3", features = ["typed-header"] }
 chrono = "0.4.39"
 clap = { version = "4.5.27", features = ["cargo", "derive", "env", "string"] }
