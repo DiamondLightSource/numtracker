@@ -352,17 +352,26 @@ impl Query {
         })
     }
 
-    /// Get the configurations for a given list of beamlines
+    /// Get the configurations for all available beamlines
+    /// Can be filtered to provide one or more specific beamlines
     #[instrument(skip(self, ctx))]
     async fn configurations(
         &self,
         ctx: &Context<'_>,
-        beamline_filters: Vec<String>,
+        beamline_filters: Option<Vec<String>>,
     ) -> async_graphql::Result<Vec<Option<CurrentConfiguration>>> {
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
+        let configurations = match beamline_filters {
+            Some(filters) => db.configurations(filters).await?,
+            None => db
+                .all_configurations()
+                .await?
+                .into_iter()
+                .map(Option::Some)
+                .collect(),
+        };
 
-        let configurations = db.configurations(beamline_filters).await?;
         futures::future::join_all(configurations.into_iter().map(|cnf| async {
             match cnf {
                 Some(config) => {
@@ -382,31 +391,6 @@ impl Query {
         .await
         .into_iter()
         .collect::<Result<Vec<Option<CurrentConfiguration>>, async_graphql::Error>>()
-    }
-
-    /// Get all the current configurations
-    #[instrument(skip(self, ctx))]
-    async fn all_configurations(
-        &self,
-        ctx: &Context<'_>,
-    ) -> async_graphql::Result<Vec<CurrentConfiguration>> {
-        let db = ctx.data::<SqliteScanPathService>()?;
-        let nt = ctx.data::<NumTracker>()?;
-
-        let configurations = db.all_configurations().await?;
-        futures::future::join_all(configurations.into_iter().map(|cnf| async {
-            let dir = nt
-                .for_beamline(&cnf.name(), cnf.tracker_file_extension())
-                .await?;
-            let high_file = dir.prev().await?;
-            Ok(CurrentConfiguration {
-                db_config: cnf,
-                high_file,
-            })
-        }))
-        .await
-        .into_iter()
-        .collect::<Result<Vec<CurrentConfiguration>, async_graphql::Error>>()
     }
 }
 
