@@ -352,17 +352,48 @@ impl Query {
         })
     }
 
-    // Get all current configurations
+    /// Get the configurations for a given list of beamlines
     #[instrument(skip(self, ctx))]
     async fn configurations(
+        &self,
+        ctx: &Context<'_>,
+        beamline_filters: Vec<String>,
+    ) -> async_graphql::Result<Vec<Option<CurrentConfiguration>>> {
+        let db = ctx.data::<SqliteScanPathService>()?;
+        let nt = ctx.data::<NumTracker>()?;
+
+        let configurations = db.configurations(beamline_filters).await?;
+        futures::future::join_all(configurations.into_iter().map(|cnf| async {
+            match cnf {
+                Some(config) => {
+                    let dir = nt
+                        .for_beamline(&config.name(), config.tracker_file_extension())
+                        .await?;
+
+                    let high_file = dir.prev().await?;
+                    Ok(Some(CurrentConfiguration {
+                        db_config: config,
+                        high_file,
+                    }))
+                }
+                None => Ok(None),
+            }
+        }))
+        .await
+        .into_iter()
+        .collect::<Result<Vec<Option<CurrentConfiguration>>, async_graphql::Error>>()
+    }
+
+    /// Get all the current configurations
+    #[instrument(skip(self, ctx))]
+    async fn all_configurations(
         &self,
         ctx: &Context<'_>,
     ) -> async_graphql::Result<Vec<CurrentConfiguration>> {
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
 
-        let configurations = db.configurations().await?;
-
+        let configurations = db.all_configurations().await?;
         futures::future::join_all(configurations.into_iter().map(|cnf| async {
             let dir = nt
                 .for_beamline(&cnf.name(), cnf.tracker_file_extension())
