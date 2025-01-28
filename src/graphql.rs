@@ -377,9 +377,8 @@ impl Query {
             match cnf {
                 Some(config) => {
                     let dir = nt
-                        .for_beamline(&config.name(), config.tracker_file_extension())
+                        .for_beamline(config.name(), config.tracker_file_extension())
                         .await?;
-
                     let high_file = dir.prev().await?;
                     Ok(Some(CurrentConfiguration {
                         db_config: config,

@@ -316,7 +316,7 @@ impl SqliteScanPathService {
 
             v.push(q)
         }
-        return Result::Ok(v);
+        Result::Ok(v)
     }
 
     pub async fn all_configurations(
