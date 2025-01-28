@@ -297,7 +297,31 @@ impl SqliteScanPathService {
         .ok_or(ConfigurationError::MissingBeamline(beamline.into()))
     }
 
-    pub async fn configurations(&self) -> Result<Vec<BeamlineConfiguration>, ConfigurationError> {
+    // re-write this
+    pub async fn configurations(
+        &self,
+        filters: Vec<String>,
+    ) -> Result<Vec<Option<BeamlineConfiguration>>, ConfigurationError> {
+        let mut v = Vec::<Option<BeamlineConfiguration>>::with_capacity(filters.len());
+
+        for beamline in filters {
+            let q = query_as!(
+                DbBeamlineConfig,
+                "SELECT * FROM beamline WHERE name = ?",
+                beamline
+            )
+            .fetch_optional(&self.pool)
+            .await?
+            .map(BeamlineConfiguration::from);
+
+            v.push(q)
+        }
+        return Result::Ok(v);
+    }
+
+    pub async fn all_configurations(
+        &self,
+    ) -> Result<Vec<BeamlineConfiguration>, ConfigurationError> {
         Ok(query_as!(DbBeamlineConfig, "SELECT * FROM beamline")
             .fetch_all(&self.pool)
             .await?
