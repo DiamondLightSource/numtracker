@@ -678,7 +678,7 @@ mod tests {
     use super::auth::PolicyCheck;
     use super::{ConfigurationUpdates, InputTemplate, Mutation, Query};
     use crate::cli::PolicyOptions;
-    use crate::db_service::SqliteScanPathService;
+    use crate::db_service::{ConfigurationError, SqliteScanPathService};
     use crate::graphql::graphql_schema;
     use crate::numtracker::TempTracker;
 
