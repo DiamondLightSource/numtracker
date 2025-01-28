@@ -360,6 +360,7 @@ impl Query {
         ctx: &Context<'_>,
         beamline_filters: Option<Vec<String>>,
     ) -> async_graphql::Result<Vec<Option<CurrentConfiguration>>> {
+        check_auth(ctx, |policy, token| policy.check_super_admin(token)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         let configurations = match beamline_filters {

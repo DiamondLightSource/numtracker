@@ -78,6 +78,22 @@ impl<'r> AdminRequest<'r> {
     }
 }
 
+#[derive(Debug, Serialize)]
+#[cfg_attr(test, derive(Deserialize))]
+pub struct SuperAdminRequest<'a> {
+    token: &'a str,
+    audience: &'a str,
+}
+
+impl<'r> SuperAdminRequest<'r> {
+    fn new(token: Option<&'r Token>) -> Result<Self, AuthError> {
+        Ok(Self {
+            token: token.ok_or(AuthError::Missing)?.token(),
+            audience: AUDIENCE,
+        })
+    }
+}
+
 #[derive(Debug)]
 struct InvalidVisit;
 
@@ -138,6 +154,14 @@ impl PolicyCheck {
         beamline: &str,
     ) -> Result<(), AuthError> {
         self.authorise(&self.admin, AdminRequest::new(token, beamline)?)
+            .await
+    }
+
+    pub async fn check_super_admin(
+        &self,
+        token: Option<&Authorization<Bearer>>,
+    ) -> Result<(), AuthError> {
+        self.authorise(&self.admin, SuperAdminRequest::new(token)?)
             .await
     }
 
