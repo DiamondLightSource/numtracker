@@ -12,6 +12,10 @@ updates:
         patterns:
           - opentelemetry*
           - tracing*
+      async_graphql:
+        # Split async graphql into its own group as it doesn't follow semver
+        patterns:
+          - async-graphql*
       patch:
         update-types:
           - patch
