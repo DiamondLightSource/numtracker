@@ -65,31 +65,15 @@ impl<'a> AccessRequest<'a> {
 pub struct AdminRequest<'a> {
     token: &'a str,
     audience: &'a str,
-    beamline: &'a str,
+    beamline: Option<&'a str>,
 }
 
 impl<'r> AdminRequest<'r> {
-    fn new(token: Option<&'r Token>, beamline: &'r str) -> Result<Self, AuthError> {
+    fn new(token: Option<&'r Token>, beamline: Option<&'r str>) -> Result<Self, AuthError> {
         Ok(Self {
             token: token.ok_or(AuthError::Missing)?.token(),
             audience: AUDIENCE,
             beamline,
-        })
-    }
-}
-
-#[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(Deserialize))]
-pub struct SuperAdminRequest<'a> {
-    token: &'a str,
-    audience: &'a str,
-}
-
-impl<'r> SuperAdminRequest<'r> {
-    fn new(token: Option<&'r Token>) -> Result<Self, AuthError> {
-        Ok(Self {
-            token: token.ok_or(AuthError::Missing)?.token(),
-            audience: AUDIENCE,
         })
     }
 }
@@ -151,17 +135,17 @@ impl PolicyCheck {
     pub async fn check_admin(
         &self,
         token: Option<&Authorization<Bearer>>,
-        beamline: &str,
     ) -> Result<(), AuthError> {
-        self.authorise(&self.admin, AdminRequest::new(token, beamline)?)
+        self.authorise(&self.admin, AdminRequest::new(token, None)?)
             .await
     }
 
-    pub async fn check_super_admin(
+    pub async fn check_beamline_admin(
         &self,
         token: Option<&Authorization<Bearer>>,
+        beamline: &str,
     ) -> Result<(), AuthError> {
-        self.authorise(&self.admin, SuperAdminRequest::new(token)?)
+        self.authorise(&self.admin, AdminRequest::new(token, Some(beamline))?)
             .await
     }
 
@@ -304,7 +288,7 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         check
-            .check_admin(token("token").as_ref(), "i22")
+            .check_beamline_admin(token("token").as_ref(), "i22")
             .await
             .unwrap();
         mock.assert();
@@ -366,7 +350,9 @@ mod tests {
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
-        let result = check.check_admin(token("token").as_ref(), "i22").await;
+        let result = check
+            .check_beamline_admin(token("token").as_ref(), "i22")
+            .await;
         let Err(AuthError::Failed) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -406,7 +392,7 @@ mod tests {
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
-        let result = check.check_admin(None, "i22").await;
+        let result = check.check_beamline_admin(None, "i22").await;
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -427,7 +413,9 @@ mod tests {
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
-        let result = check.check_admin(token("token").as_ref(), "i22").await;
+        let result = check
+            .check_beamline_admin(token("token").as_ref(), "i22")
+            .await;
         let Err(AuthError::ServerError(_)) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };

@@ -337,7 +337,10 @@ impl Query {
         ctx: &Context<'_>,
         beamline: String,
     ) -> async_graphql::Result<CurrentConfiguration> {
-        check_auth(ctx, |policy, token| policy.check_admin(token, &beamline)).await?;
+        check_auth(ctx, |policy, token| {
+            policy.check_beamline_admin(token, &beamline)
+        })
+        .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         trace!("Getting config for {beamline:?}");
@@ -360,7 +363,7 @@ impl Query {
         ctx: &Context<'_>,
         beamline_filters: Option<Vec<String>>,
     ) -> async_graphql::Result<Vec<Option<CurrentConfiguration>>> {
-        check_auth(ctx, |policy, token| policy.check_super_admin(token)).await?;
+        check_auth(ctx, |policy, token| policy.check_admin(token)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         let configurations = match beamline_filters {
@@ -445,7 +448,7 @@ impl Mutation {
         beamline: String,
         config: ConfigurationUpdates,
     ) -> async_graphql::Result<CurrentConfiguration> {
-        check_auth(ctx, |pc, token| pc.check_admin(token, &beamline)).await?;
+        check_auth(ctx, |pc, token| pc.check_beamline_admin(token, &beamline)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         trace!("Configuring: {beamline}: {config:?}");
