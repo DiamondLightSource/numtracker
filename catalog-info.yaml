@@ -1,0 +1,31 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: numtracker
+  title: Athena Numtracker
+  description: Service to provide automatic data-file numbering and path management according to existing Diamond conventions.
+  annotations:
+    github.com/project-slug: DiamondLightSource/numtracker
+    diamond.ac.uk/viewdocs-url: https://github.com/DiamondLightSource/numtracker/blob/main/README.md
+spec:
+  type: service
+  lifecycle: production
+  owner: group:data-acquisition
+  system: athena
+  providesApis:
+    - numtracker
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: numtracker
+  title: Athena Numtracker
+  description: GraphQL API for retrieving and generating Visit data-file numbers and paths
+  annotations:
+    github.com/project-slug: DiamondLightSource/numtracker
+spec:
+  type: openapi
+  lifecycle: production
+  owner: user:qan22331
+  definition:
+    $text: ./static/service_schema
