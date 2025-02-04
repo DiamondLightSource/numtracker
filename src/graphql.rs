@@ -362,38 +362,28 @@ impl Query {
         &self,
         ctx: &Context<'_>,
         beamline_filters: Option<Vec<String>>,
-    ) -> async_graphql::Result<Vec<Option<CurrentConfiguration>>> {
+    ) -> async_graphql::Result<Vec<CurrentConfiguration>> {
         check_auth(ctx, |policy, token| policy.check_admin(token)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         let configurations = match beamline_filters {
             Some(filters) => db.configurations(filters).await?,
-            None => db
-                .all_configurations()
-                .await?
-                .into_iter()
-                .map(Option::Some)
-                .collect(),
+            None => db.all_configurations().await?.into_iter().collect(),
         };
 
         futures::future::join_all(configurations.into_iter().map(|cnf| async {
-            match cnf {
-                Some(config) => {
-                    let dir = nt
-                        .for_beamline(config.name(), config.tracker_file_extension())
-                        .await?;
-                    let high_file = dir.prev().await?;
-                    Ok(Some(CurrentConfiguration {
-                        db_config: config,
-                        high_file,
-                    }))
-                }
-                None => Ok(None),
-            }
+            let dir = nt
+                .for_beamline(cnf.name(), cnf.tracker_file_extension())
+                .await?;
+            let high_file = dir.prev().await?;
+            Ok(CurrentConfiguration {
+                db_config: cnf,
+                high_file,
+            })
         }))
         .await
         .into_iter()
-        .collect::<Result<Vec<Option<CurrentConfiguration>>, async_graphql::Error>>()
+        .collect::<Result<Vec<CurrentConfiguration>, async_graphql::Error>>()
     }
 }
 
