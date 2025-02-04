@@ -142,10 +142,7 @@ impl GdaNumTracker<'_, '_> {
         if self.ext != file.extension()?.to_str()? {
             return None;
         }
-        match file.file_stem()?.to_str()?.parse() {
-            Ok(val) => Some(val),
-            Err(_) => None,
-        }
+        file.file_stem()?.to_str()?.parse().ok()
     }
 
     /// Find the highest number that has a corresponding number file in this tracker's directory
