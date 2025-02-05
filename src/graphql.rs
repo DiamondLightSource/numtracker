@@ -368,7 +368,7 @@ impl Query {
         let nt = ctx.data::<NumTracker>()?;
         let configurations = match beamline_filters {
             Some(filters) => db.configurations(filters).await?,
-            None => db.all_configurations().await?.into_iter().collect(),
+            None => db.all_configurations().await?,
         };
 
         futures::future::join_all(configurations.into_iter().map(|cnf| async {
@@ -383,7 +383,7 @@ impl Query {
         }))
         .await
         .into_iter()
-        .collect::<Result<Vec<CurrentConfiguration>, async_graphql::Error>>()
+        .collect()
     }
 }
 
