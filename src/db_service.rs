@@ -301,8 +301,7 @@ impl SqliteScanPathService {
         &self,
         filters: Vec<String>,
     ) -> Result<Vec<BeamlineConfiguration>, ConfigurationError> {
-        let mut q: QueryBuilder<Sqlite> =
-            QueryBuilder::new("SELECT * FROM beamline WHERE name in (");
+        let mut q = QueryBuilder::new("SELECT * FROM beamline WHERE name in (");
         let mut beamlines = q.separated(", ");
         for filter in filters {
             beamlines.push_bind(filter);
