@@ -7,6 +7,9 @@ metadata:
   annotations:
     github.com/project-slug: DiamondLightSource/numtracker
     diamond.ac.uk/viewdocs-url: https://github.com/DiamondLightSource/numtracker/blob/main/README.md
+  tags:
+    - rust
+    - graphql
 spec:
   type: service
   lifecycle: production
@@ -26,6 +29,6 @@ metadata:
 spec:
   type: openapi
   lifecycle: production
-  owner: user:qan22331
+  owner: group:data-acquisition
   definition:
     $text: ./static/service_schema
