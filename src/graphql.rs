@@ -258,6 +258,7 @@ impl ScanPaths {
 #[Object]
 /// The current configuration for a beamline
 impl CurrentConfiguration {
+    /// The name of the beamline
     pub async fn beamline(&self) -> async_graphql::Result<&str> {
         Ok(self.db_config.name())
     }
