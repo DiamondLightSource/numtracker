@@ -311,8 +311,7 @@ impl SqliteScanPathService {
 
         let query = q.build();
         let r = query.fetch_all(&self.pool).await?;
-        let res = r
-            .into_iter()
+        r.into_iter()
             .map(|row: sqlx::sqlite::SqliteRow| {
                 use ::sqlx::Row as _;
                 #[allow(non_snake_case)]
@@ -344,9 +343,7 @@ impl SqliteScanPathService {
                     .into(),
                 )
             })
-            .collect();
-
-        res
+            .collect()
     }
 
     pub async fn all_configurations(
