@@ -27,7 +27,6 @@ const AUDIENCE: &str = "account";
 type Token = Authorization<Bearer>;
 
 #[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(Deserialize))]
 struct Request<T> {
     input: T,
 }
@@ -39,7 +38,6 @@ struct Response {
 }
 
 #[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(Deserialize))]
 pub struct AccessRequest<'a> {
     token: &'a str,
     audience: &'a str,
@@ -61,7 +59,6 @@ impl<'a> AccessRequest<'a> {
 }
 
 #[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(Deserialize))]
 pub struct AdminRequest<'a> {
     token: &'a str,
     audience: &'a str,
