@@ -309,40 +309,8 @@ impl SqliteScanPathService {
         }
         q.push(")");
 
-        let query = q.build();
-        let r = query.fetch_all(&self.pool).await?;
-        r.into_iter()
-            .map(|row: sqlx::sqlite::SqliteRow| {
-                use ::sqlx::Row as _;
-                #[allow(non_snake_case, clippy::useless_conversion)]
-                let sqlx_query_as_id = row.try_get_unchecked::<i64, _>(0usize)?.into();
-                #[allow(non_snake_case)]
-                let sqlx_query_as_name = row.try_get_unchecked::<String, _>(1usize)?;
-                #[allow(non_snake_case)]
-                let sqlx_query_as_scan_number = row.try_get_unchecked::<i64, _>(2usize)?;
-                #[allow(non_snake_case)]
-                let sqlx_query_as_visit = row.try_get_unchecked::<String, _>(3usize)?;
-                #[allow(non_snake_case)]
-                let sqlx_query_as_scan = row.try_get_unchecked::<String, _>(4usize)?;
-                #[allow(non_snake_case)]
-                let sqlx_query_as_detector = row.try_get_unchecked::<String, _>(5usize)?;
-                #[allow(non_snake_case)]
-                let sqlx_query_as_tracker_file_extension =
-                    row.try_get_unchecked::<::std::option::Option<String>, _>(6usize)?;
-                ::std::result::Result::Ok(
-                    DbBeamlineConfig {
-                        id: sqlx_query_as_id,
-                        name: sqlx_query_as_name,
-                        scan_number: sqlx_query_as_scan_number,
-                        visit: sqlx_query_as_visit,
-                        scan: sqlx_query_as_scan,
-                        detector: sqlx_query_as_detector,
-                        tracker_file_extension: sqlx_query_as_tracker_file_extension,
-                    }
-                    .into(),
-                )
-            })
-            .collect()
+        let query = q.build_query_as();
+        Ok(query.fetch_all(&self.pool).await?)
     }
 
     pub async fn all_configurations(
