@@ -30,6 +30,9 @@ input ConfigurationUpdates {
 The current configuration for a beamline
 """
 type CurrentConfiguration {
+	"""
+	The name of the beamline
+	"""
 	beamline: String!
 	"""
 	The template used to build the path to the visit directory for a beamline
