@@ -121,7 +121,7 @@ type Query {
 	Get the configurations for all available beamlines
 	Can be filtered to provide one or more specific beamlines
 	"""
-	configurations(beamlineFilters: [String!]): [CurrentConfiguration]!
+	configurations(beamlineFilters: [String!]): [CurrentConfiguration!]!
 }
 
 """
