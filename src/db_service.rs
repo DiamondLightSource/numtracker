@@ -314,22 +314,21 @@ impl SqliteScanPathService {
         r.into_iter()
             .map(|row: sqlx::sqlite::SqliteRow| {
                 use ::sqlx::Row as _;
-                #[allow(non_snake_case)]
+                #[allow(non_snake_case, clippy::useless_conversion)]
                 let sqlx_query_as_id = row.try_get_unchecked::<i64, _>(0usize)?.into();
                 #[allow(non_snake_case)]
-                let sqlx_query_as_name = row.try_get_unchecked::<String, _>(1usize)?.into();
+                let sqlx_query_as_name = row.try_get_unchecked::<String, _>(1usize)?;
                 #[allow(non_snake_case)]
-                let sqlx_query_as_scan_number = row.try_get_unchecked::<i64, _>(2usize)?.into();
+                let sqlx_query_as_scan_number = row.try_get_unchecked::<i64, _>(2usize)?;
                 #[allow(non_snake_case)]
-                let sqlx_query_as_visit = row.try_get_unchecked::<String, _>(3usize)?.into();
+                let sqlx_query_as_visit = row.try_get_unchecked::<String, _>(3usize)?;
                 #[allow(non_snake_case)]
-                let sqlx_query_as_scan = row.try_get_unchecked::<String, _>(4usize)?.into();
+                let sqlx_query_as_scan = row.try_get_unchecked::<String, _>(4usize)?;
                 #[allow(non_snake_case)]
-                let sqlx_query_as_detector = row.try_get_unchecked::<String, _>(5usize)?.into();
+                let sqlx_query_as_detector = row.try_get_unchecked::<String, _>(5usize)?;
                 #[allow(non_snake_case)]
-                let sqlx_query_as_tracker_file_extension = row
-                    .try_get_unchecked::<::std::option::Option<String>, _>(6usize)?
-                    .into();
+                let sqlx_query_as_tracker_file_extension =
+                    row.try_get_unchecked::<::std::option::Option<String>, _>(6usize)?;
                 ::std::result::Result::Ok(
                     DbBeamlineConfig {
                         id: sqlx_query_as_id,
