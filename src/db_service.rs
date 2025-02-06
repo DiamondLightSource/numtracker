@@ -316,16 +316,52 @@ impl SqliteScanPathService {
     }
 
     #[cfg(test)]
-    pub(crate) async fn ro_memory() -> Self {
-        let db = Self::memory().await;
-        db.pool
-            .set_connect_options(SqliteConnectOptions::new().read_only(true));
-        db
+    pub(crate) async fn read_only() -> Self {
+        use sqlx::sqlite::SqlitePoolOptions;
+        use sqlx::{Connection as _, SqliteConnection};
+        use tempfile::NamedTempFile;
+
+        // Use a temp file instead of an in-memory DB to ensure that all connections see the same
+        // data. Sqlite defaults to creating a new DB for each connection and shared cache doesn't
+        // allow some connections to be read-only while some are read-write (required to run the
+        // initial migrations)
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path().to_string_lossy();
+
+        // Set up the DB schema
+        let mut init = SqliteConnection::connect(&path).await.unwrap();
+        sqlx::migrate!().run(&mut init).await.unwrap();
+
+        // Create read-only pool
+        let pool = SqlitePoolOptions::new()
+            // keep a single connection alive so the temp file being deleted doesn't affect it
+            .max_connections(1)
+            .min_connections(1)
+            .max_lifetime(None)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .read_only(true)
+                    .filename(temp_file.path()),
+            )
+            .await
+            .unwrap();
+
+        // temp file may be unlinked here but the connection should still have it open
+        Self { pool }
     }
 
     #[cfg(test)]
     pub(crate) async fn memory() -> Self {
-        let pool = SqlitePool::connect(":memory:").await.unwrap();
+        use sqlx::sqlite::SqlitePoolOptions;
+
+        // Use a single connection so that the same in-memory DB is used for all queries
+        let pool = SqlitePoolOptions::new()
+            .min_connections(1)
+            .max_connections(1)
+            .max_lifetime(None)
+            .connect(":memory:")
+            .await
+            .unwrap();
         sqlx::migrate!().run(&pool).await.unwrap();
         Self { pool }
     }
@@ -493,10 +529,12 @@ mod db_tests {
 
     #[test]
     async fn read_only_db_propagates_errors() {
-        let db = SqliteScanPathService::ro_memory().await;
+        let db = SqliteScanPathService::read_only().await;
         let e = err!(NewConfigurationError::Db, update("i22").insert_new(&db));
         let e = e.into_database_error().unwrap().downcast::<SqliteError>();
         assert_eq!(e.kind(), ErrorKind::Other);
+        // 8 is the magic number for attempting to write to a read-only DB
+        assert_eq!(e.code(), Some("8".into()));
     }
 
     #[test]
