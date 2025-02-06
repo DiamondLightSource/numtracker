@@ -315,12 +315,12 @@ impl SqliteScanPathService {
         .ok_or(ConfigurationError::MissingBeamline(beamline.into()))
     }
 
+    /// Create a db service from a new empty/schema-less DB
     #[cfg(test)]
-    pub(crate) async fn ro_memory() -> Self {
-        let db = Self::memory().await;
-        db.pool
-            .set_connect_options(SqliteConnectOptions::new().read_only(true));
-        db
+    pub(crate) async fn uninitialised() -> Self {
+        Self {
+            pool: SqlitePool::connect(":memory:").await.unwrap(),
+        }
     }
 
     #[cfg(test)]
@@ -492,11 +492,13 @@ mod db_tests {
     }
 
     #[test]
-    async fn read_only_db_propagates_errors() {
-        let db = SqliteScanPathService::ro_memory().await;
+    async fn uninitialised_db_propagates_errors() {
+        let db = SqliteScanPathService::uninitialised().await;
         let e = err!(NewConfigurationError::Db, update("i22").insert_new(&db));
         let e = e.into_database_error().unwrap().downcast::<SqliteError>();
         assert_eq!(e.kind(), ErrorKind::Other);
+        // "1" is the magic number for 'Generic Error'
+        assert_eq!(e.code(), Some("1".into()));
     }
 
     #[test]
