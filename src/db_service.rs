@@ -601,6 +601,65 @@ mod db_tests {
         assert_eq!(ext, "ext");
     }
 
+    #[rstest]
+    #[test]
+    async fn configurations() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(update("i22")
+            .with_scan_number(122)
+            .with_extension("ext")
+            .insert_new(&db));
+        ok!(update("i11")
+            .with_scan_number(111)
+            .with_extension("ext")
+            .insert_new(&db));
+
+        let confs = ok!(db.configurations(vec![
+            "i22".to_string(),
+            "i11".to_string(),
+            "i03".to_string()
+        ]));
+        assert_eq!(confs.len(), 2);
+
+        for conf in confs.iter() {
+            match conf.name() {
+                "i22" => {
+                    assert_eq!(conf.name(), "i22");
+                    assert_eq!(conf.scan_number(), 122);
+                    assert_eq!(
+                        conf.visit().unwrap().to_string(),
+                        "/tmp/{instrument}/data/{year}/{visit}"
+                    );
+                    assert_eq!(
+                        conf.scan().unwrap().to_string(),
+                        "{subdirectory}/{instrument}-{scan_number}"
+                    );
+                    assert_eq!(
+                        conf.detector().unwrap().to_string(),
+                        "{subdirectory}/{instrument}-{scan_number}-{detector}"
+                    );
+                }
+                "i11" => {
+                    assert_eq!(conf.name(), "i11");
+                    assert_eq!(conf.scan_number(), 111);
+                    assert_eq!(
+                        conf.visit().unwrap().to_string(),
+                        "/tmp/{instrument}/data/{year}/{visit}"
+                    );
+                    assert_eq!(
+                        conf.scan().unwrap().to_string(),
+                        "{subdirectory}/{instrument}-{scan_number}"
+                    );
+                    assert_eq!(
+                        conf.detector().unwrap().to_string(),
+                        "{subdirectory}/{instrument}-{scan_number}-{detector}"
+                    );
+                }
+                &_ => todo!(),
+            }
+        }
+    }
+
     type Update = BeamlineConfigurationUpdate;
 
     #[rstest]
