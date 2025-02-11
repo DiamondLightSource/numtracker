@@ -83,9 +83,9 @@ echo '{                                                                         
 </details>
 
 ### Queries (read-only)
-There are two read only queries, one to get the visit directory for a given
-visit and beamline and one to get the current configuration for a given
-beamline.
+There are three read only queries, one to get the visit directory for a given
+visit and beamline, one to get the current configuration for a given
+beamline and one to get the current configuration(s) for one or more beamline.
 
 #### paths
 Get the visit directory for a beamline and visit
@@ -119,7 +119,9 @@ Get the current configuration values for the given beamline
     visitTemplate
     scanTemplate
     detectorTemplate
-    latestScanNumber
+    dbScanNumber
+    fileScanNumber
+    trackerFileExtension
   }
 }
 ```
@@ -131,8 +133,88 @@ Get the current configuration values for the given beamline
     "visitTemplate": "/data/{instrument}/data/{year}/{visit}",
     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
     "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
-    "latestScanNumber": 20839
+    "dbScanNumber": 0,
+    "fileScanNumber": null,
+    "trackerFileExtension": null
   }
+}
+```
+
+#### configurations
+Get the current configuration values for one or more beamlines specified as a list.
+Providing no beamlines returns all current configurations.
+
+##### Query
+```graphql
+{
+    configurations(beamlineFilters: ["i22", "i11"]) {
+    beamline
+    visitTemplate
+    scanTemplate
+    detectorTemplate
+    dbScanNumber
+    fileScanNumber
+    trackerFileExtension
+  }
+}
+```
+
+##### Response
+```json
+{
+  "configurations": [
+      {
+        "beamline": "i11",
+        "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+        "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+        "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+        "dbScanNumber": 0,
+        "fileScanNumber": null,
+        "trackerFileExtension": null
+      },
+      {
+        "beamline": "i22",
+        "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+        "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+        "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+        "dbScanNumber": 0,
+        "fileScanNumber": null,
+        "trackerFileExtension": null
+      }
+    ]
+}
+```
+
+##### Query
+```graphql
+{
+    configurations {
+    beamline
+    visitTemplate
+    scanTemplate
+    detectorTemplate
+    dbScanNumber
+    fileScanNumber
+    trackerFileExtension
+  }
+}
+```
+
+##### Response
+```json
+{
+  "configurations": [
+      {
+        "beamline": "i11",
+        "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+        "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+        "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+        "dbScanNumber": 0,
+        "fileScanNumber": null,
+        "trackerFileExtension": null
+      },
+      ...
+    ]
 }
 ```
 
