@@ -850,14 +850,15 @@ mod tests {
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
-        "configuration": {
-            "beamline":"i22",
-            "visitTemplate": "/tmp/{instrument}/data/{visit}",
-            "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
-            "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
-            "dbScanNumber": 122,
-            "trackerFileExtension": Value::Null
-        }});
+            "configuration": {
+                "beamline":"i22",
+                "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                "dbScanNumber": 122,
+                "trackerFileExtension": Value::Null
+            }
+        });
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
     }
@@ -871,16 +872,18 @@ mod tests {
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
-        "configurations": [
-            {
-                "beamline": "i22",
-                "visitTemplate": "/tmp/{instrument}/data/{visit}",
-                "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
-                "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
-                "dbScanNumber": 122,
-                "fileScanNumber": 122,
-                "trackerFileExtension": Value::Null,
-            }]});
+            "configurations": [
+                {
+                    "beamline": "i22",
+                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                    "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                    "dbScanNumber": 122,
+                    "fileScanNumber": 122,
+                    "trackerFileExtension": Value::Null,
+                }
+            ]
+        });
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
     }
@@ -894,25 +897,27 @@ mod tests {
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
-        "configurations": [
-            {
-                "beamline": "i22",
-                "visitTemplate": "/tmp/{instrument}/data/{visit}",
-                "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
-                "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
-                "dbScanNumber": 122,
-                "fileScanNumber": 122,
-                "trackerFileExtension": Value::Null,
-            },
-            {
-                "beamline": "b21",
-                "visitTemplate": "/tmp/{instrument}/data/{visit}",
-                "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
-                "detectorTemplate": "{subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}",
-                "dbScanNumber": 621,
-                "fileScanNumber": 211,
-                "trackerFileExtension": "b21_ext",
-            },]});
+            "configurations": [
+                {
+                    "beamline": "i22",
+                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                    "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                    "dbScanNumber": 122,
+                    "fileScanNumber": 122,
+                    "trackerFileExtension": Value::Null,
+                },
+                {
+                    "beamline": "b21",
+                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                    "detectorTemplate": "{subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}",
+                    "dbScanNumber": 621,
+                    "fileScanNumber": 211,
+                    "trackerFileExtension": "b21_ext",
+                },
+            ]
+        });
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
     }
