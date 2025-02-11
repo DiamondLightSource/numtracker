@@ -908,7 +908,7 @@ mod tests {
                 "beamline": "b21",
                 "visitTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
-                "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                "detectorTemplate": "{subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}",
                 "dbScanNumber": 621,
                 "fileScanNumber": 211,
                 "trackerFileExtension": "b21_ext",
