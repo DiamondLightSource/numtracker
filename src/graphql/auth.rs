@@ -27,7 +27,6 @@ const AUDIENCE: &str = "account";
 type Token = Authorization<Bearer>;
 
 #[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(Deserialize))]
 struct Request<T> {
     input: T,
 }
@@ -39,7 +38,6 @@ struct Response {
 }
 
 #[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(Deserialize))]
 pub struct AccessRequest<'a> {
     token: &'a str,
     audience: &'a str,
@@ -61,15 +59,15 @@ impl<'a> AccessRequest<'a> {
 }
 
 #[derive(Debug, Serialize)]
-#[cfg_attr(test, derive(Deserialize))]
 pub struct AdminRequest<'a> {
     token: &'a str,
     audience: &'a str,
-    beamline: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    beamline: Option<&'a str>,
 }
 
 impl<'r> AdminRequest<'r> {
-    fn new(token: Option<&'r Token>, beamline: &'r str) -> Result<Self, AuthError> {
+    fn new(token: Option<&'r Token>, beamline: Option<&'r str>) -> Result<Self, AuthError> {
         Ok(Self {
             token: token.ok_or(AuthError::Missing)?.token(),
             audience: AUDIENCE,
@@ -135,9 +133,17 @@ impl PolicyCheck {
     pub async fn check_admin(
         &self,
         token: Option<&Authorization<Bearer>>,
+    ) -> Result<(), AuthError> {
+        self.authorise(&self.admin, AdminRequest::new(token, None)?)
+            .await
+    }
+
+    pub async fn check_beamline_admin(
+        &self,
+        token: Option<&Authorization<Bearer>>,
         beamline: &str,
     ) -> Result<(), AuthError> {
-        self.authorise(&self.admin, AdminRequest::new(token, beamline)?)
+        self.authorise(&self.admin, AdminRequest::new(token, Some(beamline))?)
             .await
     }
 
@@ -258,7 +264,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn successful_admin_check() {
+    async fn successful_check_beamline_admin() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|when, then| {
@@ -280,9 +286,34 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         check
-            .check_admin(token("token").as_ref(), "i22")
+            .check_beamline_admin(token("token").as_ref(), "i22")
             .await
             .unwrap();
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn successful_check_admin() {
+        let server = MockServer::start();
+        let mock = server
+            .mock_async(|when, then| {
+                when.method("POST")
+                    .path("/demo/admin")
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": true}));
+            })
+            .await;
+        let check = PolicyCheck::new(PolicyOptions {
+            policy_host: server.url(""),
+            access_query: "demo/access".into(),
+            admin_query: "demo/admin".into(),
+        });
+        check.check_admin(token("token").as_ref()).await.unwrap();
         mock.assert();
     }
 
@@ -321,7 +352,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn denied_admin_check() {
+    async fn denied_check_beamline_admin() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|when, then| {
@@ -342,7 +373,37 @@ mod tests {
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
-        let result = check.check_admin(token("token").as_ref(), "i22").await;
+        let result = check
+            .check_beamline_admin(token("token").as_ref(), "i22")
+            .await;
+        let Err(AuthError::Failed) = result else {
+            panic!("Unexpected result from unauthorised check: {result:?}");
+        };
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn denied_check_admin() {
+        let server = MockServer::start();
+        let mock = server
+            .mock_async(|when, then| {
+                when.method("POST")
+                    .path("/demo/admin")
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": false}));
+            })
+            .await;
+        let check = PolicyCheck::new(PolicyOptions {
+            policy_host: server.url(""),
+            access_query: "demo/access".into(),
+            admin_query: "demo/admin".into(),
+        });
+        let result = check.check_admin(token("token").as_ref()).await;
         let Err(AuthError::Failed) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -370,7 +431,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unauthorised_admin_check() {
+    async fn unauthorised_check_beamline_admin() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|_, _| {
@@ -382,7 +443,27 @@ mod tests {
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
-        let result = check.check_admin(None, "i22").await;
+        let result = check.check_beamline_admin(None, "i22").await;
+        let Err(AuthError::Missing) = result else {
+            panic!("Unexpected result from unauthorised check: {result:?}");
+        };
+        mock.assert_hits(0);
+    }
+
+    #[tokio::test]
+    async fn unauthorised_check_admin() {
+        let server = MockServer::start();
+        let mock = server
+            .mock_async(|_, _| {
+                // mock that rejects every request
+            })
+            .await;
+        let check = PolicyCheck::new(PolicyOptions {
+            policy_host: server.url(""),
+            access_query: "demo/access".into(),
+            admin_query: "demo/admin".into(),
+        });
+        let result = check.check_admin(None).await;
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -403,7 +484,9 @@ mod tests {
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
-        let result = check.check_admin(token("token").as_ref(), "i22").await;
+        let result = check
+            .check_beamline_admin(token("token").as_ref(), "i22")
+            .await;
         let Err(AuthError::ServerError(_)) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };

@@ -258,6 +258,10 @@ impl ScanPaths {
 #[Object]
 /// The current configuration for a beamline
 impl CurrentConfiguration {
+    /// The name of the beamline
+    pub async fn beamline(&self) -> async_graphql::Result<&str> {
+        Ok(self.db_config.name())
+    }
     /// The template used to build the path to the visit directory for a beamline
     pub async fn visit_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.visit()?.to_string())
@@ -334,7 +338,10 @@ impl Query {
         ctx: &Context<'_>,
         beamline: String,
     ) -> async_graphql::Result<CurrentConfiguration> {
-        check_auth(ctx, |policy, token| policy.check_admin(token, &beamline)).await?;
+        check_auth(ctx, |policy, token| {
+            policy.check_beamline_admin(token, &beamline)
+        })
+        .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         trace!("Getting config for {beamline:?}");
@@ -347,6 +354,37 @@ impl Query {
             db_config: conf,
             high_file,
         })
+    }
+
+    /// Get the configurations for all available beamlines
+    /// Can be filtered to provide one or more specific beamlines
+    #[instrument(skip(self, ctx))]
+    async fn configurations(
+        &self,
+        ctx: &Context<'_>,
+        beamline_filters: Option<Vec<String>>,
+    ) -> async_graphql::Result<Vec<CurrentConfiguration>> {
+        check_auth(ctx, |policy, token| policy.check_admin(token)).await?;
+        let db = ctx.data::<SqliteScanPathService>()?;
+        let nt = ctx.data::<NumTracker>()?;
+        let configurations = match beamline_filters {
+            Some(filters) => db.configurations(filters).await?,
+            None => db.all_configurations().await?,
+        };
+
+        futures::future::join_all(configurations.into_iter().map(|cnf| async {
+            let dir = nt
+                .for_beamline(cnf.name(), cnf.tracker_file_extension())
+                .await?;
+            let high_file = dir.prev().await?;
+            Ok(CurrentConfiguration {
+                db_config: cnf,
+                high_file,
+            })
+        }))
+        .await
+        .into_iter()
+        .collect()
     }
 }
 
@@ -401,7 +439,7 @@ impl Mutation {
         beamline: String,
         config: ConfigurationUpdates,
     ) -> async_graphql::Result<CurrentConfiguration> {
-        check_auth(ctx, |pc, token| pc.check_admin(token, &beamline)).await?;
+        check_auth(ctx, |pc, token| pc.check_beamline_admin(token, &beamline)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         trace!("Configuring: {beamline}: {config:?}");
@@ -634,7 +672,7 @@ mod tests {
     use super::auth::PolicyCheck;
     use super::{ConfigurationUpdates, InputTemplate, Mutation, Query};
     use crate::cli::PolicyOptions;
-    use crate::db_service::SqliteScanPathService;
+    use crate::db_service::{ConfigurationError, SqliteScanPathService};
     use crate::graphql::graphql_schema;
     use crate::numtracker::TempTracker;
 
@@ -808,17 +846,78 @@ mod tests {
     async fn configuration(#[future(awt)] env: TestEnv) {
         let query = r#"{
         configuration(beamline: "i22") {
-            visitTemplate scanTemplate detectorTemplate dbScanNumber trackerFileExtension
+            beamline visitTemplate scanTemplate detectorTemplate dbScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
-        "configuration": {
-            "visitTemplate": "/tmp/{instrument}/data/{visit}",
-            "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
-            "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
-            "dbScanNumber": 122,
-            "trackerFileExtension": Value::Null
-        }});
+            "configuration": {
+                "beamline":"i22",
+                "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                "dbScanNumber": 122,
+                "trackerFileExtension": Value::Null
+            }
+        });
+        assert!(result.errors.is_empty());
+        assert_eq!(result.data, exp);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn configurations(#[future(awt)] env: TestEnv) {
+        let query = r#"{
+        configurations(beamlineFilters: ["i22"]) {
+            beamline visitTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
+        }}"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({
+            "configurations": [
+                {
+                    "beamline": "i22",
+                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                    "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                    "dbScanNumber": 122,
+                    "fileScanNumber": 122,
+                    "trackerFileExtension": Value::Null,
+                }
+            ]
+        });
+        assert!(result.errors.is_empty());
+        assert_eq!(result.data, exp);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn configurations_all(#[future(awt)] env: TestEnv) {
+        let query = r#"{
+        configurations {
+            beamline visitTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
+        }}"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({
+            "configurations": [
+                {
+                    "beamline": "i22",
+                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                    "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                    "dbScanNumber": 122,
+                    "fileScanNumber": 122,
+                    "trackerFileExtension": Value::Null,
+                },
+                {
+                    "beamline": "b21",
+                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                    "detectorTemplate": "{subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}",
+                    "dbScanNumber": 621,
+                    "fileScanNumber": 211,
+                    "trackerFileExtension": "b21_ext",
+                },
+            ]
+        });
         assert!(result.errors.is_empty());
         assert_eq!(result.data, exp);
     }
@@ -921,7 +1020,7 @@ mod tests {
     async fn configure_new_beamline(#[future(awt)] env: TestEnv) {
         assert_matches::assert_matches!(
             env.db.current_configuration("i16").await,
-            Err(crate::db_service::ConfigurationError::MissingBeamline(bl)) if bl == "i16"
+            Err(ConfigurationError::MissingBeamline(bl)) if bl == "i16"
         );
 
         let result = env

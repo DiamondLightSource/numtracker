@@ -31,6 +31,10 @@ The current configuration for a beamline
 """
 type CurrentConfiguration {
 	"""
+	The name of the beamline
+	"""
+	beamline: String!
+	"""
 	The template used to build the path to the visit directory for a beamline
 	"""
 	visitTemplate: String!
@@ -116,6 +120,11 @@ type Query {
 	Get the current configuration for the given beamline
 	"""
 	configuration(beamline: String!): CurrentConfiguration!
+	"""
+	Get the configurations for all available beamlines
+	Can be filtered to provide one or more specific beamlines
+	"""
+	configurations(beamlineFilters: [String!]): [CurrentConfiguration!]!
 }
 
 """
