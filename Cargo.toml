@@ -5,7 +5,7 @@ name = "numtracker"
 version = "0.0.0"
 edition = "2021"
 license = "Apache-2.0"
-rust-version = "1.82"
+rust-version = "1.83"
 
 [lints.clippy]
 unwrap_used = "deny"
