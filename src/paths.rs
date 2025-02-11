@@ -179,11 +179,11 @@ impl From<PathTemplateError> for InvalidPathTemplate {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VisitTemplate;
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScanTemplate;
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DetectorTemplate;
 
 impl PathSpec for VisitTemplate {
