@@ -383,6 +383,34 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn denied_super_admin_check() {
+        let server = MockServer::start();
+        let mock = server
+            .mock_async(|when, then| {
+                when.method("POST")
+                    .path("/demo/admin")
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": false}));
+            })
+            .await;
+        let check = PolicyCheck::new(PolicyOptions {
+            policy_host: server.url(""),
+            access_query: "demo/access".into(),
+            admin_query: "demo/admin".into(),
+        });
+        let result = check.check_admin(token("token").as_ref()).await;
+        let Err(AuthError::Failed) = result else {
+            panic!("Unexpected result from unauthorised check: {result:?}");
+        };
+        mock.assert();
+    }
+
+    #[tokio::test]
     async fn unauthorised_access_check() {
         let server = MockServer::start();
         let mock = server
@@ -420,6 +448,31 @@ mod tests {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
         mock.assert_hits(0);
+    }
+
+    #[tokio::test]
+    async fn unauthorised_super_admin_check() {
+        let server = MockServer::start();
+        let mock = server
+            .mock_async(|when, then| {
+                when.method("POST")
+                    .path("/demo/admin")
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": true}));
+            })
+            .await;
+        let check = PolicyCheck::new(PolicyOptions {
+            policy_host: server.url(""),
+            access_query: "demo/access".into(),
+            admin_query: "demo/admin".into(),
+        });
+        check.check_admin(token("token").as_ref()).await.unwrap();
+        mock.assert();
     }
 
     #[tokio::test]
