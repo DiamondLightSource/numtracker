@@ -874,7 +874,7 @@ mod tests {
         "configurations": [
             {
                 "beamline": "i22",
-                "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+                "visitTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                 "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                 "dbScanNumber": 122,
@@ -897,7 +897,7 @@ mod tests {
         "configurations": [
             {
                 "beamline": "i22",
-                "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+                "visitTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                 "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                 "dbScanNumber": 122,
@@ -906,7 +906,7 @@ mod tests {
             },
             {
                 "beamline": "b21",
-                "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+                "visitTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                 "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                 "dbScanNumber": 621,
