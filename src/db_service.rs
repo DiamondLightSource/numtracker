@@ -727,7 +727,7 @@ mod db_tests {
                     };
                     assert_eq!(ext, "ext");
                 }
-                &_ => panic!("Invalid access"),
+                other => panic!("Unexpected beamline name: {other}"),
             }
         }
     }
