@@ -846,11 +846,12 @@ mod tests {
     async fn configuration(#[future(awt)] env: TestEnv) {
         let query = r#"{
         configuration(beamline: "i22") {
-            visitTemplate scanTemplate detectorTemplate dbScanNumber trackerFileExtension
+            beamline visitTemplate scanTemplate detectorTemplate dbScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
         "configuration": {
+            "beamline":"i22",
             "visitTemplate": "/tmp/{instrument}/data/{visit}",
             "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
             "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
