@@ -619,6 +619,7 @@ mod db_tests {
             "i11".to_string(),
             "i03".to_string()
         ]));
+        // i03 has not been configured so it will not fetch it.
         assert_eq!(confs.len(), 2);
 
         for conf in confs.iter() {
@@ -638,6 +639,10 @@ mod db_tests {
                         conf.detector().unwrap().to_string(),
                         "{subdirectory}/{instrument}-{scan_number}-{detector}"
                     );
+                    let Some(ext) = &conf.tracker_file_extension else {
+                        panic!("Missing extension");
+                    };
+                    assert_eq!(ext, "ext");
                 }
                 "i11" => {
                     assert_eq!(conf.name(), "i11");
@@ -654,8 +659,75 @@ mod db_tests {
                         conf.detector().unwrap().to_string(),
                         "{subdirectory}/{instrument}-{scan_number}-{detector}"
                     );
+                    let Some(ext) = &conf.tracker_file_extension else {
+                        panic!("Missing extension");
+                    };
+                    assert_eq!(ext, "ext");
                 }
-                &_ => todo!(),
+                &_ => panic!("Invalid access"),
+            }
+        }
+    }
+
+    #[rstest]
+    #[test]
+    async fn all_configurations() {
+        let db = SqliteScanPathService::memory().await;
+        ok!(update("i22")
+            .with_scan_number(122)
+            .with_extension("ext")
+            .insert_new(&db));
+        ok!(update("i11")
+            .with_scan_number(111)
+            .with_extension("ext")
+            .insert_new(&db));
+
+        let confs = ok!(db.all_configurations());
+        assert_eq!(confs.len(), 2);
+
+        for conf in confs.iter() {
+            match conf.name() {
+                "i22" => {
+                    assert_eq!(conf.name(), "i22");
+                    assert_eq!(conf.scan_number(), 122);
+                    assert_eq!(
+                        conf.visit().unwrap().to_string(),
+                        "/tmp/{instrument}/data/{year}/{visit}"
+                    );
+                    assert_eq!(
+                        conf.scan().unwrap().to_string(),
+                        "{subdirectory}/{instrument}-{scan_number}"
+                    );
+                    assert_eq!(
+                        conf.detector().unwrap().to_string(),
+                        "{subdirectory}/{instrument}-{scan_number}-{detector}"
+                    );
+                    let Some(ext) = &conf.tracker_file_extension else {
+                        panic!("Missing extension");
+                    };
+                    assert_eq!(ext, "ext");
+                }
+                "i11" => {
+                    assert_eq!(conf.name(), "i11");
+                    assert_eq!(conf.scan_number(), 111);
+                    assert_eq!(
+                        conf.visit().unwrap().to_string(),
+                        "/tmp/{instrument}/data/{year}/{visit}"
+                    );
+                    assert_eq!(
+                        conf.scan().unwrap().to_string(),
+                        "{subdirectory}/{instrument}-{scan_number}"
+                    );
+                    assert_eq!(
+                        conf.detector().unwrap().to_string(),
+                        "{subdirectory}/{instrument}-{scan_number}-{detector}"
+                    );
+                    let Some(ext) = &conf.tracker_file_extension else {
+                        panic!("Missing extension");
+                    };
+                    assert_eq!(ext, "ext");
+                }
+                &_ => panic!("Invalid access"),
             }
         }
     }
