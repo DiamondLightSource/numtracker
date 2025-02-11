@@ -41,7 +41,7 @@ pub struct NumtrackerConfig {
     pub extension: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 struct RawPathTemplate<F>(String, PhantomData<F>);
 
 impl<Spec> RawPathTemplate<Spec>
@@ -59,8 +59,14 @@ impl<F> From<String> for RawPathTemplate<F> {
     }
 }
 
+impl<F> From<&str> for RawPathTemplate<F> {
+    fn from(value: &str) -> Self {
+        value.to_string().into()
+    }
+}
+
 /// The current configuration for a beamline
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct BeamlineConfiguration {
     name: String,
     scan_number: u32,
@@ -581,27 +587,17 @@ mod db_tests {
             .with_extension("ext")
             .insert_new(&db));
         let conf = ok!(db.current_configuration("i22"));
-        assert_eq!(conf.name(), "i22");
-        assert_eq!(conf.scan_number(), 122);
-        assert_eq!(
-            conf.visit().unwrap().to_string(),
-            "/tmp/{instrument}/data/{year}/{visit}"
-        );
-        assert_eq!(
-            conf.scan().unwrap().to_string(),
-            "{subdirectory}/{instrument}-{scan_number}"
-        );
-        assert_eq!(
-            conf.detector().unwrap().to_string(),
-            "{subdirectory}/{instrument}-{scan_number}-{detector}"
-        );
-        let Some(ext) = conf.tracker_file_extension else {
-            panic!("Missing extension");
+        let expected = BeamlineConfiguration {
+            name: "i22".into(),
+            scan_number: 122,
+            visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+            scan: "{subdirectory}/{instrument}-{scan_number}".into(),
+            detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
+            tracker_file_extension: Some("ext".into()),
         };
-        assert_eq!(ext, "ext");
+        assert_eq!(conf, expected);
     }
 
-    #[rstest]
     #[test]
     async fn configurations() {
         let db = SqliteScanPathService::memory().await;
@@ -614,62 +610,37 @@ mod db_tests {
             .with_extension("ext")
             .insert_new(&db));
 
-        let confs = ok!(db.configurations(vec![
+        let mut confs = ok!(db.configurations(vec![
             "i22".to_string(),
             "i11".to_string(),
             "i03".to_string()
         ]));
-        // i03 has not been configured so it will not fetch it.
-        assert_eq!(confs.len(), 2);
 
-        for conf in confs.iter() {
-            match conf.name() {
-                "i22" => {
-                    assert_eq!(conf.name(), "i22");
-                    assert_eq!(conf.scan_number(), 122);
-                    assert_eq!(
-                        conf.visit().unwrap().to_string(),
-                        "/tmp/{instrument}/data/{year}/{visit}"
-                    );
-                    assert_eq!(
-                        conf.scan().unwrap().to_string(),
-                        "{subdirectory}/{instrument}-{scan_number}"
-                    );
-                    assert_eq!(
-                        conf.detector().unwrap().to_string(),
-                        "{subdirectory}/{instrument}-{scan_number}-{detector}"
-                    );
-                    let Some(ext) = &conf.tracker_file_extension else {
-                        panic!("Missing extension");
-                    };
-                    assert_eq!(ext, "ext");
-                }
-                "i11" => {
-                    assert_eq!(conf.name(), "i11");
-                    assert_eq!(conf.scan_number(), 111);
-                    assert_eq!(
-                        conf.visit().unwrap().to_string(),
-                        "/tmp/{instrument}/data/{year}/{visit}"
-                    );
-                    assert_eq!(
-                        conf.scan().unwrap().to_string(),
-                        "{subdirectory}/{instrument}-{scan_number}"
-                    );
-                    assert_eq!(
-                        conf.detector().unwrap().to_string(),
-                        "{subdirectory}/{instrument}-{scan_number}-{detector}"
-                    );
-                    let Some(ext) = &conf.tracker_file_extension else {
-                        panic!("Missing extension");
-                    };
-                    assert_eq!(ext, "ext");
-                }
-                other => panic!("Unexpected beamline name: {other}"),
-            }
-        }
+        // Sort returned list as DB order is not guaranteed
+        confs.sort_unstable_by_key(BeamlineConfiguration::scan_number);
+
+        // i03 has not been configured so it will not fetch it.
+        let expected = vec![
+            BeamlineConfiguration {
+                name: "i11".into(),
+                scan_number: 111,
+                visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+                scan: "{subdirectory}/{instrument}-{scan_number}".into(),
+                detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
+                tracker_file_extension: Some("ext".into()),
+            },
+            BeamlineConfiguration {
+                name: "i22".into(),
+                scan_number: 122,
+                visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+                scan: "{subdirectory}/{instrument}-{scan_number}".into(),
+                detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
+                tracker_file_extension: Some("ext".into()),
+            },
+        ];
+        assert_eq!(expected, confs);
     }
 
-    #[rstest]
     #[test]
     async fn all_configurations() {
         let db = SqliteScanPathService::memory().await;
@@ -682,54 +653,32 @@ mod db_tests {
             .with_extension("ext")
             .insert_new(&db));
 
-        let confs = ok!(db.all_configurations());
-        assert_eq!(confs.len(), 2);
+        let mut confs = ok!(db.all_configurations());
 
-        for conf in confs.iter() {
-            match conf.name() {
-                "i22" => {
-                    assert_eq!(conf.name(), "i22");
-                    assert_eq!(conf.scan_number(), 122);
-                    assert_eq!(
-                        conf.visit().unwrap().to_string(),
-                        "/tmp/{instrument}/data/{year}/{visit}"
-                    );
-                    assert_eq!(
-                        conf.scan().unwrap().to_string(),
-                        "{subdirectory}/{instrument}-{scan_number}"
-                    );
-                    assert_eq!(
-                        conf.detector().unwrap().to_string(),
-                        "{subdirectory}/{instrument}-{scan_number}-{detector}"
-                    );
-                    let Some(ext) = &conf.tracker_file_extension else {
-                        panic!("Missing extension");
-                    };
-                    assert_eq!(ext, "ext");
-                }
-                "i11" => {
-                    assert_eq!(conf.name(), "i11");
-                    assert_eq!(conf.scan_number(), 111);
-                    assert_eq!(
-                        conf.visit().unwrap().to_string(),
-                        "/tmp/{instrument}/data/{year}/{visit}"
-                    );
-                    assert_eq!(
-                        conf.scan().unwrap().to_string(),
-                        "{subdirectory}/{instrument}-{scan_number}"
-                    );
-                    assert_eq!(
-                        conf.detector().unwrap().to_string(),
-                        "{subdirectory}/{instrument}-{scan_number}-{detector}"
-                    );
-                    let Some(ext) = &conf.tracker_file_extension else {
-                        panic!("Missing extension");
-                    };
-                    assert_eq!(ext, "ext");
-                }
-                other => panic!("Unexpected beamline name: {other}"),
-            }
-        }
+        // Sort returned list as DB order is not guaranteed
+        confs.sort_unstable_by_key(BeamlineConfiguration::scan_number);
+
+        // i03 has not been configured so it will not fetch it.
+        assert_eq!(confs.len(), 2);
+        let expected = vec![
+            BeamlineConfiguration {
+                name: "i11".into(),
+                scan_number: 111,
+                visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+                scan: "{subdirectory}/{instrument}-{scan_number}".into(),
+                detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
+                tracker_file_extension: Some("ext".into()),
+            },
+            BeamlineConfiguration {
+                name: "i22".into(),
+                scan_number: 122,
+                visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+                scan: "{subdirectory}/{instrument}-{scan_number}".into(),
+                detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
+                tracker_file_extension: Some("ext".into()),
+            },
+        ];
+        assert_eq!(expected, confs);
     }
 
     type Update = BeamlineConfigurationUpdate;
