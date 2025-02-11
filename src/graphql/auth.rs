@@ -62,6 +62,7 @@ impl<'a> AccessRequest<'a> {
 pub struct AdminRequest<'a> {
     token: &'a str,
     audience: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
     beamline: Option<&'a str>,
 }
 
@@ -288,6 +289,31 @@ mod tests {
             .check_beamline_admin(token("token").as_ref(), "i22")
             .await
             .unwrap();
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn successful_super_admin_check() {
+        let server = MockServer::start();
+        let mock = server
+            .mock_async(|when, then| {
+                when.method("POST")
+                    .path("/demo/admin")
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": true}));
+            })
+            .await;
+        let check = PolicyCheck::new(PolicyOptions {
+            policy_host: server.url(""),
+            access_query: "demo/access".into(),
+            admin_query: "demo/admin".into(),
+        });
+        check.check_admin(token("token").as_ref()).await.unwrap();
         mock.assert();
     }
 
