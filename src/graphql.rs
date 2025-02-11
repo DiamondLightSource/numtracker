@@ -864,6 +864,61 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
+    async fn configurations(#[future(awt)] env: TestEnv) {
+        let query = r#"{
+        configurations(beamlineFilters: ["i22"]) {
+            beamline visitTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
+        }}"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({
+        "configurations": [
+            {
+                "beamline": "i22",
+                "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+                "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                "dbScanNumber": 122,
+                "fileScanNumber": 122,
+                "trackerFileExtension": Value::Null,
+            }]});
+        assert!(result.errors.is_empty());
+        assert_eq!(result.data, exp);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn configurations_all(#[future(awt)] env: TestEnv) {
+        let query = r#"{
+        configurations {
+            beamline visitTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
+        }}"#;
+        let result = env.schema.execute(query).await;
+        let exp = value!({
+        "configurations": [
+            {
+                "beamline": "i22",
+                "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+                "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                "dbScanNumber": 122,
+                "fileScanNumber": 122,
+                "trackerFileExtension": Value::Null,
+            },
+            {
+                "beamline": "b21",
+                "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+                "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
+                "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
+                "dbScanNumber": 621,
+                "fileScanNumber": 211,
+                "trackerFileExtension": "b21_ext",
+            },]});
+        assert!(result.errors.is_empty());
+        assert_eq!(result.data, exp);
+    }
+
+    #[rstest]
+    #[tokio::test]
     async fn custom_tracker_file_extension(#[future(awt)] env: TestEnv) {
         let result = env
             .schema
