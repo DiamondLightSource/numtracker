@@ -264,7 +264,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn successful_admin_check() {
+    async fn successful_check_beamline_admin() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|when, then| {
@@ -293,7 +293,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn successful_super_admin_check() {
+    async fn successful_check_admin() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|when, then| {
@@ -352,7 +352,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn denied_admin_check() {
+    async fn denied_check_beamline_admin() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|when, then| {
@@ -383,7 +383,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn denied_super_admin_check() {
+    async fn denied_check_admin() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|when, then| {
@@ -431,7 +431,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unauthorised_admin_check() {
+    async fn unauthorised_check_beamline_admin() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|_, _| {
@@ -451,7 +451,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unauthorised_super_admin_check() {
+    async fn unauthorised_check_admin() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|_, _| {
