@@ -295,6 +295,22 @@ impl CurrentConfiguration {
     }
 }
 
+impl CurrentConfiguration {
+    async fn for_config(
+        db_config: BeamlineConfiguration,
+        nt: &NumTracker,
+    ) -> async_graphql::Result<Self> {
+        let dir = nt
+            .for_beamline(db_config.name(), db_config.tracker_file_extension())
+            .await?;
+        let high_file = dir.prev().await?;
+        Ok(CurrentConfiguration {
+            db_config,
+            high_file,
+        })
+    }
+}
+
 impl FieldSource<ScanField> for ScanPaths {
     fn resolve(&self, field: &ScanField) -> Cow<'_, str> {
         match field {
@@ -346,14 +362,7 @@ impl Query {
         let nt = ctx.data::<NumTracker>()?;
         trace!("Getting config for {beamline:?}");
         let conf = db.current_configuration(&beamline).await?;
-        let dir = nt
-            .for_beamline(&beamline, conf.tracker_file_extension())
-            .await?;
-        let high_file = dir.prev().await?;
-        Ok(CurrentConfiguration {
-            db_config: conf,
-            high_file,
-        })
+        CurrentConfiguration::for_config(conf, nt).await
     }
 
     /// Get the configurations for all available beamlines
@@ -372,16 +381,11 @@ impl Query {
             None => db.all_configurations().await?,
         };
 
-        futures::future::join_all(configurations.into_iter().map(|cnf| async {
-            let dir = nt
-                .for_beamline(cnf.name(), cnf.tracker_file_extension())
-                .await?;
-            let high_file = dir.prev().await?;
-            Ok(CurrentConfiguration {
-                db_config: cnf,
-                high_file,
-            })
-        }))
+        futures::future::join_all(
+            configurations
+                .into_iter()
+                .map(|cnf| CurrentConfiguration::for_config(cnf, nt)),
+        )
         .await
         .into_iter()
         .collect()
@@ -448,14 +452,7 @@ impl Mutation {
             Some(bc) => bc,
             None => upd.insert_new(db).await?,
         };
-        let dir = nt
-            .for_beamline(&beamline, db_config.tracker_file_extension())
-            .await?;
-        let high_file = dir.prev().await?;
-        Ok(CurrentConfiguration {
-            db_config,
-            high_file,
-        })
+        CurrentConfiguration::for_config(db_config, nt).await
     }
 }
 
