@@ -1,0 +1,4 @@
+# Configuration for converting the README to a legible github pages page
+markdown: kramdown
+kramdown:
+  parse_block_html: true
