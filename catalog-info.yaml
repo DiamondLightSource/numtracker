@@ -6,7 +6,7 @@ metadata:
   description: Service to provide automatic data-file numbering and path management according to existing Diamond conventions.
   annotations:
     github.com/project-slug: DiamondLightSource/numtracker
-    diamond.ac.uk/viewdocs-url: https://github.com/DiamondLightSource/numtracker/blob/main/README.md
+    diamond.ac.uk/viewdocs-url: https://diamondlightsource.github.io/numtracker
   tags:
     - rust
     - graphql
