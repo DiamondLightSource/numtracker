@@ -27,14 +27,15 @@ pub enum BeamlineField {
     Instrument,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ScanField {
     Subdirectory,
     ScanNumber,
     Beamline(BeamlineField),
+    Custom(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DetectorField {
     Detector,
     Scan(ScanField),
@@ -57,6 +58,7 @@ impl Display for ScanField {
             ScanField::Subdirectory => f.write_str("subdirectory"),
             ScanField::ScanNumber => f.write_str("scan_number"),
             ScanField::Beamline(bl) => write!(f, "{bl}"),
+            ScanField::Custom(field) => write!(f, "{field}"),
         }
     }
 }
@@ -100,7 +102,10 @@ impl TryFrom<String> for ScanField {
         match value.as_str() {
             "scan_number" => Ok(ScanField::ScanNumber),
             "subdirectory" => Ok(ScanField::Subdirectory),
-            _ => Ok(ScanField::Beamline(BeamlineField::try_from(value)?)),
+            _ => match BeamlineField::try_from(value) {
+                Ok(bf) => Ok(ScanField::Beamline(bf)),
+                Err(InvalidKey(value)) => Ok(ScanField::Custom(value)),
+            },
         }
     }
 }

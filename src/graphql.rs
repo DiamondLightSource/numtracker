@@ -14,6 +14,7 @@
 
 use std::any;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Display;
 use std::future::Future;
@@ -147,12 +148,19 @@ struct VisitPath {
 struct ScanPaths {
     visit: VisitPath,
     subdirectory: Subdirectory,
+    metadata: HashMap<String, String>,
 }
 
 /// GraphQL type to provide current configuration for a beamline
 struct CurrentConfiguration {
     db_config: BeamlineConfiguration,
     high_file: Option<u32>,
+}
+
+#[derive(Debug, InputObject)]
+struct MetaKeyValue {
+    key: String,
+    value: String,
 }
 
 /// Error to be returned when a path contains non-unicode characters
@@ -301,6 +309,12 @@ impl FieldSource<ScanField> for ScanPaths {
             ScanField::Subdirectory => self.subdirectory.to_string().into(),
             ScanField::ScanNumber => self.visit.info.scan_number().to_string().into(),
             ScanField::Beamline(bl) => self.visit.resolve(bl),
+            ScanField::Custom(key) => self
+                .metadata
+                .get(key)
+                .map(|s| s.as_str())
+                .unwrap_or("")
+                .into(),
         }
     }
 }
@@ -399,6 +413,7 @@ impl Mutation {
         beamline: String,
         visit: String,
         sub: Option<Subdirectory>,
+        meta: Option<Vec<MetaKeyValue>>,
     ) -> async_graphql::Result<ScanPaths> {
         check_auth(ctx, |policy, token| {
             policy.check_access(token, &beamline, &visit)
@@ -422,11 +437,18 @@ impl Mutation {
             warn!("Failed to increment tracker file: {e}");
         }
 
+        let metadata = meta
+            .into_iter()
+            .flatten()
+            .map(|kv| (kv.key, kv.value))
+            .collect();
+
         Ok(ScanPaths {
             visit: VisitPath {
                 visit,
                 info: next_scan,
             },
+            metadata,
             subdirectory: sub.unwrap_or_default(),
         })
     }
