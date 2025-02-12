@@ -71,7 +71,7 @@ JSON object as `{"query": "<query-string>"}` taking care to escape quotes as
 required. Using `curl` and a basic visit directory query (see below), this
 looks something like
 ```bash
-echo '{                                                                                        17:15:56
+echo '{
      "query": "{
          paths(beamline: \"i22\", visit: \"cm37278-5\") {
              directory
