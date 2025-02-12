@@ -31,6 +31,8 @@ pub enum BeamlineField {
 pub enum ScanField {
     Subdirectory,
     ScanNumber,
+    YearMonthDay,
+    HourMinuteSecond,
     Beamline(BeamlineField),
 }
 
@@ -57,6 +59,8 @@ impl Display for ScanField {
             ScanField::Subdirectory => f.write_str("subdirectory"),
             ScanField::ScanNumber => f.write_str("scan_number"),
             ScanField::Beamline(bl) => write!(f, "{bl}"),
+            ScanField::YearMonthDay => f.write_str("ts_ymd"),
+            ScanField::HourMinuteSecond => f.write_str("ts_hms"),
         }
     }
 }
@@ -100,6 +104,8 @@ impl TryFrom<String> for ScanField {
         match value.as_str() {
             "scan_number" => Ok(ScanField::ScanNumber),
             "subdirectory" => Ok(ScanField::Subdirectory),
+            "ts_hms" => Ok(ScanField::HourMinuteSecond),
+            "ts_ymd" => Ok(ScanField::YearMonthDay),
             _ => Ok(ScanField::Beamline(BeamlineField::try_from(value)?)),
         }
     }

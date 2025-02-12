@@ -37,7 +37,7 @@ use axum::{Extension, Json, Router};
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use axum_extra::TypedHeader;
-use chrono::{Datelike, Local};
+use chrono::{DateTime, Datelike, Local};
 use tokio::net::TcpListener;
 use tracing::{info, instrument, trace, warn};
 
@@ -147,6 +147,7 @@ struct VisitPath {
 struct ScanPaths {
     visit: VisitPath,
     subdirectory: Subdirectory,
+    timestamp: DateTime<Local>,
 }
 
 /// GraphQL type to provide current configuration for a beamline
@@ -301,6 +302,8 @@ impl FieldSource<ScanField> for ScanPaths {
             ScanField::Subdirectory => self.subdirectory.to_string().into(),
             ScanField::ScanNumber => self.visit.info.scan_number().to_string().into(),
             ScanField::Beamline(bl) => self.visit.resolve(bl),
+            ScanField::YearMonthDay => self.timestamp.format("%Y%m%d").to_string().into(),
+            ScanField::HourMinuteSecond => self.timestamp.format("%H%M%S").to_string().into(),
         }
     }
 }
@@ -427,6 +430,7 @@ impl Mutation {
                 visit,
                 info: next_scan,
             },
+            timestamp: Local::now(),
             subdirectory: sub.unwrap_or_default(),
         })
     }
