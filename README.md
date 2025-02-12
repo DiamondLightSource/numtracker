@@ -59,7 +59,7 @@ cargo run schema
 ## Queries
 
 <details>
-<summary>Testing queries from terminal</summary>
+<summary markdown="span">Testing queries from terminal</summary>
 
 While the graphiql front-end can be useful for exploring the API schema, running
 from the terminal is sometimes quicker/easier. This only requires `curl`
