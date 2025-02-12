@@ -33,7 +33,7 @@ use axum::{Extension, Json, Router};
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use axum_extra::TypedHeader;
-use chrono::{Datelike, Local};
+use chrono::{DateTime, Datelike, Local};
 use derive_more::{Display, Error};
 use tokio::net::TcpListener;
 use tracing::{debug, info, instrument, trace, warn};
@@ -145,6 +145,7 @@ struct DirectoryPath {
 struct ScanPaths {
     directory: DirectoryPath,
     subdirectory: Subdirectory,
+    timestamp: DateTime<Local>,
 }
 
 /// GraphQL type to provide current configuration for an instrument
@@ -308,6 +309,8 @@ impl FieldSource<ScanField> for ScanPaths {
             ScanField::Subdirectory => self.subdirectory.to_string().into(),
             ScanField::ScanNumber => self.directory.info.scan_number().to_string().into(),
             ScanField::Directory(dir) => self.directory.resolve(dir),
+            ScanField::YearMonthDay => self.timestamp.format("%Y%m%d").to_string().into(),
+            ScanField::HourMinuteSecond => self.timestamp.format("%H%M%S").to_string().into(),
         }
     }
 }
@@ -425,6 +428,7 @@ impl Mutation {
                 instrument_session,
                 info: next_scan,
             },
+            timestamp: Local::now(),
             subdirectory: sub.unwrap_or_default(),
         })
     }
