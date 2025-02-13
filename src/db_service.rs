@@ -19,7 +19,7 @@ use std::path::Path;
 pub use error::ConfigurationError;
 use error::NewConfigurationError;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
-use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
+use sqlx::{query, query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
 
 use crate::paths::{
@@ -33,6 +33,12 @@ type SqliteTemplateResult<F> = Result<PathTemplate<F>, InvalidPathTemplate>;
 #[derive(Clone)]
 pub struct SqliteScanPathService {
     pool: SqlitePool,
+}
+
+#[derive(Debug)]
+pub struct NamedTemplate {
+    pub name: String,
+    pub template: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -339,6 +345,39 @@ impl SqliteScanPathService {
         .await?
         .map(InstrumentConfiguration::from)
         .ok_or(ConfigurationError::MissingInstrument(instrument.into()))
+    }
+
+    pub async fn additional_templates(
+        &self,
+        beamline: &str,
+    ) -> Result<Vec<NamedTemplate>, ConfigurationError> {
+        Ok(query_as!(
+            NamedTemplate,
+            "SELECT templates.name, templates.template
+                FROM beamline JOIN templates ON beamline.id = templates.beamline
+                WHERE beamline.name = ?",
+            beamline
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
+    pub async fn register_template(
+        &self,
+        beamline: &str,
+        name: String,
+        template: String,
+    ) -> Result<(), ConfigurationError> {
+        query!(
+            "INSERT INTO templates (name, template, beamline)
+                VALUES (?, ?, (SELECT id FROM beamline WHERE name = ?));",
+            name,
+            template,
+            beamline
+        )
+        .execute(&self.pool)
+        .await?;
+        Ok(())
     }
 
     /// Create a db service from a new empty/schema-less DB

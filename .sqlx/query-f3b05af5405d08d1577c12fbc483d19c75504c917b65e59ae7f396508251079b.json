@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT templates.name, templates.template\n                FROM beamline JOIN templates ON beamline.id = templates.beamline\n                WHERE beamline.name = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "template",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "f3b05af5405d08d1577c12fbc483d19c75504c917b65e59ae7f396508251079b"
+}
