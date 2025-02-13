@@ -16,8 +16,8 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::path::Path;
 
-pub use error::ConfigurationError;
 use error::NewConfigurationError;
+pub use error::{ConfigurationError, NamedTemplateError};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
 use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
@@ -39,6 +39,21 @@ pub struct SqliteScanPathService {
 pub struct NumtrackerConfig {
     pub directory: String,
     pub extension: String,
+}
+
+#[derive(Debug)]
+pub struct NamedTemplate {
+    pub name: String,
+    pub template: String,
+}
+
+impl<'r> FromRow<'r, SqliteRow> for NamedTemplate {
+    fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            name: row.try_get("name")?,
+            template: row.try_get("template")?,
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -347,6 +362,54 @@ impl SqliteScanPathService {
         .ok_or(ConfigurationError::MissingBeamline(beamline.into()))
     }
 
+    pub async fn all_additional_templates(
+        &self,
+        beamline: &str,
+    ) -> Result<Vec<NamedTemplate>, ConfigurationError> {
+        Ok(query_as!(
+            NamedTemplate,
+            "SELECT name, template FROM beamline_template WHERE beamline = ?",
+            beamline
+        )
+        .fetch_all(&self.pool)
+        .await?)
+    }
+    pub async fn additional_templates(
+        &self,
+        beamline: &str,
+        names: Vec<String>,
+    ) -> Result<Vec<NamedTemplate>, ConfigurationError> {
+        let mut q =
+            QueryBuilder::new("SELECT name, template FROM beamline_template WHERE beamline = ");
+        q.push_bind(beamline);
+        q.push(" AND name IN (");
+        let mut name_query = q.separated(", ");
+        for name in names {
+            name_query.push_bind(name);
+        }
+        q.push(")");
+        let query = q.build_query_as();
+        Ok(query.fetch_all(&self.pool).await?)
+    }
+
+    pub async fn register_template(
+        &self,
+        beamline: &str,
+        name: String,
+        template: String,
+    ) -> Result<NamedTemplate, NamedTemplateError> {
+        Ok(query_as!(
+            NamedTemplate,
+            "INSERT INTO template (name, template, beamline)
+                VALUES (?, ?, (SELECT id FROM beamline WHERE name = ?)) RETURNING name, template;",
+            name,
+            template,
+            beamline
+        )
+        .fetch_one(&self.pool)
+        .await?)
+    }
+
     #[cfg(test)]
     pub(crate) async fn ro_memory() -> Self {
         let db = Self::memory().await;
@@ -376,6 +439,8 @@ impl fmt::Debug for SqliteScanPathService {
 mod error {
     use std::error::Error;
     use std::fmt::{self, Display};
+
+    use sqlx::error::ErrorKind;
 
     #[derive(Debug)]
     pub enum ConfigurationError {
@@ -432,6 +497,64 @@ mod error {
     impl From<sqlx::Error> for NewConfigurationError {
         fn from(value: sqlx::Error) -> Self {
             Self::Db(value)
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum NamedTemplateError {
+        MissingBeamline,
+        EmptyName,
+        EmptyTemplate,
+        DbError(sqlx::Error),
+    }
+
+    impl From<sqlx::Error> for NamedTemplateError {
+        fn from(value: sqlx::Error) -> Self {
+            match value {
+                sqlx::Error::Database(err) => match (err.kind(), err.message().split_once(": ")) {
+                    (ErrorKind::NotNullViolation, Some((_, "template.beamline"))) => {
+                        NamedTemplateError::MissingBeamline
+                    }
+                    // pretty sure these two are not possible as strings can't be null
+                    (ErrorKind::NotNullViolation, Some((_, "template.name"))) => {
+                        NamedTemplateError::EmptyName
+                    }
+                    (ErrorKind::NotNullViolation, Some((_, "template.template"))) => {
+                        NamedTemplateError::EmptyTemplate
+                    }
+                    // Values are empty - these rely on the named checks in the schema
+                    (ErrorKind::CheckViolation, Some((_, "empty_name"))) => {
+                        NamedTemplateError::EmptyName
+                    }
+                    (ErrorKind::CheckViolation, Some((_, "empty_template"))) => {
+                        NamedTemplateError::EmptyTemplate
+                    }
+                    (_, _) => NamedTemplateError::DbError(sqlx::Error::Database(err)),
+                },
+                err => err.into(),
+            }
+        }
+    }
+
+    impl Display for NamedTemplateError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                NamedTemplateError::MissingBeamline => f.write_str("No configuration for beamline"),
+                NamedTemplateError::EmptyName => f.write_str("Template name was empty"),
+                NamedTemplateError::EmptyTemplate => f.write_str("Template was empty"),
+                NamedTemplateError::DbError(error) => {
+                    write!(f, "Error accessing named template: {error}")
+                }
+            }
+        }
+    }
+
+    impl Error for NamedTemplateError {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            match self {
+                NamedTemplateError::DbError(error) => Some(error),
+                _ => None,
+            }
         }
     }
 }
