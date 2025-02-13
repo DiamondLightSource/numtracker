@@ -14,6 +14,7 @@
 
 use std::any;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::future::Future;
 use std::io::Write;
 use std::path::{Component, PathBuf};
@@ -144,6 +145,7 @@ struct DirectoryPath {
 /// GraphQL type to provide path data for the next scan for a given instrument session
 struct ScanPaths {
     directory: DirectoryPath,
+    extra_templates: HashMap<String, PathTemplate<ScanField>>,
     subdirectory: Subdirectory,
 }
 
@@ -222,6 +224,12 @@ impl ScanPaths {
     #[instrument(skip(self))]
     async fn scan_number(&self) -> u32 {
         self.directory.info.scan_number()
+    }
+
+    async fn template(&self, name: String) -> async_graphql::Result<String> {
+        Ok(path_to_string(
+            self.extra_templates.get(&name).unwrap().render(self),
+        )?)
     }
 
     /// The paths where the given detectors should write their files.
@@ -410,7 +418,7 @@ impl Query {
         names: Option<Vec<String>>,
     ) -> async_graphql::Result<Vec<NamedTemplate>> {
         check_auth(ctx, |policy, token| {
-            policy.check_beamline_admin(token, &beamline)
+            policy.check_instrument_admin(token, &beamline)
         })
         .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
@@ -455,11 +463,38 @@ impl Mutation {
             warn!("Failed to increment tracker file: {e}");
         }
 
+        let required_templates = ctx
+            .field()
+            .selection_set()
+            .filter(|slct| slct.name() == "template")
+            .flat_map(|slct| slct.arguments())
+            .filter_map(|args| {
+                args.get(0).map(|arg| {
+                    let Value::String(name) = &arg.1 else {
+                        panic!("name isn't a string")
+                    };
+                    name.into()
+                })
+            })
+            .collect::<Vec<_>>();
+        let extra_templates = db
+            .additional_templates(&instrument, required_templates)
+            .await?
+            .into_iter()
+            .map(|template| {
+                (
+                    template.name,
+                    ScanTemplate::new_checked(&template.template).unwrap(),
+                )
+            })
+            .collect();
+
         Ok(ScanPaths {
             directory: DirectoryPath {
                 instrument_session,
                 info: next_scan,
             },
+            extra_templates,
             subdirectory: sub.unwrap_or_default(),
         })
     }
@@ -494,7 +529,7 @@ impl Mutation {
         beamline: String,
         template: TemplateInput,
     ) -> async_graphql::Result<NamedTemplate> {
-        check_auth(ctx, |pc, token| pc.check_beamline_admin(token, &beamline)).await?;
+        check_auth(ctx, |pc, token| pc.check_instrument_admin(token, &beamline)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         Ok(db
             .register_template(&beamline, template.name, template.template)
