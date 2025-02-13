@@ -16,10 +16,10 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::path::Path;
 
-pub use error::ConfigurationError;
 use error::NewConfigurationError;
+pub use error::{ConfigurationError, NamedTemplateError};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
-use sqlx::{query, query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
+use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
 
 use crate::paths::{
@@ -39,6 +39,15 @@ pub struct SqliteScanPathService {
 pub struct NamedTemplate {
     pub name: String,
     pub template: String,
+}
+
+impl<'r> FromRow<'r, SqliteRow> for NamedTemplate {
+    fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
+        Ok(Self {
+            name: row.try_get("name")?,
+            template: row.try_get("template")?,
+        })
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -347,19 +356,34 @@ impl SqliteScanPathService {
         .ok_or(ConfigurationError::MissingInstrument(instrument.into()))
     }
 
-    pub async fn additional_templates(
+    pub async fn all_additional_templates(
         &self,
         beamline: &str,
     ) -> Result<Vec<NamedTemplate>, ConfigurationError> {
         Ok(query_as!(
             NamedTemplate,
-            "SELECT templates.name, templates.template
-                FROM beamline JOIN templates ON beamline.id = templates.beamline
-                WHERE beamline.name = ?",
+            "SELECT name, template FROM beamline_template WHERE beamline = ?",
             beamline
         )
         .fetch_all(&self.pool)
         .await?)
+    }
+    pub async fn additional_templates(
+        &self,
+        beamline: &str,
+        names: Vec<String>,
+    ) -> Result<Vec<NamedTemplate>, ConfigurationError> {
+        let mut q =
+            QueryBuilder::new("SELECT name, template FROM beamline_template WHERE beamline = ");
+        q.push_bind(beamline);
+        q.push(" AND name IN (");
+        let mut name_query = q.separated(", ");
+        for name in names {
+            name_query.push_bind(name);
+        }
+        q.push(")");
+        let query = q.build_query_as();
+        Ok(query.fetch_all(&self.pool).await?)
     }
 
     pub async fn register_template(
@@ -367,17 +391,17 @@ impl SqliteScanPathService {
         beamline: &str,
         name: String,
         template: String,
-    ) -> Result<(), ConfigurationError> {
-        query!(
-            "INSERT INTO templates (name, template, beamline)
-                VALUES (?, ?, (SELECT id FROM beamline WHERE name = ?));",
+    ) -> Result<NamedTemplate, NamedTemplateError> {
+        Ok(query_as!(
+            NamedTemplate,
+            "INSERT INTO template (name, template, beamline)
+                VALUES (?, ?, (SELECT id FROM beamline WHERE name = ?)) RETURNING name, template;",
             name,
             template,
             beamline
         )
-        .execute(&self.pool)
-        .await?;
-        Ok(())
+        .fetch_one(&self.pool)
+        .await?)
     }
 
     /// Create a db service from a new empty/schema-less DB
@@ -407,7 +431,9 @@ impl fmt::Debug for SqliteScanPathService {
 }
 
 mod error {
+
     use derive_more::{Display, Error, From};
+    use sqlx::error::ErrorKind;
 
     #[derive(Debug, Display, Error, From)]
     pub enum ConfigurationError {
@@ -429,6 +455,46 @@ mod error {
     impl From<&str> for NewConfigurationError {
         fn from(value: &str) -> Self {
             Self::MissingField(value.into())
+        }
+    }
+
+    #[derive(Debug, Display, Error)]
+    pub enum NamedTemplateError {
+        #[display("No configuration for beamline")]
+        MissingBeamline,
+        #[display("Template name was empty")]
+        EmptyName,
+        #[display("Template was empty")]
+        EmptyTemplate,
+        #[display("Error accessing named template: {_0}")]
+        DbError(sqlx::Error),
+    }
+
+    impl From<sqlx::Error> for NamedTemplateError {
+        fn from(value: sqlx::Error) -> Self {
+            match value {
+                sqlx::Error::Database(err) => match (err.kind(), err.message().split_once(": ")) {
+                    (ErrorKind::NotNullViolation, Some((_, "template.beamline"))) => {
+                        NamedTemplateError::MissingBeamline
+                    }
+                    // pretty sure these two are not possible as strings can't be null
+                    (ErrorKind::NotNullViolation, Some((_, "template.name"))) => {
+                        NamedTemplateError::EmptyName
+                    }
+                    (ErrorKind::NotNullViolation, Some((_, "template.template"))) => {
+                        NamedTemplateError::EmptyTemplate
+                    }
+                    // Values are empty - these rely on the named checks in the schema
+                    (ErrorKind::CheckViolation, Some((_, "empty_name"))) => {
+                        NamedTemplateError::EmptyName
+                    }
+                    (ErrorKind::CheckViolation, Some((_, "empty_template"))) => {
+                        NamedTemplateError::EmptyTemplate
+                    }
+                    (_, _) => NamedTemplateError::DbError(sqlx::Error::Database(err)),
+                },
+                err => err.into(),
+            }
         }
     }
 }
