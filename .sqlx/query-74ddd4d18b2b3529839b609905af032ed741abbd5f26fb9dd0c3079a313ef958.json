@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO templates (name, template, beamline) VALUES (?, ?, (SELECT id FROM beamline WHERE name = ?));",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "74ddd4d18b2b3529839b609905af032ed741abbd5f26fb9dd0c3079a313ef958"
+}
