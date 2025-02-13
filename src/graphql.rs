@@ -14,6 +14,7 @@
 
 use std::any;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::Display;
 use std::future::Future;
@@ -146,6 +147,7 @@ struct VisitPath {
 /// GraphQL type to provide path data for the next scan for a given visit
 struct ScanPaths {
     visit: VisitPath,
+    extra_templates: HashMap<String, PathTemplate<ScanField>>,
     subdirectory: Subdirectory,
 }
 
@@ -231,6 +233,12 @@ impl ScanPaths {
     #[instrument(skip(self))]
     async fn scan_number(&self) -> u32 {
         self.visit.info.scan_number()
+    }
+
+    async fn template(&self, name: String) -> async_graphql::Result<String> {
+        Ok(path_to_string(
+            self.extra_templates.get(&name).unwrap().render(self),
+        )?)
     }
 
     /// The paths where the given detectors should write their files.
@@ -457,11 +465,38 @@ impl Mutation {
             warn!("Failed to increment tracker file: {e}");
         }
 
+        let required_templates = ctx
+            .field()
+            .selection_set()
+            .filter(|slct| slct.name() == "template")
+            .flat_map(|slct| slct.arguments())
+            .filter_map(|args| {
+                args.get(0).map(|arg| {
+                    let Value::String(name) = &arg.1 else {
+                        panic!("name isn't a string")
+                    };
+                    name.into()
+                })
+            })
+            .collect::<Vec<_>>();
+        let extra_templates = db
+            .additional_templates(&beamline, required_templates)
+            .await?
+            .into_iter()
+            .map(|template| {
+                (
+                    template.name,
+                    ScanTemplate::new_checked(&template.template).unwrap(),
+                )
+            })
+            .collect();
+
         Ok(ScanPaths {
             visit: VisitPath {
                 visit,
                 info: next_scan,
             },
+            extra_templates,
             subdirectory: sub.unwrap_or_default(),
         })
     }
