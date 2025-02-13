@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT templates.name, templates.template\n                FROM beamline JOIN templates ON beamline.id = templates.beamline\n                WHERE beamline.name = ?",
+  "query": "SELECT name, template FROM beamline_template WHERE beamline = ?",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "f3b05af5405d08d1577c12fbc483d19c75504c917b65e59ae7f396508251079b"
+  "hash": "15bdb26777072892c7feb712ae373379f45ec83a36351fc19353f8f48262c79e"
 }

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO template (name, template, beamline)\n                VALUES (?, ?, (SELECT id FROM beamline WHERE name = ?)) RETURNING name, template;",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "template",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "b09ef7bc16a56728acaf3b4a9e899bf4d9e2893f77b02765f9c9712f74b0e56b"
+}
