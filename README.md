@@ -59,7 +59,7 @@ cargo run schema
 ## Queries
 
 <details>
-<summary>Testing queries from terminal</summary>
+<summary markdown="span">Testing queries from terminal</summary>
 
 While the graphiql front-end can be useful for exploring the API schema, running
 from the terminal is sometimes quicker/easier. This only requires `curl`
@@ -71,7 +71,7 @@ JSON object as `{"query": "<query-string>"}` taking care to escape quotes as
 required. Using `curl` and a basic visit directory query (see below), this
 looks something like
 ```bash
-echo '{                                                                                        17:15:56
+echo '{
      "query": "{
          paths(beamline: \"i22\", visit: \"cm37278-5\") {
              directory
