@@ -1,0 +1,27 @@
+mutation ConfigureMutation($beamline: String!, $scan: String, $visit: String, $detector: String, $scan_number: Int, $ext: String) {
+    configure(beamline: $beamline, config: {
+        scan: $scan,
+        visit: $visit,
+        detector: $detector,
+        scanNumber: $scan_number,
+        trackerFileExtension: $ext
+    }) {
+        visitTemplate
+        scanTemplate
+        detectorTemplate
+        dbScanNumber
+        fileScanNumber
+        trackerFileExtension
+    }
+}
+
+# mutation ConfigureMutation($beamline: String!, $config: ConfigurationUpdates!) {
+#     configure(beamline: $beamline, config: $config) {
+#         visitTemplate
+#         scanTemplate
+#         detectorTemplate
+#         dbScanNumber
+#         fileScanNumber
+#         trackerFileExtension
+#     }
+# }

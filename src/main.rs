@@ -19,6 +19,7 @@ use tracing::debug;
 
 mod build_info;
 mod cli;
+mod client;
 mod db_service;
 mod graphql;
 mod logging;
@@ -33,6 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     debug!(?args, "Starting numtracker service");
     match args.command {
         Command::Serve(opts) => graphql::serve_graphql(opts).await,
+        Command::Client(opts) => client::run_client(opts).await,
         Command::Schema => {
             graphql::graphql_schema(std::io::stdout()).expect("Failed to write schema")
         }

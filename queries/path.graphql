@@ -1,0 +1,5 @@
+query PathQuery($beamline: String!, $visit: String!) {
+    paths(beamline: $beamline, visit: $visit) {
+        directory
+    }
+}
