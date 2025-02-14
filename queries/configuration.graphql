@@ -1,0 +1,11 @@
+query ConfigurationQuery($beamline: [String!]) {
+  configurations(beamlineFilters: $beamline) {
+    beamline
+    scanTemplate
+    visitTemplate
+    detectorTemplate
+    fileScanNumber
+    dbScanNumber
+    trackerFileExtension
+  }
+}

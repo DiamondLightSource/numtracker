@@ -14,6 +14,7 @@ COPY ./.env ./.env
 COPY ./src ./src
 COPY ./.sqlx ./.sqlx
 COPY ./migrations ./migrations
+COPY ./queries ./queries
 COPY ./static ./static
 # Copy the git directory purely so that the commit information can be included
 # build details provided by the 'built' library. See #99
