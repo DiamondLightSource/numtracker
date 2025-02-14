@@ -1163,7 +1163,7 @@ mod tests {
         graphql_schema(&mut buf).unwrap();
         assert_eq!(
             String::from_utf8(buf).unwrap(),
-            include_str!("../static/service_schema")
+            include_str!("../static/service_schema.graphql")
         );
     }
 }
