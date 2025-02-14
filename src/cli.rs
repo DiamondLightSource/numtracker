@@ -24,8 +24,6 @@ use url::Url;
 #[clap(version)]
 #[clap(long_version = crate::build_info::build_info())]
 pub struct Cli {
-    #[clap(short, long, default_value = "numtracker.db", env = "NUMTRACKER_DB")]
-    pub(crate) db: PathBuf,
     #[clap(flatten, next_help_heading = "Logging/Debug")]
     verbose: Verbosity,
     #[clap(flatten, next_help_heading = "Tracing and Logging")]
@@ -60,6 +58,8 @@ pub struct ServeOptions {
     /// The port to open for requests
     #[clap(short, long, default_value_t = 8000, env = "NUMTRACKER_PORT")]
     port: u16,
+    #[clap(short, long, default_value = "numtracker.db", env = "NUMTRACKER_DB")]
+    pub(crate) db: PathBuf,
     /// The root directory for external number tracking
     #[clap(long, env = "NUMTRACKER_ROOT_DIRECTORY")]
     root_directory: Option<PathBuf>,
@@ -168,7 +168,6 @@ mod tests {
     #[test]
     fn serve_defaults() {
         let cli = Cli::try_parse_from([APP, "serve"]).unwrap();
-        assert_eq!(cli.db, PathBuf::from("numtracker.db"));
         assert_eq!(cli.verbose.log_level(), Some(Level::ERROR));
 
         assert_eq!(cli.tracing().tracing_url(), None);
@@ -177,6 +176,7 @@ mod tests {
         let Command::Serve(cmd) = cli.command else {
             panic!("Unexpected subcommand: {:?}", cli.command);
         };
+        assert_eq!(cmd.db, PathBuf::from("numtracker.db"));
         assert_eq!(cmd.addr(), ("0.0.0.0".parse().unwrap(), 8000));
         assert_eq!(cmd.root_directory(), None);
 
