@@ -18,6 +18,7 @@ axum-extra = { version = "0.10.0", features = ["typed-header"] }
 chrono = "0.4.40"
 clap = { version = "4.5.31", features = ["cargo", "derive", "env", "string"] }
 derive_more = { version = "2.0.1", features = ["error", "display", "from", "deref"] }
+directories = "6.0.0"
 futures = "0.3.31"
 graphql_client = "0.14.0"
 opentelemetry = "0.28.0"
@@ -28,6 +29,7 @@ reqwest = { version = "0.12.7", features = ["json", "rustls-tls"], default-featu
 serde = { version = "1.0.219", features = ["derive"] }
 sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.43.0", features = ["full"] }
+toml = "0.8.20"
 tracing = "0.1.41"
 tracing-opentelemetry = "0.29.0"
 tracing-subscriber = { version = "0.3.19", features = ["env-filter"] }
