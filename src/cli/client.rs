@@ -18,6 +18,8 @@ pub struct ClientOptions {
 pub struct ConnectionOptions {
     #[clap(long, short = 'H')]
     host: Option<Url>,
+    #[clap(long)]
+    auth: Option<Url>,
 }
 impl ConnectionOptions {
     pub(crate) fn host(&self) -> &Url {

@@ -2,6 +2,8 @@ use graphql_client::{GraphQLQuery, Response};
 
 use crate::cli::client::{ClientCommand, ClientOptions, ConfigurationOptions, ConnectionOptions};
 
+mod auth;
+
 pub async fn run_client(options: ClientOptions) {
     let ClientOptions {
         connection,
