@@ -15,8 +15,8 @@
 use opentelemetry::trace::{TraceError, TracerProvider as _};
 use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::{SpanExporter, WithExportConfig as _};
-use opentelemetry_sdk::trace::TracerProvider;
-use opentelemetry_sdk::{runtime, Resource};
+use opentelemetry_sdk::trace::SdkTracerProvider;
+use opentelemetry_sdk::Resource;
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_VERSION};
 use opentelemetry_semantic_conventions::SCHEMA_URL;
 use tracing::{Level, Subscriber};
@@ -31,13 +31,15 @@ use url::Url;
 use crate::cli::TracingOptions;
 
 fn resource() -> Resource {
-    Resource::from_schema_url(
-        [
-            KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
-            KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
-        ],
-        SCHEMA_URL,
-    )
+    Resource::builder()
+        .with_schema_url(
+            [
+                KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
+                KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
+            ],
+            SCHEMA_URL,
+        )
+        .build()
 }
 
 fn init_stdout<S>(level: Option<Level>) -> impl Layer<S>
@@ -56,13 +58,12 @@ where
     S: Subscriber + for<'s> LookupSpan<'s>,
 {
     if let Some(endpoint) = endpoint {
-        let provider = TracerProvider::builder()
+        let provider = SdkTracerProvider::builder()
             .with_batch_exporter(
                 SpanExporter::builder()
                     .with_tonic()
                     .with_endpoint(endpoint)
                     .build()?,
-                runtime::Tokio,
             )
             .with_resource(resource())
             .build();
