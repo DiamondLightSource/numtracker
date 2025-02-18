@@ -18,7 +18,7 @@ use std::error::Error;
 use std::fmt::Display;
 use std::future::Future;
 use std::io::Write;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, PathBuf};
 use std::sync::Arc;
 
 use async_graphql::extensions::Tracing;
@@ -55,9 +55,9 @@ use crate::template::{FieldSource, PathTemplate};
 
 mod auth;
 
-pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
+pub async fn serve_graphql(opts: ServeOptions) {
     let server_status = Json(ServerStatus::new());
-    let db = SqliteScanPathService::connect(db)
+    let db = SqliteScanPathService::connect(&opts.db)
         .await
         .expect("Unable to open DB");
     let directory_numtracker = NumTracker::for_root_directory(opts.root_directory())
@@ -1176,7 +1176,7 @@ mod tests {
         graphql_schema(&mut buf).unwrap();
         assert_eq!(
             String::from_utf8(buf).unwrap(),
-            include_str!("../static/service_schema")
+            include_str!("../static/service_schema.graphql")
         );
     }
 }
