@@ -38,7 +38,7 @@ async-std = { version = "1.13.0", features = ["attributes"], default-features = 
 httpmock = { version = "0.7.0", default-features = false }
 rstest = "0.24.0"
 serde_json = { version = "1.0.138", features = ["preserve_order"] }
-tempfile = "3.16.0"
+tempfile = "3.17.1"
 
 [build-dependencies]
 built = { version = "0.7.7", features = ["git2", "chrono"] }
