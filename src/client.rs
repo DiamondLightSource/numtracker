@@ -1,14 +1,19 @@
 use graphql_client::{GraphQLQuery, Response};
+use pkce_auth::pkce_auth;
 
 use crate::cli::client::{ClientCommand, ClientOptions, ConfigurationOptions, ConnectionOptions};
 
 mod auth;
+mod pkce_auth;
 
 pub async fn run_client(options: ClientOptions) {
     let ClientOptions {
         connection,
         command,
     } = options;
+
+    pkce_auth(&"https://authn.diamond.ac.uk/realms/master".parse().unwrap()).await;
+
     match command {
         ClientCommand::Configuration { beamline } => {
             query_configuration(beamline, connection).await

@@ -21,6 +21,7 @@ derive_more = { version = "2.0.1", features = ["error", "display", "from", "dere
 directories = "6.0.0"
 futures = "0.3.31"
 graphql_client = "0.14.0"
+openidconnect = "4.0.0"
 opentelemetry = "0.28.0"
 opentelemetry-otlp = { version = "0.28.0", features = ["grpc-tonic"] }
 opentelemetry-semantic-conventions = "0.28.0"
