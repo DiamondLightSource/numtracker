@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt::Display;
 use std::str::FromStr;
 
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
+use derive_more::{Display, Error, From};
 use serde::{Deserialize, Serialize};
 use tracing::info;
 
@@ -162,36 +162,14 @@ impl PolicyCheck {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Display, Error, From)]
 pub enum AuthError {
+    #[display("Invalid authorization configuration")]
     ServerError(reqwest::Error),
+    #[display("Authentication failed")]
     Failed,
+    #[display("No authentication token was provided")]
     Missing,
-}
-
-impl Display for AuthError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AuthError::ServerError(_) => write!(f, "Invalid authorization configuration"),
-            AuthError::Failed => write!(f, "Authentication failed"),
-            AuthError::Missing => f.write_str("No authentication token was provided"),
-        }
-    }
-}
-
-impl std::error::Error for AuthError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            AuthError::ServerError(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl From<reqwest::Error> for AuthError {
-    fn from(value: reqwest::Error) -> Self {
-        Self::ServerError(value)
-    }
 }
 
 #[cfg(test)]

@@ -13,9 +13,10 @@
 // limitations under the License.
 
 use std::borrow::Cow;
-use std::error::Error;
 use std::fmt::{Debug, Display};
 use std::path::{Component, PathBuf};
+
+use derive_more::{Display, Error};
 
 pub trait FieldSource<F> {
     fn resolve(&self, field: &F) -> Cow<'_, str>;
@@ -90,28 +91,12 @@ impl PathType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Display, Error, PartialEq, Eq)]
 pub enum PathTemplateError {
+    #[display("Path is not valid")]
     InvalidPath,
+    #[display("{_0}")]
     TemplateError(TemplateError),
-}
-
-impl Display for PathTemplateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PathTemplateError::InvalidPath => f.write_str("Path is not valid"),
-            PathTemplateError::TemplateError(e) => write!(f, "{e}"),
-        }
-    }
-}
-
-impl Error for PathTemplateError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            PathTemplateError::InvalidPath => None,
-            PathTemplateError::TemplateError(e) => Some(e),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -127,46 +112,28 @@ enum ParseState {
     PendingLiteral(String),
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Display, Error, PartialEq, Eq)]
+#[display("Error parsing template: {kind} at {position}")]
 pub struct TemplateError {
     position: usize,
     kind: ErrorKind,
 }
 
-impl Display for TemplateError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Error parsing template: {} at {}",
-            self.kind, self.position
-        )
-    }
-}
-
-impl Error for TemplateError {}
-
 /// The reasons why a Template could be invalid
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, Display, PartialEq, Eq, Clone, Copy)]
 pub enum ErrorKind {
     /// Template placeholders cannot contain other placeholders
+    #[display("Nested placeholder")]
     Nested,
     /// Placeholders cannot be empty
+    #[display("Empty placeholder")]
     Empty,
     /// A placeholder was opened but not closed
+    #[display("Unclosed placeholder")]
     Incomplete,
     /// The placeholder was not a recognised key
+    #[display("Invalid placeholder")]
     Unrecognised,
-}
-
-impl Display for ErrorKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ErrorKind::Nested => f.write_str("Nested placeholder"),
-            ErrorKind::Empty => f.write_str("Empty placeholder"),
-            ErrorKind::Incomplete => f.write_str("Unclosed placeholder"),
-            ErrorKind::Unrecognised => f.write_str("Invalid placeholder"),
-        }
-    }
 }
 
 impl TemplateError {

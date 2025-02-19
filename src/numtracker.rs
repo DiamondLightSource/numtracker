@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use std::collections::HashMap;
-use std::fmt::{self, Display};
 use std::io::Error;
 use std::path::{Path, PathBuf};
 
+use derive_more::{Display, Error};
 #[cfg(test)]
 pub use tests::TempTracker;
 use tokio::fs as async_fs;
@@ -162,24 +162,17 @@ impl GdaNumTracker<'_, '_> {
 }
 
 /// Error returned when an extension would result in directory traversal - eg '.foo/../../bar'
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Display, Error, Clone, Copy)]
+#[display("Extension is not valid")]
 pub struct InvalidExtension;
-
-impl Display for InvalidExtension {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("Extension is not valid")
-    }
-}
-
-impl std::error::Error for InvalidExtension {}
 
 #[cfg(test)]
 mod tests {
-    use std::ops::Deref;
     use std::path::Path;
     use std::time::Duration;
     use std::{fs, io};
 
+    use derive_more::Deref;
     use rstest::{fixture, rstest};
     use tempfile::{tempdir, TempDir};
     use tokio::time::timeout;
@@ -187,7 +180,8 @@ mod tests {
     use super::{InvalidExtension, NumTracker};
 
     /// Wrapper around a NumTracker to ensure the tempdir is not dropped while it is still required
-    pub struct TempTracker(pub NumTracker, pub TempDir);
+    #[derive(Deref)]
+    pub struct TempTracker(#[deref] pub NumTracker, pub TempDir);
     impl TempTracker {
         pub fn new<F>(init: F) -> Self
         where
@@ -196,13 +190,6 @@ mod tests {
             let root = tempdir().unwrap();
             init(root.as_ref()).unwrap();
             Self(NumTracker::for_root_directory(Some(&root)).unwrap(), root)
-        }
-    }
-    impl Deref for TempTracker {
-        type Target = NumTracker;
-
-        fn deref(&self) -> &Self::Target {
-            &self.0
         }
     }
 

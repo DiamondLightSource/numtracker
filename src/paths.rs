@@ -13,73 +13,46 @@
 // limitations under the License.
 
 use std::collections::HashSet;
-use std::error::Error;
-use std::fmt::{self, Debug, Display};
+use std::fmt::{Debug, Display};
 use std::hash::Hash;
+
+use derive_more::{Display, Error, From};
 
 use crate::template::{PathTemplate, PathTemplateError};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BeamlineField {
+    #[display("year")]
     Year,
+    #[display("visit")]
     Visit,
+    #[display("proposal")]
     Proposal,
+    #[display("instrument")]
     Instrument,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ScanField {
+    #[display("subdirectory")]
     Subdirectory,
+    #[display("scan_number")]
     ScanNumber,
+    #[display("{_0}")]
     Beamline(BeamlineField),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DetectorField {
+    #[display("detector")]
     Detector,
+    #[display("{_0}")]
     Scan(ScanField),
 }
 
-impl Display for BeamlineField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BeamlineField::Year => f.write_str("year"),
-            BeamlineField::Visit => f.write_str("visit"),
-            BeamlineField::Proposal => f.write_str("proposal"),
-            BeamlineField::Instrument => f.write_str("instrument"),
-        }
-    }
-}
-
-impl Display for ScanField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ScanField::Subdirectory => f.write_str("subdirectory"),
-            ScanField::ScanNumber => f.write_str("scan_number"),
-            ScanField::Beamline(bl) => write!(f, "{bl}"),
-        }
-    }
-}
-
-impl Display for DetectorField {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DetectorField::Detector => f.write_str("detector"),
-            DetectorField::Scan(sc) => write!(f, "{sc}"),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct InvalidKey(String);
-
-impl Display for InvalidKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Unrecognised key: {}", self.0)
-    }
-}
-
-impl Error for InvalidKey {}
+#[derive(Debug, Display, Error)]
+#[display("Unrecognised key: {_0:?}")]
+pub struct InvalidKey(#[error(ignore)] String);
 
 impl TryFrom<String> for BeamlineField {
     type Error = InvalidKey;
@@ -143,40 +116,17 @@ pub trait PathSpec {
     fn describe() -> &'static str;
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Display, Error, From, PartialEq)]
 pub enum InvalidPathTemplate {
+    #[display("{_0}")]
+    #[from]
     TemplateError(PathTemplateError),
+    #[display("Path should be absolute")]
     ShouldBeAbsolute,
+    #[display("Path should be relative")]
     ShouldBeRelative,
-    MissingField(String),
-}
-
-impl Display for InvalidPathTemplate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            InvalidPathTemplate::TemplateError(e) => write!(f, "{e}"),
-            InvalidPathTemplate::ShouldBeAbsolute => f.write_str("Path should be absolute"),
-            InvalidPathTemplate::ShouldBeRelative => f.write_str("Path should be relative"),
-            InvalidPathTemplate::MissingField(fld) => {
-                write!(f, "Template should reference missing field: {fld:?}")
-            }
-        }
-    }
-}
-
-impl Error for InvalidPathTemplate {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            InvalidPathTemplate::TemplateError(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl From<PathTemplateError> for InvalidPathTemplate {
-    fn from(value: PathTemplateError) -> Self {
-        Self::TemplateError(value)
-    }
+    #[display("Template should reference missing field: {_0:?}")]
+    MissingField(#[error(ignore)] String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
