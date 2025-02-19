@@ -14,7 +14,6 @@
 
 use std::any;
 use std::borrow::Cow;
-use std::error::Error;
 use std::fmt::Display;
 use std::future::Future;
 use std::io::Write;
@@ -38,6 +37,7 @@ use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use axum_extra::TypedHeader;
 use chrono::{Datelike, Local};
+use derive_more::{Display, Error};
 use tokio::net::TcpListener;
 use tracing::{info, instrument, trace, warn};
 
@@ -156,7 +156,8 @@ struct CurrentConfiguration {
 }
 
 /// Error to be returned when a path contains non-unicode characters
-#[derive(Debug)]
+#[derive(Debug, Display, Error)]
+#[display("Path contains non-unicode characters")]
 struct NonUnicodePath;
 
 /// Try and convert a path to a string (via `OsString`), returning a `NonUnicodePath`
@@ -166,14 +167,6 @@ fn path_to_string(path: PathBuf) -> Result<String, NonUnicodePath> {
         .into_string()
         .map_err(|_| NonUnicodePath)
 }
-
-impl Display for NonUnicodePath {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Path contains non-unicode characters")
-    }
-}
-
-impl Error for NonUnicodePath {}
 
 #[Object]
 /// The path to a visit directory and the components used to build it
@@ -556,12 +549,14 @@ where
 /// Name of subdirectory within visit directory where data should be written.
 /// Can be nested (eg foo/bar) but cannot include links to parent directories (eg ../foo).
 // Derived Default is OK without validation as empty path is a valid subdirectory
-#[derive(Debug, Default)]
+#[derive(Debug, Display, Default)]
 pub struct Subdirectory(String);
 
-#[derive(Debug)]
+#[derive(Debug, Display, Error)]
 pub enum InvalidSubdirectory {
-    InvalidComponent(usize),
+    #[display("Segment {_0} of path is not valid for a subdirectory")]
+    InvalidComponent(#[error(ignore)] usize),
+    #[display("Subdirectory cannot be absolute")]
     AbsolutePath,
 }
 
@@ -593,25 +588,6 @@ impl ScalarType for Subdirectory {
     }
     fn to_value(&self) -> Value {
         Value::String(self.0.to_string())
-    }
-}
-
-impl Display for InvalidSubdirectory {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            InvalidSubdirectory::InvalidComponent(s) => {
-                write!(f, "Segment {s} of path is not valid for a subdirectory")
-            }
-            InvalidSubdirectory::AbsolutePath => f.write_str("Subdirectory cannot be absolute"),
-        }
-    }
-}
-
-impl Error for InvalidSubdirectory {}
-
-impl Display for Subdirectory {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
     }
 }
 

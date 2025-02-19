@@ -374,64 +374,28 @@ impl fmt::Debug for SqliteScanPathService {
 }
 
 mod error {
-    use std::error::Error;
-    use std::fmt::{self, Display};
+    use derive_more::{Display, Error, From};
 
-    #[derive(Debug)]
+    #[derive(Debug, Display, Error, From)]
     pub enum ConfigurationError {
-        MissingBeamline(String),
+        #[display("No configuration available for beamline {_0:?}")]
+        MissingBeamline(#[error(ignore)] String),
+        #[display("Error reading configuration: {_0}")]
         Db(sqlx::Error),
     }
 
-    impl Display for ConfigurationError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                ConfigurationError::MissingBeamline(bl) => {
-                    write!(f, "No configuration available for beamline {bl:?}")
-                }
-                ConfigurationError::Db(e) => write!(f, "Error reading configuration: {e}"),
-            }
-        }
-    }
-
-    impl Error for ConfigurationError {
-        fn source(&self) -> Option<&(dyn Error + 'static)> {
-            match self {
-                ConfigurationError::MissingBeamline(_) => None,
-                ConfigurationError::Db(e) => Some(e),
-            }
-        }
-    }
-
-    impl From<sqlx::Error> for ConfigurationError {
-        fn from(value: sqlx::Error) -> Self {
-            Self::Db(value)
-        }
-    }
-
-    #[derive(Debug)]
+    #[derive(Debug, Display, From)]
     pub enum NewConfigurationError {
+        #[display("Missing field {_0:?} for new configuration")]
         MissingField(String),
+        #[from]
+        #[display("Error inserting new configuration: {_0}")]
         Db(sqlx::Error),
     }
-    impl Display for NewConfigurationError {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                NewConfigurationError::MissingField(name) => {
-                    write!(f, "Missing field {name:?} for new configuration")
-                }
-                NewConfigurationError::Db(e) => write!(f, "Error inserting new configuration: {e}"),
-            }
-        }
-    }
+
     impl From<&str> for NewConfigurationError {
         fn from(value: &str) -> Self {
             Self::MissingField(value.into())
-        }
-    }
-    impl From<sqlx::Error> for NewConfigurationError {
-        fn from(value: sqlx::Error) -> Self {
-            Self::Db(value)
         }
     }
 }

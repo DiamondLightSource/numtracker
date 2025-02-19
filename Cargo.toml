@@ -17,6 +17,7 @@ axum = "0.8.1"
 axum-extra = { version = "0.10.0", features = ["typed-header"] }
 chrono = "0.4.39"
 clap = { version = "4.5.30", features = ["cargo", "derive", "env", "string"] }
+derive_more = { version = "2.0.1", features = ["error", "display", "from", "deref"] }
 futures = "0.3.31"
 opentelemetry = "0.28.0"
 opentelemetry-otlp = { version = "0.28.0", features = ["grpc-tonic"] }
