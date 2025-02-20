@@ -1,18 +1,12 @@
 use std::path::PathBuf;
 
-use derive_more::{Display, Error};
 use openidconnect::OAuth2TokenResponse;
 use tokio::fs;
 use tokio::io::AsyncWriteExt as _;
 use tracing::{debug, trace, warn};
 use url::Url;
 
-use super::pkce_auth::AuthHandler;
-
-#[derive(Debug, Display, Error)]
-pub enum AuthError {
-    Failed,
-}
+use super::pkce_auth::{AuthError, AuthHandler};
 
 async fn token_file() -> Option<PathBuf> {
     cache_directory()
@@ -65,11 +59,11 @@ async fn refresh_access_token(auth: &AuthHandler) -> Option<String> {
 /// If successful, cache the refresh token to prevent needing to log in next time
 pub(crate) async fn get_access_token(h: &Url) -> Result<String, AuthError> {
     debug!("Getting new access token");
-    let handler = AuthHandler::new(h.clone()).await.unwrap();
+    let handler = AuthHandler::new(h.clone()).await?;
     if let Some(token) = refresh_access_token(&handler).await {
         return Ok(token);
     }
-    let token = handler.device_flow().await;
+    let token = handler.device_flow().await?;
     if let Some(refr) = token.refresh_token() {
         save_refresh_token(refr.secret()).await;
     }
