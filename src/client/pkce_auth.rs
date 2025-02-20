@@ -1,3 +1,4 @@
+use derive_more::{Display, Error, From};
 use openidconnect::core::{
     CoreAuthDisplay, CoreAuthPrompt, CoreClaimName, CoreClaimType, CoreClient,
     CoreClientAuthMethod, CoreDeviceAuthorizationResponse, CoreErrorResponseType, CoreGenderClaim,
@@ -6,10 +7,12 @@ use openidconnect::core::{
     CoreRevocableToken, CoreSubjectIdentifierType, CoreTokenType,
 };
 use openidconnect::{
-    AdditionalProviderMetadata, AuthType, ClientId, DeviceAuthorizationUrl, EmptyAdditionalClaims,
-    EmptyExtraTokenFields, EndpointMaybeSet, EndpointNotSet, EndpointSet, IdTokenFields, IssuerUrl,
-    OAuth2TokenResponse, ProviderMetadata, RefreshToken, RevocationErrorResponseType,
-    StandardErrorResponse, StandardTokenIntrospectionResponse, StandardTokenResponse,
+    AdditionalProviderMetadata, AuthType, ClientId, DeviceAuthorizationUrl,
+    DeviceCodeErrorResponseType, DiscoveryError, EmptyAdditionalClaims, EmptyExtraTokenFields,
+    EndpointMaybeSet, EndpointNotSet, EndpointSet, HttpClientError, IdTokenFields, IssuerUrl,
+    OAuth2TokenResponse, ProviderMetadata, RefreshToken, RequestTokenError,
+    RevocationErrorResponseType, StandardErrorResponse, StandardTokenIntrospectionResponse,
+    StandardTokenResponse,
 };
 use reqwest::redirect::Policy;
 use serde::{Deserialize, Serialize};
@@ -70,21 +73,31 @@ type DeviceFlowClient = openidconnect::Client<
     EndpointMaybeSet,
 >;
 
+type HttpError = HttpClientError<reqwest::Error>;
+
 pub struct AuthHandler {
     http: reqwest::Client,
     auth: DeviceFlowClient,
 }
 
+#[derive(Debug, Display, Error, From)]
+pub enum AuthError {
+    Http(reqwest::Error),
+    Discovery(DiscoveryError<HttpError>),
+    DeviceFlowInit(RequestTokenError<HttpError, StandardErrorResponse<CoreErrorResponseType>>),
+    AccessRequest(RequestTokenError<HttpError, StandardErrorResponse<DeviceCodeErrorResponseType>>),
+    Oidc(openidconnect::ConfigurationError),
+    NoVerificationUrl,
+}
+
 impl AuthHandler {
-    pub async fn new(host: impl Into<Url>) -> Result<Self, ()> {
+    pub async fn new(host: impl Into<Url>) -> Result<Self, AuthError> {
         let http_client = reqwest::ClientBuilder::new()
             .redirect(Policy::none())
-            .build()
-            .unwrap();
+            .build()?;
         let meta_provider =
             DeviceProviderMetadata::discover_async(IssuerUrl::from_url(host.into()), &http_client)
-                .await
-                .unwrap();
+                .await?;
         let device_authorization_url = meta_provider
             .additional_metadata()
             .device_authorization_endpoint
@@ -101,34 +114,35 @@ impl AuthHandler {
             auth: client,
         })
     }
-    pub async fn device_flow(&self) -> impl OAuth2TokenResponse {
+
+    pub async fn device_flow(&self) -> Result<impl OAuth2TokenResponse, AuthError> {
         let details: CoreDeviceAuthorizationResponse = self
             .auth
             .exchange_device_code()
             .request_async(&self.http)
-            .await
-            .unwrap();
+            .await?;
 
         println!(
             "Visit: {}",
-            details.verification_uri_complete().unwrap().secret()
+            details
+                .verification_uri_complete()
+                .ok_or(AuthError::NoVerificationUrl)?
+                .secret()
         );
 
         let token = self
             .auth
-            .exchange_device_access_token(&details)
-            .unwrap()
+            .exchange_device_access_token(&details)?
             .request_async(&self.http, tokio::time::sleep, None)
-            .await
-            .unwrap();
+            .await?;
 
-        token
+        Ok(token)
     }
 
     pub async fn refresh_flow(&self, token: String) -> Option<impl OAuth2TokenResponse> {
         self.auth
             .exchange_refresh_token(&RefreshToken::new(token))
-            .unwrap()
+            .ok()?
             .request_async(&self.http)
             .await
             .ok()
