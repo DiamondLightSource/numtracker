@@ -83,7 +83,7 @@ pub async fn serve_graphql(opts: ServeOptions) {
             get((
                 StatusCode::METHOD_NOT_ALLOWED,
                 [("Allow", "POST")],
-                Html(include_str!("../static/get_graphql_warning.html")),
+                Html(include_str!("../../static/get_graphql_warning.html")),
             )),
         )
         // Interactive graphiql playground
@@ -91,7 +91,7 @@ pub async fn serve_graphql(opts: ServeOptions) {
         // Make it look less like something is broken when going to any other page
         .fallback((
             StatusCode::NOT_FOUND,
-            Html(include_str!("../static/404.html")),
+            Html(include_str!("../../static/404.html")),
         ))
         .layer(Extension(schema));
     let listener = TcpListener::bind(addr)
@@ -1164,7 +1164,7 @@ mod tests {
         graphql_schema(&mut buf).unwrap();
         assert_eq!(
             String::from_utf8(buf).unwrap(),
-            include_str!("../static/service_schema.graphql")
+            include_str!("../../static/service_schema.graphql")
         );
     }
 }
