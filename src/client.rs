@@ -1,7 +1,7 @@
+use cli_auth::AuthError;
 use config::ClientConfiguration;
 use derive_more::{Display, Error, From};
 use graphql_client::{GraphQLQuery, Response};
-use pkce_auth::AuthError;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -11,7 +11,7 @@ use crate::cli::client::{ClientCommand, ClientOptions, ConfigurationOptions};
 
 mod cli_auth;
 mod config;
-mod pkce_auth;
+
 #[derive(Debug, Display, Error, From)]
 pub enum ClientConfigurationError {
     MissingHost,
