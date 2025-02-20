@@ -39,7 +39,7 @@ use axum_extra::TypedHeader;
 use chrono::{Datelike, Local};
 use derive_more::{Display, Error};
 use tokio::net::TcpListener;
-use tracing::{info, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::build_info::ServerStatus;
 use crate::cli::ServeOptions;
@@ -56,6 +56,7 @@ use crate::template::{FieldSource, PathTemplate};
 mod auth;
 
 pub async fn serve_graphql(opts: ServeOptions) {
+    debug!(?opts, "Starting numtracker service");
     let server_status = Json(ServerStatus::new());
     let db = SqliteScanPathService::connect(&opts.db)
         .await

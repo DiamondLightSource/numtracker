@@ -19,6 +19,7 @@ chrono = "0.4.40"
 clap = { version = "4.5.31", features = ["cargo", "derive", "env", "string"] }
 derive_more = { version = "2.0.1", features = ["error", "display", "from", "deref"] }
 directories = "6.0.0"
+dirs = "6.0.0"
 futures = "0.3.31"
 graphql_client = "0.14.0"
 openidconnect = "4.0.0"

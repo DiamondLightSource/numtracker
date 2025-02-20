@@ -15,7 +15,6 @@
 use std::error::Error;
 
 use cli::{Cli, Command};
-use tracing::debug;
 
 mod build_info;
 mod cli;
@@ -31,7 +30,6 @@ mod template;
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::init();
     let _ = logging::init(args.log_level(), args.tracing());
-    debug!(?args, "Starting numtracker service");
     match args.command {
         Command::Serve(opts) => graphql::serve_graphql(opts).await,
         Command::Client(opts) => client::run_client(opts).await,
