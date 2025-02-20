@@ -14,14 +14,3 @@ mutation ConfigureMutation($beamline: String!, $scan: String, $visit: String, $d
         trackerFileExtension
     }
 }
-
-# mutation ConfigureMutation($beamline: String!, $config: ConfigurationUpdates!) {
-#     configure(beamline: $beamline, config: $config) {
-#         visitTemplate
-#         scanTemplate
-#         detectorTemplate
-#         dbScanNumber
-#         fileScanNumber
-#         trackerFileExtension
-#     }
-# }
