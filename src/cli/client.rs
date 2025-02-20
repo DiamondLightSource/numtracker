@@ -1,10 +1,5 @@
-use std::sync::LazyLock;
-
 use clap::{Parser, Subcommand};
 use url::Url;
-
-static FALLBACK_HOST: LazyLock<Url> =
-    LazyLock::new(|| Url::parse("http://localhost:8000").expect("Static URL is valid"));
 
 #[derive(Debug, Parser)]
 pub struct ClientOptions {
@@ -16,15 +11,10 @@ pub struct ClientOptions {
 
 #[derive(Debug, Parser)]
 pub struct ConnectionOptions {
-    #[clap(long, short = 'H')]
-    host: Option<Url>,
-    #[clap(long)]
-    auth: Option<Url>,
-}
-impl ConnectionOptions {
-    pub(crate) fn host(&self) -> &Url {
-        self.host.as_ref().unwrap_or(&FALLBACK_HOST)
-    }
+    #[clap(long, short = 'H', env = "NUMTRACKER_SERVICE_HOST")]
+    pub host: Option<Url>,
+    #[clap(long, env = "NUMTRACKER_AUTH_HOST")]
+    pub auth: Option<Url>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -42,15 +32,6 @@ pub enum ClientCommand {
     },
     /// Query for templated data
     Paths { beamline: String, visit: String },
-    /// Request scan information
-    Scan {
-        beamline: String,
-        visit: String,
-        #[clap(short, long)]
-        subdirectory: Option<String>,
-        #[clap(short, long)]
-        detectors: Option<Vec<String>>,
-    },
 }
 
 #[derive(Debug, Parser)]
