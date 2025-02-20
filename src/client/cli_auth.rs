@@ -7,11 +7,7 @@ use tokio::io::AsyncWriteExt as _;
 use tracing::{debug, trace, warn};
 use url::Url;
 
-use crate::client::pkce_auth;
-
-pub struct AuthManager {
-    pub oauth_host: Url,
-}
+use super::pkce_auth::AuthHandler;
 
 #[derive(Debug, Display, Error)]
 pub enum AuthError {
@@ -53,29 +49,27 @@ async fn retrieve_refresh_token() -> Option<String> {
     fs::read_to_string(&token_file().await?).await.ok()
 }
 
-impl AuthManager {
-    pub async fn get_access_token(&self) -> Result<String, AuthError> {
-        todo!()
-    }
-}
-
 /// Retrieve a saved refresh token if there is one and use it to request a new access token
 /// If a new access token is acquired, replace the saved refresh token as well
-pub(crate) async fn refresh_access_token(host: &Url) -> Option<String> {
+async fn refresh_access_token(auth: &AuthHandler) -> Option<String> {
     debug!("Trying to get access token via refresh");
-    let token = retrieve_refresh_token().await?;
-    let auth = pkce_auth::refresh_flow(host, token).await?;
-    if let Some(refr) = auth.refresh_token() {
+    let refresh = retrieve_refresh_token().await?;
+    let tokens = auth.refresh_flow(refresh).await?;
+    if let Some(refr) = tokens.refresh_token() {
         save_refresh_token(refr.secret()).await;
     }
-    Some(auth.access_token().clone().into_secret())
+    Some(tokens.access_token().clone().into_secret())
 }
 
 /// Get a new access token from the auth server via the device flow.
 /// If successful, cache the refresh token to prevent needing to log in next time
 pub(crate) async fn get_access_token(h: &Url) -> Result<String, AuthError> {
     debug!("Getting new access token");
-    let token = pkce_auth::device_flow(h).await;
+    let handler = AuthHandler::new(h.clone()).await.unwrap();
+    if let Some(token) = refresh_access_token(&handler).await {
+        return Ok(token);
+    }
+    let token = handler.device_flow().await;
     if let Some(refr) = token.refresh_token() {
         save_refresh_token(refr.secret()).await;
     }

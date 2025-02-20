@@ -79,10 +79,7 @@ impl NumtrackerClient {
         let host = config.host.ok_or(ClientConfigurationError::MissingHost)?;
 
         let auth = match config.auth {
-            Some(auth) => match cli_auth::refresh_access_token(&auth).await {
-                Some(token) => Some(token),
-                None => Some(cli_auth::get_access_token(&auth).await?),
-            },
+            Some(auth) => Some(cli_auth::get_access_token(&auth).await?),
             None => None,
         };
         Ok(NumtrackerClient { auth, host })
