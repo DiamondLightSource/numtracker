@@ -16,7 +16,7 @@ async-graphql-axum = "7.0.15"
 axum = "0.8.1"
 axum-extra = { version = "0.10.0", features = ["typed-header"] }
 chrono = "0.4.39"
-clap = { version = "4.5.30", features = ["cargo", "derive", "env", "string"] }
+clap = { version = "4.5.31", features = ["cargo", "derive", "env", "string"] }
 derive_more = { version = "2.0.1", features = ["error", "display", "from", "deref"] }
 futures = "0.3.31"
 opentelemetry = "0.28.0"
@@ -25,7 +25,7 @@ opentelemetry-semantic-conventions = "0.28.0"
 opentelemetry-stdout = "0.28.0"
 opentelemetry_sdk = { version = "0.28.0", features = ["rt-tokio"] }
 reqwest = { version = "0.12.7", features = ["json", "rustls-tls"], default-features = false }
-serde = { version = "1.0.210", features = ["derive"] }
+serde = { version = "1.0.218", features = ["derive"] }
 sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.43.0", features = ["full"] }
 tracing = "0.1.41"
@@ -38,7 +38,7 @@ assert_matches = "1.5.0"
 async-std = { version = "1.13.0", features = ["attributes"], default-features = false }
 httpmock = { version = "0.7.0", default-features = false }
 rstest = "0.24.0"
-serde_json = { version = "1.0.138", features = ["preserve_order"] }
+serde_json = { version = "1.0.139", features = ["preserve_order"] }
 tempfile = "3.17.1"
 
 [build-dependencies]
