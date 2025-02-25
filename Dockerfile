@@ -15,6 +15,9 @@ COPY ./src ./src
 COPY ./.sqlx ./.sqlx
 COPY ./migrations ./migrations
 COPY ./static ./static
+# Copy the git directory purely so that the commit information can be included
+# build details provided by the 'built' library. See #99
+COPY ./.git ./.git
 
 RUN cargo build --release --target x86_64-unknown-linux-musl
 
