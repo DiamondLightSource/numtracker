@@ -45,7 +45,7 @@ pub async fn run_client(options: ClientOptions) {
         ClientCommand::Configure { beamline, config } => {
             client.configure_beamline(beamline, config).await
         }
-        ClientCommand::Paths { beamline, visit } => {
+        ClientCommand::VisitDirectory { beamline, visit } => {
             client.query_visit_directory(beamline, visit).await
         }
     };
