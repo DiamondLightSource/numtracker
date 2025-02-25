@@ -105,7 +105,7 @@ impl NumtrackerClient {
     async fn request<Query: Serialize, Data: DeserializeOwned>(
         &self,
         content: Query,
-    ) -> Result<Option<Data>, reqwest::Error> {
+    ) -> Result<Response<Data>, reqwest::Error> {
         let client = Client::new().post(
             self.host
                 .join("/graphql")
@@ -115,9 +115,7 @@ impl NumtrackerClient {
             None => client,
             Some(token) => client.bearer_auth(token),
         };
-        let response: Response<Data> = client.json(&content).send().await?.json().await?;
-        dbg!(&response.errors);
-        Ok(response.data)
+        client.json(&content).send().await?.json().await
     }
 
     async fn query_configuration(self, beamline: Option<Vec<String>>) -> Result<(), ClientError> {
@@ -126,7 +124,24 @@ impl NumtrackerClient {
         let data = self
             .request::<_, configuration_query::ResponseData>(request)
             .await?;
-        println!("{data:#?}");
+        print_errors(data.errors.as_deref());
+        if let Some(configs) = data.data {
+            for conf in configs.configurations {
+                println!("Beamline: {}", conf.beamline);
+                println!("    Visit Template: {}", conf.visit_template);
+                println!("    Scan Template: {}", conf.scan_template);
+                println!("    Detector Template: {}", conf.detector_template);
+                println!("    DB Scan Number: {}", conf.db_scan_number);
+                match conf.file_scan_number {
+                    Some(file_num) => println!("    File Scan Number: {file_num}"),
+                    None => println!("    File Scan Number: Not Available"),
+                }
+                println!(
+                    "    Tracker File Extension: {}",
+                    conf.tracker_file_extension.unwrap_or(conf.beamline)
+                );
+            }
+        }
         Ok(())
     }
 
@@ -139,7 +154,11 @@ impl NumtrackerClient {
         let request = PathQuery::build_query(vars);
         let data = self.request::<_, path_query::ResponseData>(request).await?;
 
-        println!("{data:#?}");
+        print_errors(data.errors.as_deref());
+        match data.data {
+            Some(data) => println!("{}", data.paths.directory),
+            None => println!("No paths returned from server"),
+        }
         Ok(())
     }
 
@@ -160,7 +179,35 @@ impl NumtrackerClient {
         let data = self
             .request::<_, configure_mutation::ResponseData>(request)
             .await?;
-        println!("{data:#?}");
+
+        print_errors(data.errors.as_deref());
+        match data.data {
+            Some(data) => {
+                let conf = data.configure;
+                println!("Visit Template: {}", conf.visit_template);
+                println!("Scan Template: {}", conf.scan_template);
+                println!("Detector Template: {}", conf.detector_template);
+                println!("DB Scan Number: {}", conf.db_scan_number);
+                match conf.file_scan_number {
+                    Some(file_num) => println!("File Scan Number: {file_num}"),
+                    None => println!("File Scan Number: Not Available"),
+                }
+                println!(
+                    "Tracker File Extension: {}",
+                    conf.tracker_file_extension.as_deref().unwrap_or("None")
+                );
+            }
+            None => println!("No configuration returned from server"),
+        }
         Ok(())
+    }
+}
+
+fn print_errors(errors: Option<&[graphql_client::Error]>) {
+    if let Some(errors) = errors {
+        println!("Query returned errors:");
+        for err in errors {
+            println!("    {err}");
+        }
     }
 }
