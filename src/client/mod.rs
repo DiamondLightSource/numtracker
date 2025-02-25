@@ -13,14 +13,7 @@ mod cli_auth;
 mod config;
 
 #[derive(Debug, Display, Error, From)]
-pub enum ClientConfigurationError {
-    MissingHost,
-    AuthError(AuthError),
-}
-
-#[derive(Debug, Display, Error, From)]
 pub enum ClientError {
-    Config(ClientConfigurationError),
     Auth(AuthError),
     Network(reqwest::Error),
 }
@@ -93,7 +86,9 @@ struct ConfigureMutation;
 
 impl NumtrackerClient {
     async fn from_config(config: ClientConfiguration) -> Result<Self, ClientError> {
-        let host = config.host.ok_or(ClientConfigurationError::MissingHost)?;
+        let host = config
+            .host
+            .unwrap_or(Url::parse("http://localhost:8000").expect("Constant URL is valid"));
 
         let auth = match config.auth {
             Some(auth) => Some(cli_auth::get_access_token(&auth).await?),
