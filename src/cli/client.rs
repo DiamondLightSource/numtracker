@@ -31,7 +31,7 @@ pub enum ClientCommand {
         config: ConfigurationOptions,
     },
     /// Query for templated data
-    Paths { beamline: String, visit: String },
+    VisitDirectory { beamline: String, visit: String },
 }
 
 #[derive(Debug, Parser)]
