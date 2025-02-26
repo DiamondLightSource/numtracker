@@ -19,7 +19,7 @@
         "type_info": "Integer"
       },
       {
-        "name": "visit",
+        "name": "directory",
         "ordinal": 3,
         "type_info": "Text"
       },

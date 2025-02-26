@@ -23,8 +23,8 @@ use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
 
 use crate::paths::{
-    DetectorField, DetectorTemplate, DirectoryField, InvalidPathTemplate, PathSpec, ScanField,
-    ScanTemplate, VisitTemplate,
+    DetectorField, DetectorTemplate, DirectoryField, DirectoryTemplate, InvalidPathTemplate,
+    PathSpec, ScanField, ScanTemplate,
 };
 use crate::template::PathTemplate;
 
@@ -70,7 +70,7 @@ impl<F> From<&str> for RawPathTemplate<F> {
 pub struct InstrumentConfiguration {
     name: String,
     scan_number: u32,
-    visit: RawPathTemplate<VisitTemplate>,
+    directory: RawPathTemplate<DirectoryTemplate>,
     scan: RawPathTemplate<ScanTemplate>,
     detector: RawPathTemplate<DetectorTemplate>,
     tracker_file_extension: Option<String>,
@@ -85,8 +85,8 @@ impl InstrumentConfiguration {
         self.scan_number
     }
 
-    pub fn visit(&self) -> SqliteTemplateResult<DirectoryField> {
-        self.visit.as_template()
+    pub fn directory(&self) -> SqliteTemplateResult<DirectoryField> {
+        self.directory.as_template()
     }
 
     pub fn scan(&self) -> SqliteTemplateResult<ScanField> {
@@ -108,7 +108,7 @@ impl<'r> FromRow<'r, SqliteRow> for InstrumentConfiguration {
             id: None,
             name: row.try_get("name")?,
             scan_number: row.try_get("scan_number")?,
-            visit: row.try_get::<String, _>("visit")?,
+            directory: row.try_get::<String, _>("directory")?,
             scan: row.try_get::<String, _>("scan")?,
             detector: row.try_get::<String, _>("detector")?,
             tracker_file_extension: row.try_get::<Option<String>, _>("tracker_file_extension")?,
@@ -121,7 +121,7 @@ impl<'r> FromRow<'r, SqliteRow> for InstrumentConfiguration {
 pub struct InstrumentConfigurationUpdate {
     pub name: String,
     pub scan_number: Option<u32>,
-    pub visit: Option<PathTemplate<DirectoryField>>,
+    pub directory: Option<PathTemplate<DirectoryField>>,
     pub scan: Option<PathTemplate<ScanField>>,
     pub detector: Option<PathTemplate<DetectorField>>,
     pub tracker_file_extension: Option<String>,
@@ -130,7 +130,7 @@ pub struct InstrumentConfigurationUpdate {
 impl InstrumentConfigurationUpdate {
     fn is_empty(&self) -> bool {
         self.scan_number.is_none()
-            && self.visit.is_none()
+            && self.directory.is_none()
             && self.scan.is_none()
             && self.detector.is_none()
             && self.tracker_file_extension.is_none()
@@ -153,9 +153,9 @@ impl InstrumentConfigurationUpdate {
             fields.push("scan_number=");
             fields.push_bind_unseparated(num);
         }
-        if let Some(visit) = &self.visit {
-            fields.push("visit=");
-            fields.push_bind_unseparated(visit.to_string());
+        if let Some(directory) = &self.directory {
+            fields.push("directory=");
+            fields.push_bind_unseparated(directory.to_string());
         }
         if let Some(scan) = &self.scan {
             fields.push("scan=");
@@ -192,7 +192,7 @@ impl InstrumentConfigurationUpdate {
             id: None,
             name: self.name,
             scan_number: i64::from(self.scan_number.unwrap_or(0)),
-            visit: self.visit.ok_or("visit")?.to_string(),
+            directory: self.directory.ok_or("directory")?.to_string(),
             scan: self.scan.ok_or("scan")?.to_string(),
             detector: self.detector.ok_or("detector")?.to_string(),
             tracker_file_extension: self.tracker_file_extension,
@@ -204,7 +204,7 @@ impl InstrumentConfigurationUpdate {
         Self {
             name: name.into(),
             scan_number: None,
-            visit: None,
+            directory: None,
             scan: None,
             detector: None,
             tracker_file_extension: None,
@@ -232,7 +232,7 @@ struct DbInstrumentConfig {
     id: Option<i64>,
     name: String,
     scan_number: i64,
-    visit: String,
+    directory: String,
     scan: String,
     detector: String,
     tracker_file_extension: Option<String>,
@@ -246,13 +246,13 @@ impl DbInstrumentConfig {
         let bc = query_as!(
             DbInstrumentConfig,
             "INSERT INTO instrument
-                (name, scan_number, visit, scan, detector, tracker_file_extension)
+                (name, scan_number, directory, scan, detector, tracker_file_extension)
             VALUES
                 (?,?,?,?,?,?)
             RETURNING *",
             self.name,
             self.scan_number,
-            self.visit,
+            self.directory,
             self.scan,
             self.detector,
             self.tracker_file_extension
@@ -268,7 +268,7 @@ impl From<DbInstrumentConfig> for InstrumentConfiguration {
         Self {
             name: value.name,
             scan_number: u32::try_from(value.scan_number).expect("Out of scan numbers"),
-            visit: value.visit.into(),
+            directory: value.directory.into(),
             scan: value.scan.into(),
             detector: value.detector.into(),
             tracker_file_extension: value.tracker_file_extension,
@@ -410,7 +410,7 @@ mod db_tests {
     use super::SqliteScanPathService;
     use crate::db_service::error::{ConfigurationError, NewConfigurationError};
     use crate::db_service::{InstrumentConfiguration, InstrumentConfigurationUpdate};
-    use crate::paths::{DetectorTemplate, PathSpec, ScanTemplate, VisitTemplate};
+    use crate::paths::{DetectorTemplate, DirectoryTemplate, PathSpec, ScanTemplate};
 
     /// Remove repeated .await.unwrap() noise from tests
     macro_rules! ok {
@@ -437,7 +437,7 @@ mod db_tests {
         InstrumentConfigurationUpdate {
             name: bl.into(),
             scan_number: None,
-            visit: VisitTemplate::new_checked("/tmp/{instrument}/data/{year}/{visit}").ok(),
+            directory: DirectoryTemplate::new_checked("/tmp/{instrument}/data/{year}/{visit}").ok(),
             scan: ScanTemplate::new_checked("{subdirectory}/{instrument}-{scan_number}").ok(),
             detector: DetectorTemplate::new_checked(
                 "{subdirectory}/{instrument}-{scan_number}-{detector}",
@@ -458,7 +458,7 @@ mod db_tests {
     }
 
     #[rstest]
-    #[case::visit("visit", |u: &mut InstrumentConfigurationUpdate| u.visit = None)]
+    #[case::directory("directory", |u: &mut InstrumentConfigurationUpdate| u.directory = None)]
     #[case::scan("scan", |u: &mut InstrumentConfigurationUpdate| u.scan = None)]
     #[case::scan("detector", |u: &mut InstrumentConfigurationUpdate| u.detector = None)]
     #[tokio::test]
@@ -556,7 +556,7 @@ mod db_tests {
         let expected = InstrumentConfiguration {
             name: "i22".into(),
             scan_number: 122,
-            visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+            directory: "/tmp/{instrument}/data/{year}/{visit}".into(),
             scan: "{subdirectory}/{instrument}-{scan_number}".into(),
             detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
             tracker_file_extension: Some("ext".into()),
@@ -590,7 +590,7 @@ mod db_tests {
             InstrumentConfiguration {
                 name: "i11".into(),
                 scan_number: 111,
-                visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+                directory: "/tmp/{instrument}/data/{year}/{visit}".into(),
                 scan: "{subdirectory}/{instrument}-{scan_number}".into(),
                 detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
                 tracker_file_extension: Some("ext".into()),
@@ -598,7 +598,7 @@ mod db_tests {
             InstrumentConfiguration {
                 name: "i22".into(),
                 scan_number: 122,
-                visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+                directory: "/tmp/{instrument}/data/{year}/{visit}".into(),
                 scan: "{subdirectory}/{instrument}-{scan_number}".into(),
                 detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
                 tracker_file_extension: Some("ext".into()),
@@ -630,7 +630,7 @@ mod db_tests {
             InstrumentConfiguration {
                 name: "i11".into(),
                 scan_number: 111,
-                visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+                directory: "/tmp/{instrument}/data/{year}/{visit}".into(),
                 scan: "{subdirectory}/{instrument}-{scan_number}".into(),
                 detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
                 tracker_file_extension: Some("ext".into()),
@@ -638,7 +638,7 @@ mod db_tests {
             InstrumentConfiguration {
                 name: "i22".into(),
                 scan_number: 122,
-                visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
+                directory: "/tmp/{instrument}/data/{year}/{visit}".into(),
                 scan: "{subdirectory}/{instrument}-{scan_number}".into(),
                 detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
                 tracker_file_extension: Some("ext".into()),
@@ -650,9 +650,9 @@ mod db_tests {
     type Update = InstrumentConfigurationUpdate;
 
     #[rstest]
-    #[case::visit(
-            |u: &mut Update| u.visit = VisitTemplate::new_checked("/new/{instrument}/{proposal}/{visit}").ok(),
-            |u: InstrumentConfiguration| assert_eq!(u.visit().unwrap().to_string(), "/new/{instrument}/{proposal}/{visit}"))]
+    #[case::directory(
+            |u: &mut Update| u.directory = DirectoryTemplate::new_checked("/new/{instrument}/{proposal}/{visit}").ok(),
+            |u: InstrumentConfiguration| assert_eq!(u.directory().unwrap().to_string(), "/new/{instrument}/{proposal}/{visit}"))]
     #[case::scan(
             |u: &mut Update| u.scan = ScanTemplate::new_checked("new-{scan_number}").ok(),
             |u: InstrumentConfiguration| assert_eq!(u.scan().unwrap().to_string(), "new-{scan_number}"))]

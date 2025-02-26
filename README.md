@@ -117,7 +117,7 @@ Get the current configuration values for the given instrument
 ```graphql
 {
   configuration(instrument: "i22") {
-    visitTemplate
+    directoryTemplate
     scanTemplate
     detectorTemplate
     dbScanNumber
@@ -131,7 +131,7 @@ Get the current configuration values for the given instrument
 ```json
 {
   "configuration": {
-    "visitTemplate": "/data/{instrument}/data/{year}/{visit}",
+    "directoryTemplate": "/data/{instrument}/data/{year}/{visit}",
     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
     "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
     "dbScanNumber": 0,
@@ -151,7 +151,7 @@ empty list will return no configurations.
 {
     configurations(instrumentFilters: ["i22", "i11"]) {
     instrument
-    visitTemplate
+    directoryTemplate
     scanTemplate
     detectorTemplate
     dbScanNumber
@@ -167,7 +167,7 @@ empty list will return no configurations.
   "configurations": [
       {
         "instrument": "i11",
-        "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+        "directoryTemplate": "/tmp/{instrument}/data/{year}/{visit}",
         "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
         "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
         "dbScanNumber": 0,
@@ -176,7 +176,7 @@ empty list will return no configurations.
       },
       {
         "instrument": "i22",
-        "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+        "directoryTemplate": "/tmp/{instrument}/data/{year}/{visit}",
         "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
         "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
         "dbScanNumber": 0,
@@ -192,7 +192,7 @@ empty list will return no configurations.
 {
     configurations {
     instrument
-    visitTemplate
+    directoryTemplate
     scanTemplate
     detectorTemplate
     dbScanNumber
@@ -208,7 +208,7 @@ empty list will return no configurations.
   "configurations": [
       {
         "instrument": "i11",
-        "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+        "directoryTemplate": "/tmp/{instrument}/data/{year}/{visit}",
         "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
         "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
         "dbScanNumber": 0,
@@ -264,12 +264,12 @@ mutation {
 ```graphql
 mutation {
   configure(instrument: "i11", config: {
-      visit:"/tmp/{instrument}/data/{year}/{visit}"
+      directory:"/tmp/{instrument}/data/{year}/{visit}"
       scan:"{subdirectory}/{instrument}-{scan_number}"
       detector:"{subdirectory}/{instrument}-{scan_number}-{detector}"
       scanNumber: 12345
     }) {
-      visitTemplate
+      directoryTemplate
       scanTemplate
       detectorTemplate
       latestScanNumber
@@ -281,7 +281,7 @@ mutation {
 ```json
 {
   "configure": {
-    "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
+    "directoryTemplate": "/tmp/{instrument}/data/{year}/{visit}",
     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
     "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
     "latestScanNumber": 12345

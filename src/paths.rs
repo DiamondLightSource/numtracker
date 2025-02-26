@@ -130,13 +130,13 @@ pub enum InvalidPathTemplate {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VisitTemplate;
+pub struct DirectoryTemplate;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScanTemplate;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DetectorTemplate;
 
-impl PathSpec for VisitTemplate {
+impl PathSpec for DirectoryTemplate {
     type Field = DirectoryField;
 
     const REQUIRED: &'static [Self::Field] = &[DirectoryField::Instrument, DirectoryField::Visit];
@@ -190,7 +190,7 @@ mod paths_tests {
     use std::fmt::Debug;
 
     use super::{
-        DetectorTemplate, InvalidPathTemplate, PathSpec as _, ScanTemplate, VisitTemplate,
+        DetectorTemplate, DirectoryTemplate, InvalidPathTemplate, PathSpec as _, ScanTemplate,
     };
     use crate::template::{ErrorKind, PathTemplateError};
 
@@ -231,7 +231,7 @@ mod paths_tests {
         #[case] template: &str,
         #[case] err: E,
     ) {
-        let e = VisitTemplate::new_checked(template).unwrap_err();
+        let e = DirectoryTemplate::new_checked(template).unwrap_err();
         assert_eq!(err, e);
     }
 

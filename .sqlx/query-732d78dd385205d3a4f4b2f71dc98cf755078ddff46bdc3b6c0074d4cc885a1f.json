@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO instrument\n                (name, scan_number, visit, scan, detector, tracker_file_extension)\n            VALUES\n                (?,?,?,?,?,?)\n            RETURNING *",
+  "query": "INSERT INTO instrument\n                (name, scan_number, directory, scan, detector, tracker_file_extension)\n            VALUES\n                (?,?,?,?,?,?)\n            RETURNING *",
   "describe": {
     "columns": [
       {
@@ -19,7 +19,7 @@
         "type_info": "Integer"
       },
       {
-        "name": "visit",
+        "name": "directory",
         "ordinal": 3,
         "type_info": "Text"
       },
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "6deeea832def01a5573571c1c45662029080dd82a21ab6602c994222285d216e"
+  "hash": "732d78dd385205d3a4f4b2f71dc98cf755078ddff46bdc3b6c0074d4cc885a1f"
 }
