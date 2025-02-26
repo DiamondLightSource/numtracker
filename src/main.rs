@@ -18,6 +18,7 @@ use cli::{Cli, Command};
 
 mod build_info;
 mod cli;
+#[cfg(feature = "client")]
 mod client;
 mod db_service;
 mod graphql;
@@ -32,6 +33,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let _ = logging::init(args.log_level(), args.tracing());
     match args.command {
         Command::Serve(opts) => graphql::serve_graphql(opts).await,
+        #[cfg(not(feature = "client"))]
+        Command::Client { .. } => {
+            println!("Client subcommand requires 'client' feature to be enabled when building")
+        }
+        #[cfg(feature = "client")]
         Command::Client(opts) => client::run_client(opts).await,
         Command::Schema => {
             graphql::graphql_schema(std::io::stdout()).expect("Failed to write schema")

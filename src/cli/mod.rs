@@ -17,10 +17,10 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 
 use clap::{ArgAction, Args, Parser, Subcommand};
-use client::ClientOptions;
 use tracing::Level;
 use url::Url;
 
+#[cfg(feature = "client")]
 pub mod client;
 
 #[derive(Debug, Parser)]
@@ -49,8 +49,14 @@ pub struct TracingOptions {
 pub enum Command {
     /// Run the server to respond to directory and scan path requests
     Serve(ServeOptions),
+    /// Client subcommand requires 'client' feature to be enabled
+    // Accept but ignore all subsequent args and options so all calls are treated the same
+    #[cfg(not(feature = "client"))]
+    #[clap(hide(true), allow_hyphen_values(true))]
+    Client { _ignored: Vec<String> },
     /// View and update beamline configurations provided by an instance of the service
-    Client(ClientOptions),
+    #[cfg(feature = "client")]
+    Client(client::ClientOptions),
     /// Generate the graphql schema
     Schema,
 }
