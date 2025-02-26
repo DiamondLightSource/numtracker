@@ -24,14 +24,14 @@ use tokio::sync::{Mutex, MutexGuard};
 use tracing::{info, instrument, trace};
 
 /// Central controller to access external directory trackers. Prevents concurrent access to the same
-/// beamline's directory.
+/// instrument's directory.
 pub struct NumTracker {
     bl_locks: HashMap<String, Mutex<PathBuf>>,
 }
 
 impl NumTracker {
     /// Build a numtracker than will provide locked access to subdirectories that exists and no-op
-    /// trackers for beamlines that do not have subdirectories.
+    /// trackers for instruments that do not have subdirectories.
     pub fn for_root_directory<P: AsRef<Path>>(root: Option<P>) -> Result<Self, Error> {
         let mut bl_locks: HashMap<String, Mutex<PathBuf>> = Default::default();
         if let Some(dir) = root {
@@ -56,9 +56,9 @@ impl NumTracker {
         Ok(Self { bl_locks })
     }
 
-    /// Create a wrapper around a subdirectory if one exists for the given beamline, or a no-op
+    /// Create a wrapper around a subdirectory if one exists for the given instrument, or a no-op
     /// tracker if a directory does not exist.
-    pub async fn for_beamline<'nt, 'bl>(
+    pub async fn for_instrument<'nt, 'bl>(
         &'nt self,
         bl: &'bl str,
         ext: Option<&'bl str>,
@@ -213,7 +213,7 @@ mod tests {
     #[rstest]
     #[tokio::test[]]
     async fn exclusive_locking(nt: TempTracker) {
-        let i22 = nt.for_beamline("i22", None).await;
+        let i22 = nt.for_instrument("i22", None).await;
 
         // difficult to test but this should be locked until i22 is dropped
         nt.bl_locks.get("i22").unwrap().try_lock().unwrap_err();
@@ -227,19 +227,19 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn multiple_beamlines_not_exclusive(nt: TempTracker) {
-        // trackers for different beamlines can be held concurrently
-        let _i22 = nt.for_beamline("i22", None).await.unwrap();
-        let _b21 = nt.for_beamline("b21", None).await.unwrap();
+    async fn multiple_instruments_not_exclusive(nt: TempTracker) {
+        // trackers for different instruments can be held concurrently
+        let _i22 = nt.for_instrument("i22", None).await.unwrap();
+        let _b21 = nt.for_instrument("b21", None).await.unwrap();
     }
 
     #[rstest]
     #[tokio::test]
-    async fn unmanaged_beamlines_not_locked(nt: TempTracker) {
-        let i11 = nt.for_beamline("i11", None);
-        let i11_2 = nt.for_beamline("i11", None);
-        let i11_3 = nt.for_beamline("i11", None);
-        let i11_4 = nt.for_beamline("i11", None);
+    async fn unmanaged_instruments_not_locked(nt: TempTracker) {
+        let i11 = nt.for_instrument("i11", None);
+        let i11_2 = nt.for_instrument("i11", None);
+        let i11_3 = nt.for_instrument("i11", None);
+        let i11_4 = nt.for_instrument("i11", None);
 
         // This should never get near 1s but in case something deadlocks we want to exit early. The
         // test will still fail successfully in this case.
@@ -255,22 +255,22 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn unmanaged_beamline_has_no_numbers(nt: TempTracker) {
-        let i11 = nt.for_beamline("i11", None).await.unwrap();
+    async fn unmanaged_instrument_has_no_numbers(nt: TempTracker) {
+        let i11 = nt.for_instrument("i11", None).await.unwrap();
         if let Some(num) = i11.prev().await.unwrap() {
-            panic!("Unmanaged beamline returned previous number: {num}");
+            panic!("Unmanaged instrument returned previous number: {num}");
         }
-        // setting an unmanaged beamline is a no-op
+        // setting an unmanaged instrument is a no-op
         i11.set(111).await.unwrap();
         if let Some(num) = i11.prev().await.unwrap() {
-            panic!("Unmanaged beamline returned previous number: {num}");
+            panic!("Unmanaged instrument returned previous number: {num}");
         }
     }
 
     #[rstest]
     #[tokio::test]
     async fn bump_numbers(nt: TempTracker) {
-        let i22 = nt.for_beamline("i22", None).await.unwrap();
+        let i22 = nt.for_instrument("i22", None).await.unwrap();
         assert_eq!(i22.prev().await.unwrap(), Some(122));
         i22.set(123).await.unwrap();
         assert_eq!(i22.prev().await.unwrap(), Some(123));
@@ -283,7 +283,7 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn non_consecutive_files_left(nt: TempTracker) {
-        let i22 = nt.for_beamline("i22", None).await.unwrap();
+        let i22 = nt.for_instrument("i22", None).await.unwrap();
         assert_eq!(i22.prev().await.unwrap(), Some(122));
         i22.set(244).await.unwrap();
         assert_eq!(i22.prev().await.unwrap(), Some(244));
@@ -296,10 +296,10 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn alternative_extensions(nt: TempTracker) {
-        let i22 = nt.for_beamline("i22", None).await.unwrap(); // default i22 extension
+        let i22 = nt.for_instrument("i22", None).await.unwrap(); // default i22 extension
         assert_eq!(i22.prev().await.unwrap(), Some(122));
         drop(i22);
-        let i22 = nt.for_beamline("i22", Some("alt")).await.unwrap();
+        let i22 = nt.for_instrument("i22", Some("alt")).await.unwrap();
         assert_eq!(i22.prev().await.unwrap(), Some(0));
         i22.set(1234).await.unwrap();
         assert!(
@@ -316,15 +316,16 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn invalid_extensions(nt: TempTracker) {
-        let Err(InvalidExtension) = nt.for_beamline("i22", Some("ext space")).await else {
+        let Err(InvalidExtension) = nt.for_instrument("i22", Some("ext space")).await else {
             panic!("Invalid extension was accepted");
         };
 
-        let Err(InvalidExtension) = nt.for_beamline("i22", Some("in:valid@chars")).await else {
+        let Err(InvalidExtension) = nt.for_instrument("i22", Some("in:valid@chars")).await else {
             panic!("Invalid extension was accepted");
         };
 
-        let Err(InvalidExtension) = nt.for_beamline("i22", Some("i22/../beamline")).await else {
+        let Err(InvalidExtension) = nt.for_instrument("i22", Some("i22/../instrument")).await
+        else {
             panic!("Invalid extension was accepted");
         };
         assert_eq!(InvalidExtension.to_string(), "Extension is not valid");
@@ -334,7 +335,7 @@ mod tests {
     #[tokio::test]
     async fn non_number_files(nt: TempTracker) {
         fs::File::create(nt.1.as_ref().join("i22").join("string.i22")).unwrap();
-        let i22 = nt.for_beamline("i22", None).await.unwrap();
+        let i22 = nt.for_instrument("i22", None).await.unwrap();
         assert_eq!(i22.prev().await.unwrap(), Some(122));
     }
 }

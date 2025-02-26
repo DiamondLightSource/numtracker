@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * FROM beamline",
+  "query": "UPDATE instrument SET scan_number = max(scan_number, ?) + 1 WHERE name = ? RETURNING *",
   "describe": {
     "columns": [
       {
@@ -40,7 +40,7 @@
       }
     ],
     "parameters": {
-      "Right": 0
+      "Right": 2
     },
     "nullable": [
       false,
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "02d6faf0ffd8fb96031f7a8e824de4e4552ea72176c5e885cea3e517316e7774"
+  "hash": "6d1e14903687dc07c77d9dbc0e2e2bf1cf90adca88506b4c484f4f6234463200"
 }

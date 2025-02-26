@@ -36,7 +36,7 @@ version of the compiler (1.81+). This is available from [rustup.rs][_rustup].
 
 At this point the service is running and can be queried via the graphQL
 endpoints (see [the graphiql][_graphiql] front-end available at
-`localhost:8000/graphiql` by default) but there are no beamlines configured.
+`localhost:8000/graphiql` by default) but there are no instruments configured.
 
 Additional logging output is available via `-v` verbose flags.
 
@@ -73,7 +73,7 @@ looks something like
 ```bash
 echo '{
      "query": "{
-         paths(beamline: \"i22\", visit: \"cm37278-5\") {
+         paths(instrument: \"i22\", visit: \"cm37278-5\") {
              directory
          }
      }"
@@ -84,16 +84,17 @@ echo '{
 
 ### Queries (read-only)
 There are three read only queries, one to get the visit directory for a given
-visit and beamline, one to get the current configuration for a given
-beamline and one to get the current configuration(s) for one or more beamline.
+visit and instrument, one to get the current configuration for a given
+instrument and one to get the current configuration(s) for one or more
+instruments.
 
 #### paths
-Get the visit directory for a beamline and visit
+Get the visit directory for an instrument and visit
 
 ##### Query
 ```graphql
 {
-  paths(beamline: "i22", visit: "cm12345-6") {
+  paths(instrument: "i22", visit: "cm12345-6") {
     directory
     visit
   }
@@ -110,12 +111,12 @@ Get the visit directory for a beamline and visit
 ```
 
 #### configuration
-Get the current configuration values for the given beamline
+Get the current configuration values for the given instrument
 
 ##### Query
 ```graphql
 {
-  configuration(beamline: "i22") {
+  configuration(instrument: "i22") {
     visitTemplate
     scanTemplate
     detectorTemplate
@@ -141,14 +142,15 @@ Get the current configuration values for the given beamline
 ```
 
 #### configurations
-Get the current configuration values for one or more beamlines specified as a list.
-Providing no beamlines returns all current configurations.
+Get the current configuration values for one or more instruments specified as a
+list. Providing no list returns all current configurations whereas providing an
+empty list will return no configurations.
 
 ##### Query
 ```graphql
 {
-    configurations(beamlineFilters: ["i22", "i11"]) {
-    beamline
+    configurations(instrumentFilters: ["i22", "i11"]) {
+    instrument
     visitTemplate
     scanTemplate
     detectorTemplate
@@ -164,7 +166,7 @@ Providing no beamlines returns all current configurations.
 {
   "configurations": [
       {
-        "beamline": "i11",
+        "instrument": "i11",
         "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
         "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
         "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
@@ -173,7 +175,7 @@ Providing no beamlines returns all current configurations.
         "trackerFileExtension": null
       },
       {
-        "beamline": "i22",
+        "instrument": "i22",
         "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
         "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
         "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
@@ -189,7 +191,7 @@ Providing no beamlines returns all current configurations.
 ```graphql
 {
     configurations {
-    beamline
+    instrument
     visitTemplate
     scanTemplate
     detectorTemplate
@@ -205,7 +207,7 @@ Providing no beamlines returns all current configurations.
 {
   "configurations": [
       {
-        "beamline": "i11",
+        "instrument": "i11",
         "visitTemplate": "/tmp/{instrument}/data/{year}/{visit}",
         "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
         "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
@@ -226,7 +228,7 @@ Providing no beamlines returns all current configurations.
 
 ```graphql
 mutation {
-  scan(beamline: "i22", visit: "cm12345-2", subdirectory: "sub/tree") {
+  scan(instrument: "i22", visit: "cm12345-2", subdirectory: "sub/tree") {
       scanFile
       scanNumber
       detectors(names: ["det1", "det2"] ) {
@@ -261,7 +263,7 @@ mutation {
 ##### Query
 ```graphql
 mutation {
-  configure(beamline: "i11", config: {
+  configure(instrument: "i11", config: {
       visit:"/tmp/{instrument}/data/{year}/{visit}"
       scan:"{subdirectory}/{instrument}-{scan_number}"
       detector:"{subdirectory}/{instrument}-{scan_number}-{detector}"

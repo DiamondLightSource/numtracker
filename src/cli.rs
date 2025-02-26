@@ -70,7 +70,7 @@ pub struct ServeOptions {
 #[derive(Debug, Default, Parser)]
 #[group(requires = "policy_host")]
 pub struct PolicyOptions {
-    /// Beamline Policy Endpoint
+    /// Authorization Policy service
     ///
     /// eg, https://authz.diamond.ac.uk
     #[clap(long = "policy", required = false, env = "NUMTRACKER_AUTH_HOST")]
