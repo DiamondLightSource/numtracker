@@ -48,8 +48,8 @@ use crate::db_service::{
 };
 use crate::numtracker::NumTracker;
 use crate::paths::{
-    DetectorField, DetectorTemplate, DirectoryField, PathSpec, ScanField, ScanTemplate,
-    VisitTemplate,
+    DetectorField, DetectorTemplate, DirectoryField, DirectoryTemplate, PathSpec, ScanField,
+    ScanTemplate,
 };
 use crate::template::{FieldSource, PathTemplate};
 
@@ -184,7 +184,7 @@ impl VisitPath {
     /// The absolute path to the visit directory
     #[instrument(skip(self))]
     async fn directory(&self) -> async_graphql::Result<String> {
-        Ok(path_to_string(self.info.visit()?.render(self))?)
+        Ok(path_to_string(self.info.directory()?.render(self))?)
     }
 }
 
@@ -256,8 +256,8 @@ impl CurrentConfiguration {
         Ok(self.db_config.name())
     }
     /// The template used to build the path to the visit directory for an instrument
-    pub async fn visit_template(&self) -> async_graphql::Result<String> {
-        Ok(self.db_config.visit()?.to_string())
+    pub async fn directory_template(&self) -> async_graphql::Result<String> {
+        Ok(self.db_config.directory()?.to_string())
     }
     /// The template used to build the path of a scan file for a data acquisition, relative to the
     /// root of the visit directory.
@@ -473,8 +473,8 @@ where
 /// Changes that should be made to an instrument's configuration
 #[derive(Debug, InputObject)]
 struct ConfigurationUpdates {
-    /// New template used to determine the visit directory
-    visit: Option<InputTemplate<VisitTemplate>>,
+    /// New template used to determine the root data directory
+    directory: Option<InputTemplate<DirectoryTemplate>>,
     /// New template used to determine the relative path to the main scan file for a collection
     scan: Option<InputTemplate<ScanTemplate>>,
     /// New template used to determine the relative path for detector data files
@@ -491,7 +491,7 @@ impl ConfigurationUpdates {
         InstrumentConfigurationUpdate {
             name: name.into(),
             scan_number: self.scan_number,
-            visit: self.visit.map(|t| t.0),
+            directory: self.directory.map(|t| t.0),
             scan: self.scan.map(|t| t.0),
             detector: self.detector.map(|t| t.0),
             tracker_file_extension: self.tracker_file_extension,
@@ -669,14 +669,15 @@ mod tests {
     }
 
     fn updates(
-        visit: Option<&str>,
+        directory: Option<&str>,
         scan: Option<&str>,
         det: Option<&str>,
         num: Option<u32>,
         ext: Option<&str>,
     ) -> ConfigurationUpdates {
         ConfigurationUpdates {
-            visit: visit.map(|v| InputTemplate::parse(Some(Value::String(v.into()))).unwrap()),
+            directory: directory
+                .map(|d| InputTemplate::parse(Some(Value::String(d.into()))).unwrap()),
             scan: scan.map(|s| InputTemplate::parse(Some(Value::String(s.into()))).unwrap()),
             detector: det.map(|d| InputTemplate::parse(Some(Value::String(d.into()))).unwrap()),
             scan_number: num,
@@ -822,13 +823,13 @@ mod tests {
     async fn configuration(#[future(awt)] env: TestEnv) {
         let query = r#"{
         configuration(instrument: "i22") {
-            instrument visitTemplate scanTemplate detectorTemplate dbScanNumber trackerFileExtension
+            instrument directoryTemplate scanTemplate detectorTemplate dbScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
             "configuration": {
                 "instrument":"i22",
-                "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                 "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                 "dbScanNumber": 122,
@@ -844,14 +845,14 @@ mod tests {
     async fn configurations(#[future(awt)] env: TestEnv) {
         let query = r#"{
         configurations(instrumentFilters: ["i22"]) {
-            instrument visitTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
+            instrument directoryTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
             "configurations": [
                 {
                     "instrument": "i22",
-                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                     "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                     "dbScanNumber": 122,
@@ -869,14 +870,14 @@ mod tests {
     async fn configurations_all(#[future(awt)] env: TestEnv) {
         let query = r#"{
         configurations {
-            instrument visitTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
+            instrument directoryTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
             "configurations": [
                 {
                     "instrument": "i22",
-                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                     "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                     "dbScanNumber": 122,
@@ -885,7 +886,7 @@ mod tests {
                 },
                 {
                     "instrument": "b21",
-                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                     "detectorTemplate": "{subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}",
                     "dbScanNumber": 621,
@@ -950,13 +951,13 @@ mod tests {
     async fn empty_configure_for_existing(#[future(awt)] env: TestEnv) {
         let query = r#"mutation {
             configure(instrument: "i22", config: {}) {
-                visitTemplate scanTemplate detectorTemplate dbScanNumber
+                directoryTemplate scanTemplate detectorTemplate dbScanNumber
             }
         }"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
             "configure": {
-                "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                 "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                 "dbScanNumber": 122
@@ -1004,17 +1005,17 @@ mod tests {
             .execute(
                 r#"mutation {
                     configure(instrument: "i16", config: {
-                        visit: "/tmp/{instrument}/{year}/{visit}"
+                        directory: "/tmp/{instrument}/{year}/{visit}"
                         scan: "{instrument}-{scan_number}"
                         detector: "{scan_number}-{detector}"
                     }) {
-                        scanTemplate visitTemplate detectorTemplate dbScanNumber
+                        scanTemplate directoryTemplate detectorTemplate dbScanNumber
                     }
                 }"#,
             )
             .await;
         let exp = value!({ "configure": {
-                "visitTemplate": "/tmp/{instrument}/{year}/{visit}",
+                "directoryTemplate": "/tmp/{instrument}/{year}/{visit}",
                 "scanTemplate": "{instrument}-{scan_number}",
                 "detectorTemplate": "{scan_number}-{detector}",
                 "dbScanNumber": 0
@@ -1220,11 +1221,11 @@ mod input_template_tests {
     use async_graphql::{InputType, Value};
 
     use super::InputTemplate;
-    use crate::paths::{DetectorTemplate, ScanTemplate, VisitTemplate};
+    use crate::paths::{DetectorTemplate, DirectoryTemplate, ScanTemplate};
 
     #[test]
-    fn valid_visit_template() {
-        let template = InputTemplate::<VisitTemplate>::parse(Some(Value::String(
+    fn valid_directory_template() {
+        let template = InputTemplate::<DirectoryTemplate>::parse(Some(Value::String(
             "/tmp/{instrument}/data/{visit}".into(),
         )))
         .unwrap();
@@ -1243,8 +1244,8 @@ mod input_template_tests {
     #[case::missing_instrument("/tmp/{visit}")]
     #[case::missing_visit("/tmp/{instrument}/data")]
     #[case::invalid_template("/tmp/{nested{placeholder}}")]
-    fn invalid_visit_template(#[case] path: String) {
-        InputTemplate::<VisitTemplate>::parse(Some(Value::String(path))).unwrap_err();
+    fn invalid_directory_template(#[case] path: String) {
+        InputTemplate::<DirectoryTemplate>::parse(Some(Value::String(path))).unwrap_err();
     }
 
     #[rstest::rstest]
