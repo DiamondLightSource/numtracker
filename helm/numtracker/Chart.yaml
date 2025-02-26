@@ -1,6 +1,6 @@
 apiVersion: v2
 name: numtracker
-description: Helm chart to deploy the numtracker service for unifying beamline filenaming
+description: Helm chart to deploy the numtracker service for unifying instrument filenaming
 type: application
 
 # These versions are ignored and are automatically set via the CI process to the version from the tag

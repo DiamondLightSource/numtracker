@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO beamline\n                (name, scan_number, visit, scan, detector, tracker_file_extension)\n            VALUES\n                (?,?,?,?,?,?)\n            RETURNING *",
+  "query": "SELECT * FROM instrument WHERE name = ?",
   "describe": {
     "columns": [
       {
@@ -40,7 +40,7 @@
       }
     ],
     "parameters": {
-      "Right": 6
+      "Right": 1
     },
     "nullable": [
       false,
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "1ad61bdc8babbb4403c535318ccf657b3ea98a04126539ccf08f8251d87ed32b"
+  "hash": "99bf4cc482254ce2a89496c99e65d87a0a44be3838754fe180d9e724722af52f"
 }

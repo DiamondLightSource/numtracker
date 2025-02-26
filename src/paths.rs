@@ -21,7 +21,7 @@ use derive_more::{Display, Error, From};
 use crate::template::{PathTemplate, PathTemplateError};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BeamlineField {
+pub enum DirectoryField {
     #[display("year")]
     Year,
     #[display("visit")]
@@ -39,7 +39,7 @@ pub enum ScanField {
     #[display("scan_number")]
     ScanNumber,
     #[display("{_0}")]
-    Beamline(BeamlineField),
+    Directory(DirectoryField),
 }
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
@@ -54,14 +54,14 @@ pub enum DetectorField {
 #[display("Unrecognised key: {_0:?}")]
 pub struct InvalidKey(#[error(ignore)] String);
 
-impl TryFrom<String> for BeamlineField {
+impl TryFrom<String> for DirectoryField {
     type Error = InvalidKey;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
-            "year" => Ok(BeamlineField::Year),
-            "visit" => Ok(BeamlineField::Visit),
-            "proposal" => Ok(BeamlineField::Proposal),
-            "instrument" => Ok(BeamlineField::Instrument),
+            "year" => Ok(DirectoryField::Year),
+            "visit" => Ok(DirectoryField::Visit),
+            "proposal" => Ok(DirectoryField::Proposal),
+            "instrument" => Ok(DirectoryField::Instrument),
             _ => Err(InvalidKey(value)),
         }
     }
@@ -73,7 +73,7 @@ impl TryFrom<String> for ScanField {
         match value.as_str() {
             "scan_number" => Ok(ScanField::ScanNumber),
             "subdirectory" => Ok(ScanField::Subdirectory),
-            _ => Ok(ScanField::Beamline(BeamlineField::try_from(value)?)),
+            _ => Ok(ScanField::Directory(DirectoryField::try_from(value)?)),
         }
     }
 }
@@ -137,14 +137,14 @@ pub struct ScanTemplate;
 pub struct DetectorTemplate;
 
 impl PathSpec for VisitTemplate {
-    type Field = BeamlineField;
+    type Field = DirectoryField;
 
-    const REQUIRED: &'static [Self::Field] = &[BeamlineField::Instrument, BeamlineField::Visit];
+    const REQUIRED: &'static [Self::Field] = &[DirectoryField::Instrument, DirectoryField::Visit];
 
     const ABSOLUTE: bool = true;
     fn describe() -> &'static str {
         concat!(
-            "A template describing the path to the visit directory for a beamline. ",
+            "A template describing the path to the visit directory for an instrument. ",
             "It should be an absolute path and contain placeholders for {instrument} and {visit}."
         )
     }

@@ -1,6 +1,6 @@
 
 """
-Changes that should be made to a beamline's configuration
+Changes that should be made to an instrument's configuration
 """
 input ConfigurationUpdates {
 	"""
@@ -27,15 +27,15 @@ input ConfigurationUpdates {
 }
 
 """
-The current configuration for a beamline
+The current configuration for an instrument
 """
 type CurrentConfiguration {
 	"""
-	The name of the beamline
+	The name of the instrument
 	"""
-	beamline: String!
+	instrument: String!
 	"""
-	The template used to build the path to the visit directory for a beamline
+	The template used to build the path to the visit directory for an instrument
 	"""
 	visitTemplate: String!
 	"""
@@ -50,13 +50,13 @@ type CurrentConfiguration {
 	detectorTemplate: String!
 	"""
 	The latest scan number stored in the DB. This is the last scan number provided by this
-	service but may not reflect the most recent scan number for a beamline if an external
+	service but may not reflect the most recent scan number for an instrument if an external
 	service (eg GDA) has incremented its own number tracker.
 	"""
 	dbScanNumber: Int!
 	"""
-	The highest matching number file for this beamline in the configured tracking directory.
-	May be null if no directory is available for this beamline or if there are no matching
+	The highest matching number file for this instrument in the configured tracking directory.
+	May be null if no directory is available for this instrument or if there are no matching
 	number files.
 	"""
 	fileScanNumber: Int
@@ -100,11 +100,11 @@ type Mutation {
 	"""
 	Generate scan file locations for the next scan
 	"""
-	scan(beamline: String!, visit: String!, sub: Subdirectory): ScanPaths!
+	scan(instrument: String!, visit: String!, sub: Subdirectory): ScanPaths!
 	"""
-	Add or modify the stored configuration for a beamline
+	Add or modify the stored configuration for an instrument
 	"""
-	configure(beamline: String!, config: ConfigurationUpdates!): CurrentConfiguration!
+	configure(instrument: String!, config: ConfigurationUpdates!): CurrentConfiguration!
 }
 
 """
@@ -112,23 +112,23 @@ Queries relating to numtracker configurations that have no side-effects
 """
 type Query {
 	"""
-	Get the visit directory information for the given beamline and visit.
+	Get the visit directory information for the given instrument and visit.
 	This information is not scan specific
 	"""
-	paths(beamline: String!, visit: String!): VisitPath!
+	paths(instrument: String!, visit: String!): VisitPath!
 	"""
-	Get the current configuration for the given beamline
+	Get the current configuration for the given instrument
 	"""
-	configuration(beamline: String!): CurrentConfiguration!
+	configuration(instrument: String!): CurrentConfiguration!
 	"""
-	Get the configurations for all available beamlines
-	Can be filtered to provide one or more specific beamlines
+	Get the configurations for all available instruments
+	Can be filtered to provide one or more specific instruments
 	"""
-	configurations(beamlineFilters: [String!]): [CurrentConfiguration!]!
+	configurations(instrumentFilters: [String!]): [CurrentConfiguration!]!
 }
 
 """
-Paths and values related to a specific scan/data collection for a beamline
+Paths and values related to a specific scan/data collection for an instrument
 """
 type ScanPaths {
 	"""
@@ -141,7 +141,7 @@ type ScanPaths {
 	"""
 	scanFile: String!
 	"""
-	The scan number for this scan. This should be unique for the requested beamline.
+	The scan number for this scan. This should be unique for the requested instrument.
 	"""
 	scanNumber: Int!
 	"""
@@ -172,9 +172,9 @@ type VisitPath {
 	"""
 	visit: String!
 	"""
-	This beamline for which this is the visit directory
+	The instrument for which this is the visit directory
 	"""
-	beamline: String!
+	instrument: String!
 	"""
 	The absolute path to the visit directory
 	"""
@@ -182,7 +182,7 @@ type VisitPath {
 }
 
 """
-A template describing the path to the visit directory for a beamline. It should be an absolute path and contain placeholders for {instrument} and {visit}.
+A template describing the path to the visit directory for an instrument. It should be an absolute path and contain placeholders for {instrument} and {visit}.
 """
 scalar VisitTemplate
 

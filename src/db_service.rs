@@ -23,7 +23,7 @@ use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
 
 use crate::paths::{
-    BeamlineField, DetectorField, DetectorTemplate, InvalidPathTemplate, PathSpec, ScanField,
+    DetectorField, DetectorTemplate, DirectoryField, InvalidPathTemplate, PathSpec, ScanField,
     ScanTemplate, VisitTemplate,
 };
 use crate::template::PathTemplate;
@@ -65,9 +65,9 @@ impl<F> From<&str> for RawPathTemplate<F> {
     }
 }
 
-/// The current configuration for a beamline
+/// The current configuration for an instrument
 #[derive(Debug, PartialEq, Eq)]
-pub struct BeamlineConfiguration {
+pub struct InstrumentConfiguration {
     name: String,
     scan_number: u32,
     visit: RawPathTemplate<VisitTemplate>,
@@ -76,7 +76,7 @@ pub struct BeamlineConfiguration {
     tracker_file_extension: Option<String>,
 }
 
-impl BeamlineConfiguration {
+impl InstrumentConfiguration {
     pub fn name(&self) -> &str {
         &self.name
     }
@@ -85,7 +85,7 @@ impl BeamlineConfiguration {
         self.scan_number
     }
 
-    pub fn visit(&self) -> SqliteTemplateResult<BeamlineField> {
+    pub fn visit(&self) -> SqliteTemplateResult<DirectoryField> {
         self.visit.as_template()
     }
 
@@ -102,9 +102,9 @@ impl BeamlineConfiguration {
     }
 }
 
-impl<'r> FromRow<'r, SqliteRow> for BeamlineConfiguration {
+impl<'r> FromRow<'r, SqliteRow> for InstrumentConfiguration {
     fn from_row(row: &'r SqliteRow) -> Result<Self, sqlx::Error> {
-        Ok(DbBeamlineConfig {
+        Ok(DbInstrumentConfig {
             id: None,
             name: row.try_get("name")?,
             scan_number: row.try_get("scan_number")?,
@@ -118,16 +118,16 @@ impl<'r> FromRow<'r, SqliteRow> for BeamlineConfiguration {
 }
 
 #[derive(Debug)]
-pub struct BeamlineConfigurationUpdate {
+pub struct InstrumentConfigurationUpdate {
     pub name: String,
     pub scan_number: Option<u32>,
-    pub visit: Option<PathTemplate<BeamlineField>>,
+    pub visit: Option<PathTemplate<DirectoryField>>,
     pub scan: Option<PathTemplate<ScanField>>,
     pub detector: Option<PathTemplate<DetectorField>>,
     pub tracker_file_extension: Option<String>,
 }
 
-impl BeamlineConfigurationUpdate {
+impl InstrumentConfigurationUpdate {
     fn is_empty(&self) -> bool {
         self.scan_number.is_none()
             && self.visit.is_none()
@@ -136,18 +136,18 @@ impl BeamlineConfigurationUpdate {
             && self.tracker_file_extension.is_none()
     }
 
-    pub async fn update_beamline(
+    pub async fn update_instrument(
         &self,
         db: &SqliteScanPathService,
-    ) -> Result<Option<BeamlineConfiguration>, sqlx::Error> {
+    ) -> Result<Option<InstrumentConfiguration>, sqlx::Error> {
         if self.is_empty() {
             return match db.current_configuration(&self.name).await {
                 Ok(bc) => Ok(Some(bc)),
-                Err(ConfigurationError::MissingBeamline(_)) => Ok(None),
+                Err(ConfigurationError::MissingInstrument(_)) => Ok(None),
                 Err(ConfigurationError::Db(e)) => Err(e),
             };
         }
-        let mut q: QueryBuilder<Sqlite> = QueryBuilder::new("UPDATE beamline SET ");
+        let mut q: QueryBuilder<Sqlite> = QueryBuilder::new("UPDATE instrument SET ");
         let mut fields = q.separated(", ");
         if let Some(num) = self.scan_number {
             fields.push("scan_number=");
@@ -167,7 +167,7 @@ impl BeamlineConfigurationUpdate {
         }
         if let Some(ext) = &self.tracker_file_extension {
             if ext != &self.name {
-                // extension defaults to beamline name
+                // extension defaults to instrument name
                 fields.push("tracker_file_extension=");
                 fields.push_bind_unseparated(ext);
             }
@@ -177,9 +177,9 @@ impl BeamlineConfigurationUpdate {
         q.push(" RETURNING *");
 
         trace!(
-            beamline = self.name,
+            instrument = self.name,
             query = q.sql(),
-            "Updating beamline configuration",
+            "Updating instrument configuration",
         );
 
         q.build_query_as().fetch_optional(&db.pool).await
@@ -187,8 +187,8 @@ impl BeamlineConfigurationUpdate {
     pub async fn insert_new(
         self,
         db: &SqliteScanPathService,
-    ) -> Result<BeamlineConfiguration, NewConfigurationError> {
-        let dbc = DbBeamlineConfig {
+    ) -> Result<InstrumentConfiguration, NewConfigurationError> {
+        let dbc = DbInstrumentConfig {
             id: None,
             name: self.name,
             scan_number: i64::from(self.scan_number.unwrap_or(0)),
@@ -227,7 +227,7 @@ impl BeamlineConfigurationUpdate {
 }
 
 #[derive(Debug)]
-struct DbBeamlineConfig {
+struct DbInstrumentConfig {
     #[allow(unused)] // unused but allows use of 'SELECT * ...' queries
     id: Option<i64>,
     name: String,
@@ -238,14 +238,14 @@ struct DbBeamlineConfig {
     tracker_file_extension: Option<String>,
 }
 
-impl DbBeamlineConfig {
+impl DbInstrumentConfig {
     pub async fn insert_into(
         self,
         db: &SqliteScanPathService,
-    ) -> sqlx::Result<BeamlineConfiguration> {
+    ) -> sqlx::Result<InstrumentConfiguration> {
         let bc = query_as!(
-            DbBeamlineConfig,
-            "INSERT INTO beamline
+            DbInstrumentConfig,
+            "INSERT INTO instrument
                 (name, scan_number, visit, scan, detector, tracker_file_extension)
             VALUES
                 (?,?,?,?,?,?)
@@ -263,8 +263,8 @@ impl DbBeamlineConfig {
     }
 }
 
-impl From<DbBeamlineConfig> for BeamlineConfiguration {
-    fn from(value: DbBeamlineConfig) -> Self {
+impl From<DbInstrumentConfig> for InstrumentConfiguration {
+    fn from(value: DbInstrumentConfig) -> Self {
         Self {
             name: value.name,
             scan_number: u32::try_from(value.scan_number).expect("Out of scan numbers"),
@@ -290,27 +290,27 @@ impl SqliteScanPathService {
 
     pub async fn current_configuration(
         &self,
-        beamline: &str,
-    ) -> Result<BeamlineConfiguration, ConfigurationError> {
+        instrument: &str,
+    ) -> Result<InstrumentConfiguration, ConfigurationError> {
         query_as!(
-            DbBeamlineConfig,
-            "SELECT * FROM beamline WHERE name = ?",
-            beamline
+            DbInstrumentConfig,
+            "SELECT * FROM instrument WHERE name = ?",
+            instrument
         )
         .fetch_optional(&self.pool)
         .await?
-        .map(BeamlineConfiguration::from)
-        .ok_or(ConfigurationError::MissingBeamline(beamline.into()))
+        .map(InstrumentConfiguration::from)
+        .ok_or(ConfigurationError::MissingInstrument(instrument.into()))
     }
 
     pub async fn configurations(
         &self,
         filters: Vec<String>,
-    ) -> Result<Vec<BeamlineConfiguration>, ConfigurationError> {
-        let mut q = QueryBuilder::new("SELECT * FROM beamline WHERE name in (");
-        let mut beamlines = q.separated(", ");
+    ) -> Result<Vec<InstrumentConfiguration>, ConfigurationError> {
+        let mut q = QueryBuilder::new("SELECT * FROM instrument WHERE name in (");
+        let mut instruments = q.separated(", ");
         for filter in filters {
-            beamlines.push_bind(filter);
+            instruments.push_bind(filter);
         }
         q.push(")");
 
@@ -320,31 +320,31 @@ impl SqliteScanPathService {
 
     pub async fn all_configurations(
         &self,
-    ) -> Result<Vec<BeamlineConfiguration>, ConfigurationError> {
-        Ok(query_as!(DbBeamlineConfig, "SELECT * FROM beamline")
+    ) -> Result<Vec<InstrumentConfiguration>, ConfigurationError> {
+        Ok(query_as!(DbInstrumentConfig, "SELECT * FROM instrument")
             .fetch_all(&self.pool)
             .await?
             .into_iter()
-            .map(BeamlineConfiguration::from)
+            .map(InstrumentConfiguration::from)
             .collect())
     }
 
     pub async fn next_scan_configuration(
         &self,
-        beamline: &str,
+        instrument: &str,
         current_high: Option<u32>,
-    ) -> Result<BeamlineConfiguration, ConfigurationError> {
+    ) -> Result<InstrumentConfiguration, ConfigurationError> {
         let exp = current_high.unwrap_or(0);
         query_as!(
-            DbBeamlineConfig,
-            "UPDATE beamline SET scan_number = max(scan_number, ?) + 1 WHERE name = ? RETURNING *",
+            DbInstrumentConfig,
+            "UPDATE instrument SET scan_number = max(scan_number, ?) + 1 WHERE name = ? RETURNING *",
             exp,
-            beamline
+            instrument
         )
         .fetch_optional(&self.pool)
         .await?
-        .map(BeamlineConfiguration::from)
-        .ok_or(ConfigurationError::MissingBeamline(beamline.into()))
+        .map(InstrumentConfiguration::from)
+        .ok_or(ConfigurationError::MissingInstrument(instrument.into()))
     }
 
     /// Create a db service from a new empty/schema-less DB
@@ -378,8 +378,8 @@ mod error {
 
     #[derive(Debug, Display, Error, From)]
     pub enum ConfigurationError {
-        #[display("No configuration available for beamline {_0:?}")]
-        MissingBeamline(#[error(ignore)] String),
+        #[display("No configuration available for instrument {_0:?}")]
+        MissingInstrument(#[error(ignore)] String),
         #[display("Error reading configuration: {_0}")]
         Db(sqlx::Error),
     }
@@ -409,7 +409,7 @@ mod db_tests {
 
     use super::SqliteScanPathService;
     use crate::db_service::error::{ConfigurationError, NewConfigurationError};
-    use crate::db_service::{BeamlineConfiguration, BeamlineConfigurationUpdate};
+    use crate::db_service::{InstrumentConfiguration, InstrumentConfigurationUpdate};
     use crate::paths::{DetectorTemplate, PathSpec, ScanTemplate, VisitTemplate};
 
     /// Remove repeated .await.unwrap() noise from tests
@@ -433,8 +433,8 @@ mod db_tests {
         }};
     }
 
-    fn update(bl: &str) -> BeamlineConfigurationUpdate {
-        BeamlineConfigurationUpdate {
+    fn update(bl: &str) -> InstrumentConfigurationUpdate {
+        InstrumentConfigurationUpdate {
             name: bl.into(),
             scan_number: None,
             visit: VisitTemplate::new_checked("/tmp/{instrument}/data/{year}/{visit}").ok(),
@@ -451,20 +451,20 @@ mod db_tests {
     async fn empty_db_has_no_config() {
         let db = SqliteScanPathService::memory().await;
         let e = err!(
-            ConfigurationError::MissingBeamline,
+            ConfigurationError::MissingInstrument,
             db.current_configuration("i22")
         );
         assert_eq!(e, "i22")
     }
 
     #[rstest]
-    #[case::visit("visit", |u: &mut BeamlineConfigurationUpdate| u.visit = None)]
-    #[case::scan("scan", |u: &mut BeamlineConfigurationUpdate| u.scan = None)]
-    #[case::scan("detector", |u: &mut BeamlineConfigurationUpdate| u.detector = None)]
+    #[case::visit("visit", |u: &mut InstrumentConfigurationUpdate| u.visit = None)]
+    #[case::scan("scan", |u: &mut InstrumentConfigurationUpdate| u.scan = None)]
+    #[case::scan("detector", |u: &mut InstrumentConfigurationUpdate| u.detector = None)]
     #[tokio::test]
-    async fn new_beamline_with_missing_field(
+    async fn new_instrument_with_missing_field(
         #[case] name: &str,
-        #[case] init: impl FnOnce(&mut BeamlineConfigurationUpdate),
+        #[case] init: impl FnOnce(&mut InstrumentConfigurationUpdate),
     ) {
         let db = SqliteScanPathService::memory().await;
         let mut update = update("i22");
@@ -474,11 +474,11 @@ mod db_tests {
     }
 
     #[rstest]
-    #[case::directory(|u: &mut BeamlineConfigurationUpdate| u.tracker_file_extension = None)]
-    #[case::scan_number(|u: &mut BeamlineConfigurationUpdate| u.scan_number = None)]
+    #[case::directory(|u: &mut InstrumentConfigurationUpdate| u.tracker_file_extension = None)]
+    #[case::scan_number(|u: &mut InstrumentConfigurationUpdate| u.scan_number = None)]
     #[tokio::test]
-    async fn new_beamline_without_optional(
-        #[case] init: impl FnOnce(&mut BeamlineConfigurationUpdate),
+    async fn new_instrument_without_optional(
+        #[case] init: impl FnOnce(&mut InstrumentConfigurationUpdate),
     ) {
         let db = SqliteScanPathService::memory().await;
         let mut update = update("i22");
@@ -498,7 +498,7 @@ mod db_tests {
     }
 
     #[test]
-    async fn duplicate_beamlines() {
+    async fn duplicate_instruments() {
         let db = SqliteScanPathService::memory().await;
         ok!(update("i22").insert_new(&db));
         let e = err!(NewConfigurationError::Db, update("i22").insert_new(&db));
@@ -536,10 +536,10 @@ mod db_tests {
     }
 
     #[test]
-    async fn incrementing_missing_beamline() {
+    async fn incrementing_missing_instrument() {
         let db = SqliteScanPathService::memory().await;
         let e = err!(
-            ConfigurationError::MissingBeamline,
+            ConfigurationError::MissingInstrument,
             db.next_scan_configuration("b21", None)
         );
         assert_eq!(e, "b21")
@@ -553,7 +553,7 @@ mod db_tests {
             .with_extension("ext")
             .insert_new(&db));
         let conf = ok!(db.current_configuration("i22"));
-        let expected = BeamlineConfiguration {
+        let expected = InstrumentConfiguration {
             name: "i22".into(),
             scan_number: 122,
             visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
@@ -583,11 +583,11 @@ mod db_tests {
         ]));
 
         // Sort returned list as DB order is not guaranteed
-        confs.sort_unstable_by_key(BeamlineConfiguration::scan_number);
+        confs.sort_unstable_by_key(InstrumentConfiguration::scan_number);
 
         // i03 has not been configured so it will not fetch it.
         let expected = vec![
-            BeamlineConfiguration {
+            InstrumentConfiguration {
                 name: "i11".into(),
                 scan_number: 111,
                 visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
@@ -595,7 +595,7 @@ mod db_tests {
                 detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
                 tracker_file_extension: Some("ext".into()),
             },
-            BeamlineConfiguration {
+            InstrumentConfiguration {
                 name: "i22".into(),
                 scan_number: 122,
                 visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
@@ -622,12 +622,12 @@ mod db_tests {
         let mut confs = ok!(db.all_configurations());
 
         // Sort returned list as DB order is not guaranteed
-        confs.sort_unstable_by_key(BeamlineConfiguration::scan_number);
+        confs.sort_unstable_by_key(InstrumentConfiguration::scan_number);
 
         // i03 has not been configured so it will not fetch it.
         assert_eq!(confs.len(), 2);
         let expected = vec![
-            BeamlineConfiguration {
+            InstrumentConfiguration {
                 name: "i11".into(),
                 scan_number: 111,
                 visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
@@ -635,7 +635,7 @@ mod db_tests {
                 detector: "{subdirectory}/{instrument}-{scan_number}-{detector}".into(),
                 tracker_file_extension: Some("ext".into()),
             },
-            BeamlineConfiguration {
+            InstrumentConfiguration {
                 name: "i22".into(),
                 scan_number: 122,
                 visit: "/tmp/{instrument}/data/{year}/{visit}".into(),
@@ -647,41 +647,41 @@ mod db_tests {
         assert_eq!(expected, confs);
     }
 
-    type Update = BeamlineConfigurationUpdate;
+    type Update = InstrumentConfigurationUpdate;
 
     #[rstest]
     #[case::visit(
             |u: &mut Update| u.visit = VisitTemplate::new_checked("/new/{instrument}/{proposal}/{visit}").ok(),
-            |u: BeamlineConfiguration| assert_eq!(u.visit().unwrap().to_string(), "/new/{instrument}/{proposal}/{visit}"))]
+            |u: InstrumentConfiguration| assert_eq!(u.visit().unwrap().to_string(), "/new/{instrument}/{proposal}/{visit}"))]
     #[case::scan(
             |u: &mut Update| u.scan = ScanTemplate::new_checked("new-{scan_number}").ok(),
-            |u: BeamlineConfiguration| assert_eq!(u.scan().unwrap().to_string(), "new-{scan_number}"))]
+            |u: InstrumentConfiguration| assert_eq!(u.scan().unwrap().to_string(), "new-{scan_number}"))]
     #[case::detector(
             |u: &mut Update| u.detector = DetectorTemplate::new_checked("new-{scan_number}-{detector}").ok(),
-            |u: BeamlineConfiguration| assert_eq!(u.detector().unwrap().to_string(), "new-{scan_number}-{detector}"))]
+            |u: InstrumentConfiguration| assert_eq!(u.detector().unwrap().to_string(), "new-{scan_number}-{detector}"))]
     #[case::scan_number(
             |u: &mut Update| u.scan_number = Some(42),
-            |u: BeamlineConfiguration| assert_eq!(u.scan_number(), 42))]
+            |u: InstrumentConfiguration| assert_eq!(u.scan_number(), 42))]
     #[case::extension(
             |u: &mut Update| u.tracker_file_extension = Some("new".into()),
-            |u: BeamlineConfiguration| assert_eq!(u.tracker_file_extension.unwrap(), "new"))]
+            |u: InstrumentConfiguration| assert_eq!(u.tracker_file_extension.unwrap(), "new"))]
     #[tokio::test]
     async fn update_existing(
-        #[case] init: impl FnOnce(&mut BeamlineConfigurationUpdate),
-        #[case] check: impl FnOnce(BeamlineConfiguration),
+        #[case] init: impl FnOnce(&mut InstrumentConfigurationUpdate),
+        #[case] check: impl FnOnce(InstrumentConfiguration),
     ) {
         let db = SqliteScanPathService::memory().await;
         ok!(update("i22").insert_new(&db));
-        let mut upd = BeamlineConfigurationUpdate::empty("i22");
+        let mut upd = InstrumentConfigurationUpdate::empty("i22");
         init(&mut upd);
-        let bc = ok!(upd.update_beamline(&db)).expect("Updated beamline missing");
+        let bc = ok!(upd.update_instrument(&db)).expect("Updated instrument missing");
         check(bc)
     }
 
     #[tokio::test]
     async fn empty_update() {
         let db = SqliteScanPathService::memory().await;
-        let upd = BeamlineConfigurationUpdate::empty("b21");
-        assert!(ok!(upd.update_beamline(&db)).is_none());
+        let upd = InstrumentConfigurationUpdate::empty("b21");
+        assert!(ok!(upd.update_instrument(&db)).is_none());
     }
 }

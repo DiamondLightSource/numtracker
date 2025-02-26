@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * FROM beamline WHERE name = ?",
+  "query": "SELECT * FROM instrument",
   "describe": {
     "columns": [
       {
@@ -40,7 +40,7 @@
       }
     ],
     "parameters": {
-      "Right": 1
+      "Right": 0
     },
     "nullable": [
       false,
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "e45d346b58374c69e4f3bb59935719177993012eb03ce8f2d9bcca00290690be"
+  "hash": "30e7b9868a569ff84bf63ad3f750cd3f81e49b4836604e2d040c09aba1b590b0"
 }
