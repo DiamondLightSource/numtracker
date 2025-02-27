@@ -21,7 +21,7 @@ use derive_more::{Display, Error, From};
 use crate::template::{PathTemplate, PathTemplateError};
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum BeamlineField {
+pub enum DirectoryField {
     #[display("year")]
     Year,
     #[display("visit")]
@@ -39,7 +39,7 @@ pub enum ScanField {
     #[display("scan_number")]
     ScanNumber,
     #[display("{_0}")]
-    Beamline(BeamlineField),
+    Directory(DirectoryField),
 }
 
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
@@ -54,14 +54,14 @@ pub enum DetectorField {
 #[display("Unrecognised key: {_0:?}")]
 pub struct InvalidKey(#[error(ignore)] String);
 
-impl TryFrom<String> for BeamlineField {
+impl TryFrom<String> for DirectoryField {
     type Error = InvalidKey;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         match value.as_str() {
-            "year" => Ok(BeamlineField::Year),
-            "visit" => Ok(BeamlineField::Visit),
-            "proposal" => Ok(BeamlineField::Proposal),
-            "instrument" => Ok(BeamlineField::Instrument),
+            "year" => Ok(DirectoryField::Year),
+            "visit" => Ok(DirectoryField::Visit),
+            "proposal" => Ok(DirectoryField::Proposal),
+            "instrument" => Ok(DirectoryField::Instrument),
             _ => Err(InvalidKey(value)),
         }
     }
@@ -73,7 +73,7 @@ impl TryFrom<String> for ScanField {
         match value.as_str() {
             "scan_number" => Ok(ScanField::ScanNumber),
             "subdirectory" => Ok(ScanField::Subdirectory),
-            _ => Ok(ScanField::Beamline(BeamlineField::try_from(value)?)),
+            _ => Ok(ScanField::Directory(DirectoryField::try_from(value)?)),
         }
     }
 }
@@ -130,21 +130,21 @@ pub enum InvalidPathTemplate {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct VisitTemplate;
+pub struct DirectoryTemplate;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ScanTemplate;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DetectorTemplate;
 
-impl PathSpec for VisitTemplate {
-    type Field = BeamlineField;
+impl PathSpec for DirectoryTemplate {
+    type Field = DirectoryField;
 
-    const REQUIRED: &'static [Self::Field] = &[BeamlineField::Instrument, BeamlineField::Visit];
+    const REQUIRED: &'static [Self::Field] = &[DirectoryField::Instrument, DirectoryField::Visit];
 
     const ABSOLUTE: bool = true;
     fn describe() -> &'static str {
         concat!(
-            "A template describing the path to the visit directory for a beamline. ",
+            "A template describing the path to the data directory for a given instrument session. ",
             "It should be an absolute path and contain placeholders for {instrument} and {visit}."
         )
     }
@@ -158,7 +158,7 @@ impl PathSpec for ScanTemplate {
     const ABSOLUTE: bool = false;
     fn describe() -> &'static str {
         concat!(
-            "A template describing the location within a visit directory where the root scan file should be written. ",
+            "A template describing the location within a session data directory where the root scan file should be written. ",
             "It should be a relative path and contain a placeholder for {scan_number} to ensure files are unique."
         )
     }
@@ -175,7 +175,7 @@ impl PathSpec for DetectorTemplate {
     const ABSOLUTE: bool = false;
     fn describe() -> &'static str {
         concat!(
-            "A template describing the location within a visit directory where ",
+            "A template describing the location within a session data directory where ",
             "the data for a given detector should be written",
             "\n\n",
             "It should contain placeholders for {detector} and {scan_number} ",
@@ -190,7 +190,7 @@ mod paths_tests {
     use std::fmt::Debug;
 
     use super::{
-        DetectorTemplate, InvalidPathTemplate, PathSpec as _, ScanTemplate, VisitTemplate,
+        DetectorTemplate, DirectoryTemplate, InvalidPathTemplate, PathSpec as _, ScanTemplate,
     };
     use crate::template::{ErrorKind, PathTemplateError};
 
@@ -227,11 +227,11 @@ mod paths_tests {
     #[case::invalid_path_empty("/data/{}", TemplateErrorType::Empty)]
     #[case::invalid_path_nested("/data/{nes{ted}}", TemplateErrorType::Nested)]
     #[case::invalid_path_unrecognised("/data/{scan_number}", TemplateErrorType::Unrecognised)]
-    fn invalid_visit<E: PartialEq<InvalidPathTemplate> + Debug>(
+    fn invalid_directory<E: PartialEq<InvalidPathTemplate> + Debug>(
         #[case] template: &str,
         #[case] err: E,
     ) {
-        let e = VisitTemplate::new_checked(template).unwrap_err();
+        let e = DirectoryTemplate::new_checked(template).unwrap_err();
         assert_eq!(err, e);
     }
 

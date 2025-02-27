@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "UPDATE beamline SET scan_number = max(scan_number, ?) + 1 WHERE name = ? RETURNING *",
+  "query": "SELECT * FROM instrument WHERE name = ?",
   "describe": {
     "columns": [
       {
@@ -19,7 +19,7 @@
         "type_info": "Integer"
       },
       {
-        "name": "visit",
+        "name": "directory",
         "ordinal": 3,
         "type_info": "Text"
       },
@@ -40,7 +40,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       false,
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "7b769dea685f49e8ff6d24a69e69e7037c1dc197db8bd273ec53e63a85e85351"
+  "hash": "99bf4cc482254ce2a89496c99e65d87a0a44be3838754fe180d9e724722af52f"
 }

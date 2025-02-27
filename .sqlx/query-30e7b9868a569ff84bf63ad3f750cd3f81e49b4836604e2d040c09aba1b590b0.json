@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT * FROM beamline",
+  "query": "SELECT * FROM instrument",
   "describe": {
     "columns": [
       {
@@ -19,7 +19,7 @@
         "type_info": "Integer"
       },
       {
-        "name": "visit",
+        "name": "directory",
         "ordinal": 3,
         "type_info": "Text"
       },
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "02d6faf0ffd8fb96031f7a8e824de4e4552ea72176c5e885cea3e517316e7774"
+  "hash": "30e7b9868a569ff84bf63ad3f750cd3f81e49b4836604e2d040c09aba1b590b0"
 }

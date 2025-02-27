@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO beamline\n                (name, scan_number, visit, scan, detector, tracker_file_extension)\n            VALUES\n                (?,?,?,?,?,?)\n            RETURNING *",
+  "query": "UPDATE instrument SET scan_number = max(scan_number, ?) + 1 WHERE name = ? RETURNING *",
   "describe": {
     "columns": [
       {
@@ -19,7 +19,7 @@
         "type_info": "Integer"
       },
       {
-        "name": "visit",
+        "name": "directory",
         "ordinal": 3,
         "type_info": "Text"
       },
@@ -40,7 +40,7 @@
       }
     ],
     "parameters": {
-      "Right": 6
+      "Right": 2
     },
     "nullable": [
       false,
@@ -52,5 +52,5 @@
       true
     ]
   },
-  "hash": "1ad61bdc8babbb4403c535318ccf657b3ea98a04126539ccf08f8251d87ed32b"
+  "hash": "6d1e14903687dc07c77d9dbc0e2e2bf1cf90adca88506b4c484f4f6234463200"
 }

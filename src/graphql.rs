@@ -44,12 +44,12 @@ use tracing::{info, instrument, trace, warn};
 use crate::build_info::ServerStatus;
 use crate::cli::ServeOptions;
 use crate::db_service::{
-    BeamlineConfiguration, BeamlineConfigurationUpdate, SqliteScanPathService,
+    InstrumentConfiguration, InstrumentConfigurationUpdate, SqliteScanPathService,
 };
 use crate::numtracker::NumTracker;
 use crate::paths::{
-    BeamlineField, DetectorField, DetectorTemplate, PathSpec, ScanField, ScanTemplate,
-    VisitTemplate,
+    DetectorField, DetectorTemplate, DirectoryField, DirectoryTemplate, PathSpec, ScanField,
+    ScanTemplate,
 };
 use crate::template::{FieldSource, PathTemplate};
 
@@ -137,21 +137,21 @@ struct DetectorPath {
     path: String,
 }
 
-/// GraphQL type to provide path data for a specific visit
-struct VisitPath {
-    visit: String,
-    info: BeamlineConfiguration,
+/// GraphQL type to provide directory data for a specific instrument session
+struct DirectoryPath {
+    instrument_session: String,
+    info: InstrumentConfiguration,
 }
 
-/// GraphQL type to provide path data for the next scan for a given visit
+/// GraphQL type to provide path data for the next scan for a given instrument session
 struct ScanPaths {
-    visit: VisitPath,
+    directory: DirectoryPath,
     subdirectory: Subdirectory,
 }
 
-/// GraphQL type to provide current configuration for a beamline
+/// GraphQL type to provide current configuration for an instrument
 struct CurrentConfiguration {
-    db_config: BeamlineConfiguration,
+    db_config: InstrumentConfiguration,
     high_file: Option<u32>,
 }
 
@@ -169,61 +169,61 @@ fn path_to_string(path: PathBuf) -> Result<String, NonUnicodePath> {
 }
 
 #[Object]
-/// The path to a visit directory and the components used to build it
-impl VisitPath {
-    /// The visit for which this is the visit directory
+/// The path to a data directory and the components used to build it
+impl DirectoryPath {
+    /// The instrument session for which this is the data directory
     #[instrument(skip(self))]
-    async fn visit(&self) -> &str {
-        &self.visit
+    async fn instrument_session(&self) -> &str {
+        &self.instrument_session
     }
-    /// This beamline for which this is the visit directory
+    /// The instrument for which this is the data directory
     #[instrument(skip(self))]
-    async fn beamline(&self) -> &str {
+    async fn instrument(&self) -> &str {
         &self.info.name()
     }
-    /// The absolute path to the visit directory
+    /// The absolute path to the data directory
     #[instrument(skip(self))]
-    async fn directory(&self) -> async_graphql::Result<String> {
-        Ok(path_to_string(self.info.visit()?.render(self))?)
+    async fn path(&self) -> async_graphql::Result<String> {
+        Ok(path_to_string(self.info.directory()?.render(self))?)
     }
 }
 
-impl FieldSource<BeamlineField> for VisitPath {
-    fn resolve(&self, field: &BeamlineField) -> Cow<'_, str> {
+impl FieldSource<DirectoryField> for DirectoryPath {
+    fn resolve(&self, field: &DirectoryField) -> Cow<'_, str> {
         match field {
-            BeamlineField::Year => Local::now().year().to_string().into(),
-            BeamlineField::Visit => self.visit.as_str().into(),
-            BeamlineField::Proposal => self
-                .visit
+            DirectoryField::Year => Local::now().year().to_string().into(),
+            DirectoryField::Visit => self.instrument_session.as_str().into(),
+            DirectoryField::Proposal => self
+                .instrument_session
                 .split('-')
                 .next()
                 .expect("There is always one section for a split")
                 .into(),
-            BeamlineField::Instrument => self.info.name().into(),
+            DirectoryField::Instrument => self.info.name().into(),
         }
     }
 }
 
 #[Object]
-/// Paths and values related to a specific scan/data collection for a beamline
+/// Paths and values related to a specific scan/data collection for an instrument
 impl ScanPaths {
-    /// The visit used to generate this scan information. Should be the same as the visit passed in
+    /// The directory used to generate this scan information.
     #[instrument(skip(self))]
-    async fn visit(&self) -> &VisitPath {
-        &self.visit
+    async fn directory(&self) -> &DirectoryPath {
+        &self.directory
     }
 
     /// The root scan file for this scan. The path has no extension so that the format can be
     /// chosen by the client.
     #[instrument(skip(self))]
     async fn scan_file(&self) -> async_graphql::Result<String> {
-        Ok(path_to_string(self.visit.info.scan()?.render(self))?)
+        Ok(path_to_string(self.directory.info.scan()?.render(self))?)
     }
 
-    /// The scan number for this scan. This should be unique for the requested beamline.
+    /// The scan number for this scan. This should be unique for the requested instrument.
     #[instrument(skip(self))]
     async fn scan_number(&self) -> u32 {
-        self.visit.info.scan_number()
+        self.directory.info.scan_number()
     }
 
     /// The paths where the given detectors should write their files.
@@ -235,7 +235,7 @@ impl ScanPaths {
     // TODO: The docs here reference the implementation specific behaviour in the normalisation
     #[instrument(skip(self))]
     async fn detectors(&self, names: Vec<Detector>) -> async_graphql::Result<Vec<DetectorPath>> {
-        let template = self.visit.info.detector()?;
+        let template = self.directory.info.detector()?;
         Ok(names
             .into_iter()
             .map(|name| {
@@ -249,34 +249,34 @@ impl ScanPaths {
 }
 
 #[Object]
-/// The current configuration for a beamline
+/// The current configuration for an instrument
 impl CurrentConfiguration {
-    /// The name of the beamline
-    pub async fn beamline(&self) -> async_graphql::Result<&str> {
+    /// The name of the instrument
+    pub async fn instrument(&self) -> async_graphql::Result<&str> {
         Ok(self.db_config.name())
     }
-    /// The template used to build the path to the visit directory for a beamline
-    pub async fn visit_template(&self) -> async_graphql::Result<String> {
-        Ok(self.db_config.visit()?.to_string())
+    /// The template used to build the path to the data directory for an instrument
+    pub async fn directory_template(&self) -> async_graphql::Result<String> {
+        Ok(self.db_config.directory()?.to_string())
     }
     /// The template used to build the path of a scan file for a data acquisition, relative to the
-    /// root of the visit directory.
+    /// root of the data directory.
     pub async fn scan_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.scan()?.to_string())
     }
     /// The template used to build the path of a detector's data file for a data acquisition,
-    /// relative to the root of the visit directory.
+    /// relative to the root of the data directory.
     pub async fn detector_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.detector()?.to_string())
     }
     /// The latest scan number stored in the DB. This is the last scan number provided by this
-    /// service but may not reflect the most recent scan number for a beamline if an external
+    /// service but may not reflect the most recent scan number for an instrument if an external
     /// service (eg GDA) has incremented its own number tracker.
     pub async fn db_scan_number(&self) -> async_graphql::Result<u32> {
         Ok(self.db_config.scan_number())
     }
-    /// The highest matching number file for this beamline in the configured tracking directory.
-    /// May be null if no directory is available for this beamline or if there are no matching
+    /// The highest matching number file for this instrument in the configured tracking directory.
+    /// May be null if no directory is available for this instrument or if there are no matching
     /// number files.
     pub async fn file_scan_number(&self) -> async_graphql::Result<Option<u32>> {
         Ok(self.high_file)
@@ -290,11 +290,11 @@ impl CurrentConfiguration {
 
 impl CurrentConfiguration {
     async fn for_config(
-        db_config: BeamlineConfiguration,
+        db_config: InstrumentConfiguration,
         nt: &NumTracker,
     ) -> async_graphql::Result<Self> {
         let dir = nt
-            .for_beamline(db_config.name(), db_config.tracker_file_extension())
+            .for_instrument(db_config.name(), db_config.tracker_file_extension())
             .await?;
         let high_file = dir.prev().await?;
         Ok(CurrentConfiguration {
@@ -308,8 +308,8 @@ impl FieldSource<ScanField> for ScanPaths {
     fn resolve(&self, field: &ScanField) -> Cow<'_, str> {
         match field {
             ScanField::Subdirectory => self.subdirectory.to_string().into(),
-            ScanField::ScanNumber => self.visit.info.scan_number().to_string().into(),
-            ScanField::Beamline(bl) => self.visit.resolve(bl),
+            ScanField::ScanNumber => self.directory.info.scan_number().to_string().into(),
+            ScanField::Directory(dir) => self.directory.resolve(dir),
         }
     }
 }
@@ -326,50 +326,53 @@ impl FieldSource<DetectorField> for (&str, &ScanPaths) {
 #[Object]
 /// Queries relating to numtracker configurations that have no side-effects
 impl Query {
-    /// Get the visit directory information for the given beamline and visit.
+    /// Get the data directory information for the given instrument and instrument session.
     /// This information is not scan specific
     #[instrument(skip(self, ctx))]
     async fn paths(
         &self,
         ctx: &Context<'_>,
-        beamline: String,
-        visit: String,
-    ) -> async_graphql::Result<VisitPath> {
+        instrument: String,
+        instrument_session: String,
+    ) -> async_graphql::Result<DirectoryPath> {
         let db = ctx.data::<SqliteScanPathService>()?;
-        let info = db.current_configuration(&beamline).await?;
-        Ok(VisitPath { visit, info })
+        let info = db.current_configuration(&instrument).await?;
+        Ok(DirectoryPath {
+            instrument_session,
+            info,
+        })
     }
 
-    /// Get the current configuration for the given beamline
+    /// Get the current configuration for the given instrument
     #[instrument(skip(self, ctx))]
     async fn configuration(
         &self,
         ctx: &Context<'_>,
-        beamline: String,
+        instrument: String,
     ) -> async_graphql::Result<CurrentConfiguration> {
         check_auth(ctx, |policy, token| {
-            policy.check_beamline_admin(token, &beamline)
+            policy.check_instrument_admin(token, &instrument)
         })
         .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
-        trace!("Getting config for {beamline:?}");
-        let conf = db.current_configuration(&beamline).await?;
+        trace!("Getting config for {instrument:?}");
+        let conf = db.current_configuration(&instrument).await?;
         CurrentConfiguration::for_config(conf, nt).await
     }
 
-    /// Get the configurations for all available beamlines
-    /// Can be filtered to provide one or more specific beamlines
+    /// Get the configurations for all available instruments
+    /// Can be filtered to provide one or more specific instruments
     #[instrument(skip(self, ctx))]
     async fn configurations(
         &self,
         ctx: &Context<'_>,
-        beamline_filters: Option<Vec<String>>,
+        instrument_filters: Option<Vec<String>>,
     ) -> async_graphql::Result<Vec<CurrentConfiguration>> {
         check_auth(ctx, |policy, token| policy.check_admin(token)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
-        let configurations = match beamline_filters {
+        let configurations = match instrument_filters {
             Some(filters) => db.configurations(filters).await?,
             None => db.all_configurations().await?,
         };
@@ -393,12 +396,12 @@ impl Mutation {
     async fn scan<'ctx>(
         &self,
         ctx: &Context<'ctx>,
-        beamline: String,
-        visit: String,
+        instrument: String,
+        instrument_session: String,
         sub: Option<Subdirectory>,
     ) -> async_graphql::Result<ScanPaths> {
         check_auth(ctx, |policy, token| {
-            policy.check_access(token, &beamline, &visit)
+            policy.check_access(token, &instrument, &instrument_session)
         })
         .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
@@ -406,13 +409,13 @@ impl Mutation {
         // There is a race condition here if a process increments the file
         // while the DB is being queried or between the two queries but there
         // isn't much we can do from here.
-        let current = db.current_configuration(&beamline).await?;
+        let current = db.current_configuration(&instrument).await?;
         let dir = nt
-            .for_beamline(&beamline, current.tracker_file_extension())
+            .for_instrument(&instrument, current.tracker_file_extension())
             .await?;
 
         let next_scan = db
-            .next_scan_configuration(&beamline, dir.prev().await?)
+            .next_scan_configuration(&instrument, dir.prev().await?)
             .await?;
 
         if let Err(e) = dir.set(next_scan.scan_number()).await {
@@ -420,28 +423,31 @@ impl Mutation {
         }
 
         Ok(ScanPaths {
-            visit: VisitPath {
-                visit,
+            directory: DirectoryPath {
+                instrument_session,
                 info: next_scan,
             },
             subdirectory: sub.unwrap_or_default(),
         })
     }
 
-    /// Add or modify the stored configuration for a beamline
+    /// Add or modify the stored configuration for an instrument
     #[instrument(skip(self, ctx))]
     async fn configure<'ctx>(
         &self,
         ctx: &Context<'ctx>,
-        beamline: String,
+        instrument: String,
         config: ConfigurationUpdates,
     ) -> async_graphql::Result<CurrentConfiguration> {
-        check_auth(ctx, |pc, token| pc.check_beamline_admin(token, &beamline)).await?;
+        check_auth(ctx, |pc, token| {
+            pc.check_instrument_admin(token, &instrument)
+        })
+        .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
-        trace!("Configuring: {beamline}: {config:?}");
-        let upd = config.into_update(&beamline);
-        let db_config = match upd.update_beamline(db).await? {
+        trace!("Configuring: {instrument}: {config:?}");
+        let upd = config.into_update(&instrument);
+        let db_config = match upd.update_instrument(db).await? {
             Some(bc) => bc,
             None => upd.insert_new(db).await?,
         };
@@ -467,11 +473,11 @@ where
     }
 }
 
-/// Changes that should be made to a beamline's configuration
+/// Changes that should be made to an instrument's configuration
 #[derive(Debug, InputObject)]
 struct ConfigurationUpdates {
-    /// New template used to determine the visit directory
-    visit: Option<InputTemplate<VisitTemplate>>,
+    /// New template used to determine the root data directory
+    directory: Option<InputTemplate<DirectoryTemplate>>,
     /// New template used to determine the relative path to the main scan file for a collection
     scan: Option<InputTemplate<ScanTemplate>>,
     /// New template used to determine the relative path for detector data files
@@ -484,11 +490,11 @@ struct ConfigurationUpdates {
 }
 
 impl ConfigurationUpdates {
-    fn into_update<S: Into<String>>(self, name: S) -> BeamlineConfigurationUpdate {
-        BeamlineConfigurationUpdate {
+    fn into_update<S: Into<String>>(self, name: S) -> InstrumentConfigurationUpdate {
+        InstrumentConfigurationUpdate {
             name: name.into(),
             scan_number: self.scan_number,
-            visit: self.visit.map(|t| t.0),
+            directory: self.directory.map(|t| t.0),
             scan: self.scan.map(|t| t.0),
             detector: self.detector.map(|t| t.0),
             tracker_file_extension: self.tracker_file_extension,
@@ -546,7 +552,7 @@ where
     }
 }
 
-/// Name of subdirectory within visit directory where data should be written.
+/// Name of subdirectory within data directory where data should be written.
 /// Can be nested (eg foo/bar) but cannot include links to parent directories (eg ../foo).
 // Derived Default is OK without validation as empty path is a valid subdirectory
 #[derive(Debug, Display, Default)]
@@ -666,14 +672,15 @@ mod tests {
     }
 
     fn updates(
-        visit: Option<&str>,
+        directory: Option<&str>,
         scan: Option<&str>,
         det: Option<&str>,
         num: Option<u32>,
         ext: Option<&str>,
     ) -> ConfigurationUpdates {
         ConfigurationUpdates {
-            visit: visit.map(|v| InputTemplate::parse(Some(Value::String(v.into()))).unwrap()),
+            directory: directory
+                .map(|d| InputTemplate::parse(Some(Value::String(d.into()))).unwrap()),
             scan: scan.map(|s| InputTemplate::parse(Some(Value::String(s.into()))).unwrap()),
             detector: det.map(|d| InputTemplate::parse(Some(Value::String(d.into()))).unwrap()),
             scan_number: num,
@@ -764,14 +771,14 @@ mod tests {
     async fn missing_config(#[future(awt)] env: TestEnv) {
         let result = env
             .schema
-            .execute(r#"{paths(beamline: "i11", visit: "cm1234-5") {directory}}"#)
+            .execute(r#"{paths(instrument: "i11", instrumentSession: "cm1234-5") {path}}"#)
             .await;
 
         assert_eq!(result.data, Value::Null);
         println!("{result:?}");
         assert_eq!(
             result.errors[0].message,
-            r#"No configuration available for beamline "i11""#
+            r#"No configuration available for instrument "i11""#
         );
     }
 
@@ -780,10 +787,10 @@ mod tests {
     async fn paths(#[future(awt)] env: TestEnv) {
         let result = env
             .schema
-            .execute(r#"{paths(beamline: "i22", visit: "cm12345-3") {directory visit}}"#)
+            .execute(r#"{paths(instrument: "i22", instrumentSession: "cm12345-3") {path instrumentSession}}"#)
             .await;
         println!("{result:#?}");
-        let exp = value!({"paths": {"visit": "cm12345-3", "directory": "/tmp/i22/data/cm12345-3"}});
+        let exp = value!({"paths": {"instrumentSession": "cm12345-3", "path": "/tmp/i22/data/cm12345-3"}});
         assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
     }
@@ -792,8 +799,8 @@ mod tests {
     #[tokio::test]
     async fn scan(#[future(awt)] env: TestEnv) {
         let query = r#"mutation {
-            scan(beamline: "i22", visit: "cm12345-3", sub: "foo/bar") {
-                visit { beamline directory visit} scanFile scanNumber
+            scan(instrument: "i22", instrumentSession: "cm12345-3", sub: "foo/bar") {
+                directory { instrument path instrumentSession } scanFile scanNumber
                 detectors(names: ["det_one", "det_two"]) { name path }
             }
         }"#;
@@ -803,7 +810,7 @@ mod tests {
         assert_eq!(result.errors, &[]);
         let exp = value!({
         "scan": {
-            "visit": {"visit": "cm12345-3", "beamline": "i22", "directory": "/tmp/i22/data/cm12345-3"},
+            "directory": {"instrumentSession": "cm12345-3", "instrument": "i22", "path": "/tmp/i22/data/cm12345-3"},
             "scanFile": "foo/bar/i22-123",
             "scanNumber": 123,
             "detectors": [
@@ -818,14 +825,14 @@ mod tests {
     #[tokio::test]
     async fn configuration(#[future(awt)] env: TestEnv) {
         let query = r#"{
-        configuration(beamline: "i22") {
-            beamline visitTemplate scanTemplate detectorTemplate dbScanNumber trackerFileExtension
+        configuration(instrument: "i22") {
+            instrument directoryTemplate scanTemplate detectorTemplate dbScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
             "configuration": {
-                "beamline":"i22",
-                "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                "instrument":"i22",
+                "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                 "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                 "dbScanNumber": 122,
@@ -840,15 +847,15 @@ mod tests {
     #[tokio::test]
     async fn configurations(#[future(awt)] env: TestEnv) {
         let query = r#"{
-        configurations(beamlineFilters: ["i22"]) {
-            beamline visitTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
+        configurations(instrumentFilters: ["i22"]) {
+            instrument directoryTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
             "configurations": [
                 {
-                    "beamline": "i22",
-                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "instrument": "i22",
+                    "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                     "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                     "dbScanNumber": 122,
@@ -866,14 +873,14 @@ mod tests {
     async fn configurations_all(#[future(awt)] env: TestEnv) {
         let query = r#"{
         configurations {
-            beamline visitTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
+            instrument directoryTemplate scanTemplate detectorTemplate dbScanNumber fileScanNumber trackerFileExtension
         }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
             "configurations": [
                 {
-                    "beamline": "i22",
-                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "instrument": "i22",
+                    "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                     "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                     "dbScanNumber": 122,
@@ -881,8 +888,8 @@ mod tests {
                     "trackerFileExtension": Value::Null,
                 },
                 {
-                    "beamline": "b21",
-                    "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                    "instrument": "b21",
+                    "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                     "detectorTemplate": "{subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}",
                     "dbScanNumber": 621,
@@ -900,7 +907,7 @@ mod tests {
     async fn custom_tracker_file_extension(#[future(awt)] env: TestEnv) {
         let result = env
             .schema
-            .execute(r#"{configuration(beamline: "b21") { trackerFileExtension }}"#)
+            .execute(r#"{configuration(instrument: "b21") { trackerFileExtension }}"#)
             .await;
         assert_eq!(result.errors, &[]);
         assert_eq!(
@@ -918,7 +925,7 @@ mod tests {
             .await
             .unwrap();
         let query = r#"{
-            configuration(beamline: "i22") {
+            configuration(instrument: "i22") {
                 dbScanNumber
                 fileScanNumber
             }
@@ -946,14 +953,14 @@ mod tests {
     #[tokio::test]
     async fn empty_configure_for_existing(#[future(awt)] env: TestEnv) {
         let query = r#"mutation {
-            configure(beamline: "i22", config: {}) {
-                visitTemplate scanTemplate detectorTemplate dbScanNumber
+            configure(instrument: "i22", config: {}) {
+                directoryTemplate scanTemplate detectorTemplate dbScanNumber
             }
         }"#;
         let result = env.schema.execute(query).await;
         let exp = value!({
             "configure": {
-                "visitTemplate": "/tmp/{instrument}/data/{visit}",
+                "directoryTemplate": "/tmp/{instrument}/data/{visit}",
                 "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
                 "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
                 "dbScanNumber": 122
@@ -970,7 +977,7 @@ mod tests {
         #[future(awt)] env: TestEnv,
     ) -> Result<(), Box<dyn Error>> {
         let query = r#"mutation {
-        configure(beamline: "i22", config: { scan: "{instrument}-{scan_number}"}) {
+        configure(instrument: "i22", config: { scan: "{instrument}-{scan_number}"}) {
             scanTemplate
         }}"#;
         let result = env.schema.execute(query).await;
@@ -990,28 +997,28 @@ mod tests {
 
     #[rstest]
     #[tokio::test]
-    async fn configure_new_beamline(#[future(awt)] env: TestEnv) {
+    async fn configure_new_instrument(#[future(awt)] env: TestEnv) {
         assert_matches::assert_matches!(
             env.db.current_configuration("i16").await,
-            Err(ConfigurationError::MissingBeamline(bl)) if bl == "i16"
+            Err(ConfigurationError::MissingInstrument(bl)) if bl == "i16"
         );
 
         let result = env
             .schema
             .execute(
                 r#"mutation {
-                    configure(beamline: "i16", config: {
-                        visit: "/tmp/{instrument}/{year}/{visit}"
+                    configure(instrument: "i16", config: {
+                        directory: "/tmp/{instrument}/{year}/{visit}"
                         scan: "{instrument}-{scan_number}"
                         detector: "{scan_number}-{detector}"
                     }) {
-                        scanTemplate visitTemplate detectorTemplate dbScanNumber
+                        scanTemplate directoryTemplate detectorTemplate dbScanNumber
                     }
                 }"#,
             )
             .await;
         let exp = value!({ "configure": {
-                "visitTemplate": "/tmp/{instrument}/{year}/{visit}",
+                "directoryTemplate": "/tmp/{instrument}/{year}/{visit}",
                 "scanTemplate": "{instrument}-{scan_number}",
                 "detectorTemplate": "{scan_number}-{detector}",
                 "dbScanNumber": 0
@@ -1024,7 +1031,8 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn unauthorised_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
-        let query = r#"mutation {scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
+        let query =
+            r#"mutation {scan(instrument: "i22", instrumentSession: "cm12345-3") { scanNumber }}"#;
         let result = auth_env
             .schema
             .execute(Request::new(query).data(Option::<Authorization<Bearer>>::None))
@@ -1041,7 +1049,8 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn denied_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
-        let query = r#"mutation{ scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
+        let query =
+            r#"mutation{ scan(instrument: "i22", instrumentSession: "cm12345-3") { scanNumber }}"#;
         let token = Some(Authorization(
             Bearer::decode(&HeaderValue::from_str("Bearer token_value").unwrap()).unwrap(),
         ));
@@ -1077,7 +1086,8 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn authorized_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
-        let query = r#"mutation{ scan(beamline: "i22", visit: "cm12345-3") { scanNumber }}"#;
+        let query =
+            r#"mutation{ scan(instrument: "i22", instrumentSession: "cm12345-3") { scanNumber }}"#;
         let token = Some(Authorization(
             Bearer::decode(&HeaderValue::from_str("Bearer token_value").unwrap()).unwrap(),
         ));
@@ -1120,7 +1130,8 @@ mod tests {
         tokio::fs::File::create_new(env.dir.as_ref().join("i22").join("5678.i22"))
             .await
             .unwrap();
-        let query = r#"mutation { scan(beamline: "i22", visit:"cm12345-3") { scanNumber }}"#;
+        let query =
+            r#"mutation { scan(instrument: "i22", instrumentSession:"cm12345-3") { scanNumber }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({"scan": {"scanNumber": 5679}});
 
@@ -1217,11 +1228,11 @@ mod input_template_tests {
     use async_graphql::{InputType, Value};
 
     use super::InputTemplate;
-    use crate::paths::{DetectorTemplate, ScanTemplate, VisitTemplate};
+    use crate::paths::{DetectorTemplate, DirectoryTemplate, ScanTemplate};
 
     #[test]
-    fn valid_visit_template() {
-        let template = InputTemplate::<VisitTemplate>::parse(Some(Value::String(
+    fn valid_directory_template() {
+        let template = InputTemplate::<DirectoryTemplate>::parse(Some(Value::String(
             "/tmp/{instrument}/data/{visit}".into(),
         )))
         .unwrap();
@@ -1240,8 +1251,8 @@ mod input_template_tests {
     #[case::missing_instrument("/tmp/{visit}")]
     #[case::missing_visit("/tmp/{instrument}/data")]
     #[case::invalid_template("/tmp/{nested{placeholder}}")]
-    fn invalid_visit_template(#[case] path: String) {
-        InputTemplate::<VisitTemplate>::parse(Some(Value::String(path))).unwrap_err();
+    fn invalid_directory_template(#[case] path: String) {
+        InputTemplate::<DirectoryTemplate>::parse(Some(Value::String(path))).unwrap_err();
     }
 
     #[rstest::rstest]

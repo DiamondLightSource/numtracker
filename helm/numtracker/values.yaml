@@ -27,8 +27,8 @@ numtracker:
   auth:
     enabled: false
     # host: OPA instance
-    # admin: rule determining admin access to a beamline
-    # access: rule determining access to a beamline session
+    # admin: rule determining admin access to an instrument
+    # access: rule determining access to an instrument session
 
 
 
