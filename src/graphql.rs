@@ -137,15 +137,15 @@ struct DetectorPath {
     path: String,
 }
 
-/// GraphQL type to provide path data for a specific visit
-struct VisitPath {
-    visit: String,
+/// GraphQL type to provide directory data for a specific instrument session
+struct DirectoryPath {
+    instrument_session: String,
     info: InstrumentConfiguration,
 }
 
-/// GraphQL type to provide path data for the next scan for a given visit
+/// GraphQL type to provide path data for the next scan for a given instrument session
 struct ScanPaths {
-    visit: VisitPath,
+    directory: DirectoryPath,
     subdirectory: Subdirectory,
 }
 
@@ -169,32 +169,32 @@ fn path_to_string(path: PathBuf) -> Result<String, NonUnicodePath> {
 }
 
 #[Object]
-/// The path to a visit directory and the components used to build it
-impl VisitPath {
-    /// The visit for which this is the visit directory
+/// The path to a data directory and the components used to build it
+impl DirectoryPath {
+    /// The instrument session for which this is the data directory
     #[instrument(skip(self))]
-    async fn visit(&self) -> &str {
-        &self.visit
+    async fn instrument_session(&self) -> &str {
+        &self.instrument_session
     }
-    /// The instrument for which this is the visit directory
+    /// The instrument for which this is the data directory
     #[instrument(skip(self))]
     async fn instrument(&self) -> &str {
         &self.info.name()
     }
-    /// The absolute path to the visit directory
+    /// The absolute path to the data directory
     #[instrument(skip(self))]
-    async fn directory(&self) -> async_graphql::Result<String> {
+    async fn path(&self) -> async_graphql::Result<String> {
         Ok(path_to_string(self.info.directory()?.render(self))?)
     }
 }
 
-impl FieldSource<DirectoryField> for VisitPath {
+impl FieldSource<DirectoryField> for DirectoryPath {
     fn resolve(&self, field: &DirectoryField) -> Cow<'_, str> {
         match field {
             DirectoryField::Year => Local::now().year().to_string().into(),
-            DirectoryField::Visit => self.visit.as_str().into(),
+            DirectoryField::Visit => self.instrument_session.as_str().into(),
             DirectoryField::Proposal => self
-                .visit
+                .instrument_session
                 .split('-')
                 .next()
                 .expect("There is always one section for a split")
@@ -207,23 +207,23 @@ impl FieldSource<DirectoryField> for VisitPath {
 #[Object]
 /// Paths and values related to a specific scan/data collection for an instrument
 impl ScanPaths {
-    /// The visit used to generate this scan information. Should be the same as the visit passed in
+    /// The directory used to generate this scan information.
     #[instrument(skip(self))]
-    async fn visit(&self) -> &VisitPath {
-        &self.visit
+    async fn directory(&self) -> &DirectoryPath {
+        &self.directory
     }
 
     /// The root scan file for this scan. The path has no extension so that the format can be
     /// chosen by the client.
     #[instrument(skip(self))]
     async fn scan_file(&self) -> async_graphql::Result<String> {
-        Ok(path_to_string(self.visit.info.scan()?.render(self))?)
+        Ok(path_to_string(self.directory.info.scan()?.render(self))?)
     }
 
     /// The scan number for this scan. This should be unique for the requested instrument.
     #[instrument(skip(self))]
     async fn scan_number(&self) -> u32 {
-        self.visit.info.scan_number()
+        self.directory.info.scan_number()
     }
 
     /// The paths where the given detectors should write their files.
@@ -235,7 +235,7 @@ impl ScanPaths {
     // TODO: The docs here reference the implementation specific behaviour in the normalisation
     #[instrument(skip(self))]
     async fn detectors(&self, names: Vec<Detector>) -> async_graphql::Result<Vec<DetectorPath>> {
-        let template = self.visit.info.detector()?;
+        let template = self.directory.info.detector()?;
         Ok(names
             .into_iter()
             .map(|name| {
@@ -255,17 +255,17 @@ impl CurrentConfiguration {
     pub async fn instrument(&self) -> async_graphql::Result<&str> {
         Ok(self.db_config.name())
     }
-    /// The template used to build the path to the visit directory for an instrument
+    /// The template used to build the path to the data directory for an instrument
     pub async fn directory_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.directory()?.to_string())
     }
     /// The template used to build the path of a scan file for a data acquisition, relative to the
-    /// root of the visit directory.
+    /// root of the data directory.
     pub async fn scan_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.scan()?.to_string())
     }
     /// The template used to build the path of a detector's data file for a data acquisition,
-    /// relative to the root of the visit directory.
+    /// relative to the root of the data directory.
     pub async fn detector_template(&self) -> async_graphql::Result<String> {
         Ok(self.db_config.detector()?.to_string())
     }
@@ -308,8 +308,8 @@ impl FieldSource<ScanField> for ScanPaths {
     fn resolve(&self, field: &ScanField) -> Cow<'_, str> {
         match field {
             ScanField::Subdirectory => self.subdirectory.to_string().into(),
-            ScanField::ScanNumber => self.visit.info.scan_number().to_string().into(),
-            ScanField::Directory(dir) => self.visit.resolve(dir),
+            ScanField::ScanNumber => self.directory.info.scan_number().to_string().into(),
+            ScanField::Directory(dir) => self.directory.resolve(dir),
         }
     }
 }
@@ -326,18 +326,21 @@ impl FieldSource<DetectorField> for (&str, &ScanPaths) {
 #[Object]
 /// Queries relating to numtracker configurations that have no side-effects
 impl Query {
-    /// Get the visit directory information for the given instrument and visit.
+    /// Get the data directory information for the given instrument and instrument session.
     /// This information is not scan specific
     #[instrument(skip(self, ctx))]
     async fn paths(
         &self,
         ctx: &Context<'_>,
         instrument: String,
-        visit: String,
-    ) -> async_graphql::Result<VisitPath> {
+        instrument_session: String,
+    ) -> async_graphql::Result<DirectoryPath> {
         let db = ctx.data::<SqliteScanPathService>()?;
         let info = db.current_configuration(&instrument).await?;
-        Ok(VisitPath { visit, info })
+        Ok(DirectoryPath {
+            instrument_session,
+            info,
+        })
     }
 
     /// Get the current configuration for the given instrument
@@ -394,11 +397,11 @@ impl Mutation {
         &self,
         ctx: &Context<'ctx>,
         instrument: String,
-        visit: String,
+        instrument_session: String,
         sub: Option<Subdirectory>,
     ) -> async_graphql::Result<ScanPaths> {
         check_auth(ctx, |policy, token| {
-            policy.check_access(token, &instrument, &visit)
+            policy.check_access(token, &instrument, &instrument_session)
         })
         .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
@@ -420,8 +423,8 @@ impl Mutation {
         }
 
         Ok(ScanPaths {
-            visit: VisitPath {
-                visit,
+            directory: DirectoryPath {
+                instrument_session,
                 info: next_scan,
             },
             subdirectory: sub.unwrap_or_default(),
@@ -549,7 +552,7 @@ where
     }
 }
 
-/// Name of subdirectory within visit directory where data should be written.
+/// Name of subdirectory within data directory where data should be written.
 /// Can be nested (eg foo/bar) but cannot include links to parent directories (eg ../foo).
 // Derived Default is OK without validation as empty path is a valid subdirectory
 #[derive(Debug, Display, Default)]
@@ -768,7 +771,7 @@ mod tests {
     async fn missing_config(#[future(awt)] env: TestEnv) {
         let result = env
             .schema
-            .execute(r#"{paths(instrument: "i11", visit: "cm1234-5") {directory}}"#)
+            .execute(r#"{paths(instrument: "i11", instrumentSession: "cm1234-5") {path}}"#)
             .await;
 
         assert_eq!(result.data, Value::Null);
@@ -784,10 +787,10 @@ mod tests {
     async fn paths(#[future(awt)] env: TestEnv) {
         let result = env
             .schema
-            .execute(r#"{paths(instrument: "i22", visit: "cm12345-3") {directory visit}}"#)
+            .execute(r#"{paths(instrument: "i22", instrumentSession: "cm12345-3") {path instrumentSession}}"#)
             .await;
         println!("{result:#?}");
-        let exp = value!({"paths": {"visit": "cm12345-3", "directory": "/tmp/i22/data/cm12345-3"}});
+        let exp = value!({"paths": {"instrumentSession": "cm12345-3", "path": "/tmp/i22/data/cm12345-3"}});
         assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
     }
@@ -796,8 +799,8 @@ mod tests {
     #[tokio::test]
     async fn scan(#[future(awt)] env: TestEnv) {
         let query = r#"mutation {
-            scan(instrument: "i22", visit: "cm12345-3", sub: "foo/bar") {
-                visit { instrument directory visit} scanFile scanNumber
+            scan(instrument: "i22", instrumentSession: "cm12345-3", sub: "foo/bar") {
+                directory { instrument path instrumentSession } scanFile scanNumber
                 detectors(names: ["det_one", "det_two"]) { name path }
             }
         }"#;
@@ -807,7 +810,7 @@ mod tests {
         assert_eq!(result.errors, &[]);
         let exp = value!({
         "scan": {
-            "visit": {"visit": "cm12345-3", "instrument": "i22", "directory": "/tmp/i22/data/cm12345-3"},
+            "directory": {"instrumentSession": "cm12345-3", "instrument": "i22", "path": "/tmp/i22/data/cm12345-3"},
             "scanFile": "foo/bar/i22-123",
             "scanNumber": 123,
             "detectors": [
@@ -1028,7 +1031,8 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn unauthorised_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
-        let query = r#"mutation {scan(instrument: "i22", visit: "cm12345-3") { scanNumber }}"#;
+        let query =
+            r#"mutation {scan(instrument: "i22", instrumentSession: "cm12345-3") { scanNumber }}"#;
         let result = auth_env
             .schema
             .execute(Request::new(query).data(Option::<Authorization<Bearer>>::None))
@@ -1045,7 +1049,8 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn denied_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
-        let query = r#"mutation{ scan(instrument: "i22", visit: "cm12345-3") { scanNumber }}"#;
+        let query =
+            r#"mutation{ scan(instrument: "i22", instrumentSession: "cm12345-3") { scanNumber }}"#;
         let token = Some(Authorization(
             Bearer::decode(&HeaderValue::from_str("Bearer token_value").unwrap()).unwrap(),
         ));
@@ -1081,7 +1086,8 @@ mod tests {
     #[rstest]
     #[tokio::test]
     async fn authorized_scan_request(#[future(awt)] auth_env: TestAuthEnv) {
-        let query = r#"mutation{ scan(instrument: "i22", visit: "cm12345-3") { scanNumber }}"#;
+        let query =
+            r#"mutation{ scan(instrument: "i22", instrumentSession: "cm12345-3") { scanNumber }}"#;
         let token = Some(Authorization(
             Bearer::decode(&HeaderValue::from_str("Bearer token_value").unwrap()).unwrap(),
         ));
@@ -1124,7 +1130,8 @@ mod tests {
         tokio::fs::File::create_new(env.dir.as_ref().join("i22").join("5678.i22"))
             .await
             .unwrap();
-        let query = r#"mutation { scan(instrument: "i22", visit:"cm12345-3") { scanNumber }}"#;
+        let query =
+            r#"mutation { scan(instrument: "i22", instrumentSession:"cm12345-3") { scanNumber }}"#;
         let result = env.schema.execute(query).await;
         let exp = value!({"scan": {"scanNumber": 5679}});
 

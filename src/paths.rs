@@ -144,7 +144,7 @@ impl PathSpec for DirectoryTemplate {
     const ABSOLUTE: bool = true;
     fn describe() -> &'static str {
         concat!(
-            "A template describing the path to the visit directory for an instrument. ",
+            "A template describing the path to the data directory for a given instrument session. ",
             "It should be an absolute path and contain placeholders for {instrument} and {visit}."
         )
     }
@@ -158,7 +158,7 @@ impl PathSpec for ScanTemplate {
     const ABSOLUTE: bool = false;
     fn describe() -> &'static str {
         concat!(
-            "A template describing the location within a visit directory where the root scan file should be written. ",
+            "A template describing the location within a session data directory where the root scan file should be written. ",
             "It should be a relative path and contain a placeholder for {scan_number} to ensure files are unique."
         )
     }
@@ -175,7 +175,7 @@ impl PathSpec for DetectorTemplate {
     const ABSOLUTE: bool = false;
     fn describe() -> &'static str {
         concat!(
-            "A template describing the location within a visit directory where ",
+            "A template describing the location within a session data directory where ",
             "the data for a given detector should be written",
             "\n\n",
             "It should contain placeholders for {detector} and {scan_number} ",
@@ -227,7 +227,7 @@ mod paths_tests {
     #[case::invalid_path_empty("/data/{}", TemplateErrorType::Empty)]
     #[case::invalid_path_nested("/data/{nes{ted}}", TemplateErrorType::Nested)]
     #[case::invalid_path_unrecognised("/data/{scan_number}", TemplateErrorType::Unrecognised)]
-    fn invalid_visit<E: PartialEq<InvalidPathTemplate> + Debug>(
+    fn invalid_directory<E: PartialEq<InvalidPathTemplate> + Debug>(
         #[case] template: &str,
         #[case] err: E,
     ) {
