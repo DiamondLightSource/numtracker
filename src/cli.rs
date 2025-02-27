@@ -46,7 +46,7 @@ pub struct TracingOptions {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Run the server to respond to visit and scan path requests
+    /// Run the server to respond to directory and scan path requests
     Serve(ServeOptions),
     /// Generate the graphql schema
     Schema,
@@ -75,7 +75,7 @@ pub struct PolicyOptions {
     /// eg, https://authz.diamond.ac.uk
     #[clap(long = "policy", required = false, env = "NUMTRACKER_AUTH_HOST")]
     pub policy_host: String,
-    /// The Rego rule used to generate visit access data
+    /// The Rego rule used to generate instrument access data
     ///
     /// eg. v1/data/diamond/policy/session/write_to_beamline_visit
     #[clap(long, required = false, env = "NUMTRACKER_AUTH_ACCESS")]
