@@ -784,7 +784,7 @@ mod tests {
             .await;
         println!("{result:#?}");
         let exp = value!({"paths": {"visit": "cm12345-3", "directory": "/tmp/i22/data/cm12345-3"}});
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
     }
 
@@ -800,7 +800,7 @@ mod tests {
         let result = env.schema.execute(query).await;
 
         println!("{result:#?}");
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         let exp = value!({
         "scan": {
             "visit": {"visit": "cm12345-3", "beamline": "i22", "directory": "/tmp/i22/data/cm12345-3"},
@@ -832,7 +832,7 @@ mod tests {
                 "trackerFileExtension": Value::Null
             }
         });
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
     }
 
@@ -857,7 +857,7 @@ mod tests {
                 }
             ]
         });
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
     }
 
@@ -891,7 +891,7 @@ mod tests {
                 },
             ]
         });
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
     }
 
@@ -902,7 +902,7 @@ mod tests {
             .schema
             .execute(r#"{configuration(beamline: "b21") { trackerFileExtension }}"#)
             .await;
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(
             result.data,
             value!({ "configuration": { "trackerFileExtension": "b21_ext" } })
@@ -930,7 +930,7 @@ mod tests {
                 "fileScanNumber": 5678
             }
         });
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
 
         let db_num = env.db.current_configuration("i22").await?.scan_number();
@@ -960,7 +960,7 @@ mod tests {
             }
         });
         println!("{result:#?}");
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
     }
 
@@ -976,7 +976,7 @@ mod tests {
         let result = env.schema.execute(query).await;
         let exp = value!({"configure": { "scanTemplate": "{instrument}-{scan_number}"}});
         println!("{result:#?}");
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
         let new = env
             .db
@@ -1016,7 +1016,7 @@ mod tests {
                 "detectorTemplate": "{scan_number}-{detector}",
                 "dbScanNumber": 0
             } });
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(result.data, exp);
         _ = env.db.current_configuration("i16").await.unwrap();
     }
@@ -1095,7 +1095,7 @@ mod tests {
         auth.assert();
 
         println!("{result:#?}");
-        assert!(result.errors.is_empty());
+        assert_eq!(result.errors, &[]);
         assert_eq!(result.data, value!({"scan": {"scanNumber": 123}}));
         // Ensure that the number was incremented
         assert_eq!(
