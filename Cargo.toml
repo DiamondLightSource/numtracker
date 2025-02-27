@@ -22,7 +22,6 @@ futures = "0.3.31"
 opentelemetry = "0.28.0"
 opentelemetry-otlp = { version = "0.28.0", features = ["grpc-tonic"] }
 opentelemetry-semantic-conventions = "0.28.0"
-opentelemetry-stdout = "0.28.0"
 opentelemetry_sdk = { version = "0.28.0", features = ["rt-tokio"] }
 reqwest = { version = "0.12.7", features = ["json", "rustls-tls"], default-features = false }
 serde = { version = "1.0.218", features = ["derive"] }
