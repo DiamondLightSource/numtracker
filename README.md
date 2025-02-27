@@ -56,6 +56,15 @@ graphiql interface.
 cargo run schema
 ```
 
+> [!NOTE]
+> Within the schema, 'instrument' can be thought of as equivalent to 'beamline'
+> in most other contexts. It is used to include other facilities such as lab
+> sources and electron-microscopes.
+>
+> In a similar way, 'instrumentSession' is what would usually be considered a
+> 'visit', i.e. a single block of time on an instrument for a proposal
+> designated by a code such as cm12345-6.
+
 ## Queries
 
 <details>
@@ -68,13 +77,13 @@ easier to parse output.
 
 The query to run should be made as a POST request to `/graphql` wrapped in a
 JSON object as `{"query": "<query-string>"}` taking care to escape quotes as
-required. Using `curl` and a basic visit directory query (see below), this
+required. Using `curl` and a basic data directory query (see below), this
 looks something like
 ```bash
 echo '{
      "query": "{
-         paths(instrument: \"i22\", visit: \"cm37278-5\") {
-             directory
+         paths(instrument: \"i22\", instrumentSession: \"cm37278-5\") {
+             path
          }
      }"
  }'| curl -s -X POST 127.0.0.1:8000/graphql -H "Content-Type: application/json" -d @- | jq
@@ -83,20 +92,20 @@ echo '{
 </details>
 
 ### Queries (read-only)
-There are three read only queries, one to get the visit directory for a given
-visit and instrument, one to get the current configuration for a given
+There are three read only queries, one to get the data directory for a given
+instrument session and instrument, one to get the current configuration for a given
 instrument and one to get the current configuration(s) for one or more
 instruments.
 
 #### paths
-Get the visit directory for an instrument and visit
+Get the data directory for an instrument and instrument session
 
 ##### Query
 ```graphql
 {
-  paths(instrument: "i22", visit: "cm12345-6") {
-    directory
-    visit
+  paths(instrument: "i22", instrumentSession: "cm12345-6") {
+    path
+    instrumentSession
   }
 }
 ```
@@ -104,8 +113,8 @@ Get the visit directory for an instrument and visit
 ```json
 {
   "paths": {
-    "directory": "/data/i22/data/2024/cm37278-5",
-    "visit": "cm37278-5"
+    "path": "/data/i22/data/2024/cm37278-5",
+    "instrumentSession": "cm37278-5"
   }
 }
 ```
@@ -149,7 +158,7 @@ empty list will return no configurations.
 ##### Query
 ```graphql
 {
-    configurations(instrumentFilters: ["i22", "i11"]) {
+  configurations(instrumentFilters: ["i22", "i11"]) {
     instrument
     directoryTemplate
     scanTemplate
@@ -190,7 +199,7 @@ empty list will return no configurations.
 ##### Query
 ```graphql
 {
-    configurations {
+  configurations {
     instrument
     directoryTemplate
     scanTemplate
@@ -228,7 +237,7 @@ empty list will return no configurations.
 
 ```graphql
 mutation {
-  scan(instrument: "i22", visit: "cm12345-2", subdirectory: "sub/tree") {
+  scan(instrument: "i22", instrumentSession: "cm12345-2", subdirectory: "sub/tree") {
       scanFile
       scanNumber
       detectors(names: ["det1", "det2"] ) {

@@ -42,6 +42,8 @@ pub struct AccessRequest<'a> {
     token: &'a str,
     audience: &'a str,
     proposal: u32,
+    // This should stay as visit instead of instrument session number until the
+    // rules in the authz service are updated.
     visit: u16,
     // This should stay as beamline instead of instrument until the rules in the authz service are
     // updated to use instrument
@@ -49,12 +51,16 @@ pub struct AccessRequest<'a> {
 }
 
 impl<'a> AccessRequest<'a> {
-    fn new(token: Option<&'a Token>, visit: Visit, instrument: &'a str) -> Result<Self, AuthError> {
+    fn new(
+        token: Option<&'a Token>,
+        instrument_session: InstrumentSession,
+        instrument: &'a str,
+    ) -> Result<Self, AuthError> {
         Ok(Self {
             token: token.ok_or(AuthError::Missing)?.token(),
             audience: AUDIENCE,
-            proposal: visit.proposal,
-            visit: visit.session,
+            proposal: instrument_session.proposal,
+            visit: instrument_session.session,
             beamline: instrument,
         })
     }
@@ -81,24 +87,24 @@ impl<'r> AdminRequest<'r> {
 }
 
 #[derive(Debug)]
-struct InvalidVisit;
+struct InvalidInstrumentSession;
 
 #[cfg_attr(test, derive(Debug))]
-struct Visit {
+struct InstrumentSession {
     proposal: u32,
     session: u16,
 }
-impl FromStr for Visit {
-    type Err = InvalidVisit;
+impl FromStr for InstrumentSession {
+    type Err = InvalidInstrumentSession;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let (code_prop, vis) = s.split_once('-').ok_or(InvalidVisit)?;
+        let (code_prop, vis) = s.split_once('-').ok_or(InvalidInstrumentSession)?;
         let prop = code_prop
             .chars()
             .skip_while(|p| !p.is_ascii_digit())
             .collect::<String>();
-        let proposal = prop.parse().map_err(|_| InvalidVisit)?;
-        let session = vis.parse().map_err(|_| InvalidVisit)?;
+        let proposal = prop.parse().map_err(|_| InvalidInstrumentSession)?;
+        let session = vis.parse().map_err(|_| InvalidInstrumentSession)?;
         Ok(Self { proposal, session })
     }
 }
@@ -127,11 +133,15 @@ impl PolicyCheck {
         &self,
         token: Option<&Authorization<Bearer>>,
         instrument: &str,
-        visit: &str,
+        instrument_session: &str,
     ) -> Result<(), AuthError> {
-        let visit: Visit = visit.parse().map_err(|_| AuthError::Failed)?;
-        self.authorise(&self.access, AccessRequest::new(token, visit, instrument)?)
-            .await
+        let session: InstrumentSession =
+            instrument_session.parse().map_err(|_| AuthError::Failed)?;
+        self.authorise(
+            &self.access,
+            AccessRequest::new(token, session, instrument)?,
+        )
+        .await
     }
 
     pub async fn check_admin(
@@ -188,7 +198,7 @@ mod tests {
     use rstest::rstest;
     use serde_json::json;
 
-    use super::{AuthError, InvalidVisit, PolicyCheck, Visit};
+    use super::{AuthError, InstrumentSession, InvalidInstrumentSession, PolicyCheck};
     use crate::cli::PolicyOptions;
 
     fn token(name: &'static str) -> Option<Authorization<Bearer>> {
@@ -198,10 +208,10 @@ mod tests {
     }
 
     #[test]
-    fn valid_visit() {
-        let visit = Visit::from_str("cm12345-1").unwrap();
-        assert_eq!(visit.session, 1);
-        assert_eq!(visit.proposal, 12345);
+    fn valid_instrument_session() {
+        let session = InstrumentSession::from_str("cm12345-1").unwrap();
+        assert_eq!(session.session, 1);
+        assert_eq!(session.proposal, 12345);
     }
 
     #[rstest]
@@ -210,8 +220,11 @@ mod tests {
     #[case::invalid_session("cm12345-abc")]
     #[case::invalid_proposal("cm123abc-12")]
     #[case::negative_session("cm1234--12")]
-    fn invalid_visit(#[case] visit: &str) {
-        assert_matches!(Visit::from_str(visit), Err(InvalidVisit))
+    fn invalid_instrument_session(#[case] instrument_session: &str) {
+        assert_matches!(
+            InstrumentSession::from_str(instrument_session),
+            Err(InvalidInstrumentSession)
+        )
     }
 
     #[tokio::test]

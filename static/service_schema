@@ -35,17 +35,17 @@ type CurrentConfiguration {
 	"""
 	instrument: String!
 	"""
-	The template used to build the path to the visit directory for an instrument
+	The template used to build the path to the data directory for an instrument
 	"""
 	directoryTemplate: String!
 	"""
 	The template used to build the path of a scan file for a data acquisition, relative to the
-	root of the visit directory.
+	root of the data directory.
 	"""
 	scanTemplate: String!
 	"""
 	The template used to build the path of a detector's data file for a data acquisition,
-	relative to the root of the visit directory.
+	relative to the root of the data directory.
 	"""
 	detectorTemplate: String!
 	"""
@@ -84,14 +84,32 @@ type DetectorPath {
 }
 
 """
-A template describing the location within a visit directory where the data for a given detector should be written
+A template describing the location within a session data directory where the data for a given detector should be written
 
 It should contain placeholders for {detector} and {scan_number} to ensure paths are unique between scans and for multiple detectors.
 """
 scalar DetectorTemplate
 
 """
-A template describing the path to the visit directory for an instrument. It should be an absolute path and contain placeholders for {instrument} and {visit}.
+The path to a data directory and the components used to build it
+"""
+type DirectoryPath {
+	"""
+	The instrument session for which this is the data directory
+	"""
+	instrumentSession: String!
+	"""
+	The instrument for which this is the data directory
+	"""
+	instrument: String!
+	"""
+	The absolute path to the data directory
+	"""
+	path: String!
+}
+
+"""
+A template describing the path to the data directory for a given instrument session. It should be an absolute path and contain placeholders for {instrument} and {visit}.
 """
 scalar DirectoryTemplate
 
@@ -105,7 +123,7 @@ type Mutation {
 	"""
 	Generate scan file locations for the next scan
 	"""
-	scan(instrument: String!, visit: String!, sub: Subdirectory): ScanPaths!
+	scan(instrument: String!, instrumentSession: String!, sub: Subdirectory): ScanPaths!
 	"""
 	Add or modify the stored configuration for an instrument
 	"""
@@ -117,10 +135,10 @@ Queries relating to numtracker configurations that have no side-effects
 """
 type Query {
 	"""
-	Get the visit directory information for the given instrument and visit.
+	Get the data directory information for the given instrument and instrument session.
 	This information is not scan specific
 	"""
-	paths(instrument: String!, visit: String!): VisitPath!
+	paths(instrument: String!, instrumentSession: String!): DirectoryPath!
 	"""
 	Get the current configuration for the given instrument
 	"""
@@ -137,9 +155,9 @@ Paths and values related to a specific scan/data collection for an instrument
 """
 type ScanPaths {
 	"""
-	The visit used to generate this scan information. Should be the same as the visit passed in
+	The directory used to generate this scan information.
 	"""
-	visit: VisitPath!
+	directory: DirectoryPath!
 	"""
 	The root scan file for this scan. The path has no extension so that the format can be
 	chosen by the client.
@@ -161,30 +179,12 @@ type ScanPaths {
 }
 
 """
-A template describing the location within a visit directory where the root scan file should be written. It should be a relative path and contain a placeholder for {scan_number} to ensure files are unique.
+A template describing the location within a session data directory where the root scan file should be written. It should be a relative path and contain a placeholder for {scan_number} to ensure files are unique.
 """
 scalar ScanTemplate
 
 
 scalar Subdirectory
-
-"""
-The path to a visit directory and the components used to build it
-"""
-type VisitPath {
-	"""
-	The visit for which this is the visit directory
-	"""
-	visit: String!
-	"""
-	The instrument for which this is the visit directory
-	"""
-	instrument: String!
-	"""
-	The absolute path to the visit directory
-	"""
-	directory: String!
-}
 
 directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
 directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
