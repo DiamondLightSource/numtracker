@@ -15,7 +15,7 @@ async-graphql = { version = "7.0.15", features = ["tracing"] }
 async-graphql-axum = "7.0.15"
 axum = "0.8.1"
 axum-extra = { version = "0.10.0", features = ["typed-header"] }
-chrono = "0.4.39"
+chrono = "0.4.40"
 clap = { version = "4.5.31", features = ["cargo", "derive", "env", "string"] }
 derive_more = { version = "2.0.1", features = ["error", "display", "from", "deref"] }
 futures = "0.3.31"
@@ -37,7 +37,7 @@ assert_matches = "1.5.0"
 async-std = { version = "1.13.0", features = ["attributes"], default-features = false }
 httpmock = { version = "0.7.0", default-features = false }
 rstest = "0.24.0"
-serde_json = { version = "1.0.139", features = ["preserve_order"] }
+serde_json = { version = "1.0.140", features = ["preserve_order"] }
 tempfile = "3.17.1"
 
 [build-dependencies]
