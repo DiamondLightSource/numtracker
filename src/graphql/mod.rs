@@ -1249,8 +1249,6 @@ mod input_template_tests {
 
     #[rstest::rstest]
     #[case::relative("tmp/{instrument}/{visit}")]
-    #[case::missing_instrument("/tmp/{visit}")]
-    #[case::missing_visit("/tmp/{instrument}/data")]
     #[case::invalid_template("/tmp/{nested{placeholder}}")]
     fn invalid_directory_template(#[case] path: String) {
         InputTemplate::<DirectoryTemplate>::parse(Some(Value::String(path))).unwrap_err();

@@ -139,7 +139,7 @@ pub struct DetectorTemplate;
 impl PathSpec for DirectoryTemplate {
     type Field = DirectoryField;
 
-    const REQUIRED: &'static [Self::Field] = &[DirectoryField::Instrument, DirectoryField::Visit];
+    const REQUIRED: &'static [Self::Field] = &[];
 
     const ABSOLUTE: bool = true;
     fn describe() -> &'static str {
@@ -221,8 +221,6 @@ mod paths_tests {
 
     #[rstest::rstest]
     #[case::relative("relative/visit/path", InvalidPathTemplate::ShouldBeAbsolute)]
-    #[case::missing_visit("/{instrument}/data", InvalidPathTemplate::MissingField("visit".into()))]
-    #[case::missing_instrument("/data/{visit}", InvalidPathTemplate::MissingField("instrument".into()))]
     #[case::invalid_path_incomplete("/data/{unclosed", TemplateErrorType::Incomplete)]
     #[case::invalid_path_empty("/data/{}", TemplateErrorType::Empty)]
     #[case::invalid_path_nested("/data/{nes{ted}}", TemplateErrorType::Nested)]
