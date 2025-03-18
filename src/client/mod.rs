@@ -113,8 +113,8 @@ impl NumtrackerClient {
         client.json(&content).send().await?.json().await
     }
 
-    async fn query_configuration(self, beamline: Option<Vec<String>>) -> Result<(), ClientError> {
-        let vars = configuration_query::Variables { beamline };
+    async fn query_configuration(self, instrument: Option<Vec<String>>) -> Result<(), ClientError> {
+        let vars = configuration_query::Variables { instrument };
         let request = ConfigurationQuery::build_query(vars);
         let data = self
             .request::<_, configuration_query::ResponseData>(request)
@@ -122,8 +122,8 @@ impl NumtrackerClient {
         print_errors(data.errors.as_deref());
         if let Some(configs) = data.data {
             for conf in configs.configurations {
-                println!("Beamline: {}", conf.beamline);
-                println!("    Visit Template: {}", conf.visit_template);
+                println!("Beamline: {}", conf.instrument);
+                println!("    Visit Template: {}", conf.directory_template);
                 println!("    Scan Template: {}", conf.scan_template);
                 println!("    Detector Template: {}", conf.detector_template);
                 println!("    DB Scan Number: {}", conf.db_scan_number);
@@ -133,7 +133,7 @@ impl NumtrackerClient {
                 }
                 println!(
                     "    Tracker File Extension: {}",
-                    conf.tracker_file_extension.unwrap_or(conf.beamline)
+                    conf.tracker_file_extension.unwrap_or(conf.instrument)
                 );
             }
         }
@@ -142,16 +142,19 @@ impl NumtrackerClient {
 
     async fn query_visit_directory(
         self,
-        beamline: String,
-        visit: String,
+        instrument: String,
+        instrument_session: String,
     ) -> Result<(), ClientError> {
-        let vars = path_query::Variables { beamline, visit };
+        let vars = path_query::Variables {
+            instrument,
+            instrument_session,
+        };
         let request = PathQuery::build_query(vars);
         let data = self.request::<_, path_query::ResponseData>(request).await?;
 
         print_errors(data.errors.as_deref());
         match data.data {
-            Some(data) => println!("{}", data.paths.directory),
+            Some(data) => println!("{}", data.paths.path),
             None => println!("No paths returned from server"),
         }
         Ok(())
@@ -159,13 +162,13 @@ impl NumtrackerClient {
 
     async fn configure_beamline(
         self,
-        beamline: String,
+        instrument: String,
         config: ConfigurationOptions,
     ) -> Result<(), ClientError> {
         let vars = configure_mutation::Variables {
-            beamline,
+            instrument,
             scan: config.scan,
-            visit: config.visit,
+            directory: config.directory,
             detector: config.detector,
             scan_number: config.scan_number,
             ext: config.tracker_file_extension,
@@ -179,7 +182,7 @@ impl NumtrackerClient {
         match data.data {
             Some(data) => {
                 let conf = data.configure;
-                println!("Visit Template: {}", conf.visit_template);
+                println!("Visit Template: {}", conf.directory_template);
                 println!("Scan Template: {}", conf.scan_template);
                 println!("Detector Template: {}", conf.detector_template);
                 println!("DB Scan Number: {}", conf.db_scan_number);

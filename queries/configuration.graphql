@@ -1,8 +1,8 @@
-query ConfigurationQuery($beamline: [String!]) {
-  configurations(beamlineFilters: $beamline) {
-    beamline
+query ConfigurationQuery($instrument: [String!]) {
+  configurations(instrumentFilters: $instrument) {
+    instrument
     scanTemplate
-    visitTemplate
+    directoryTemplate
     detectorTemplate
     fileScanNumber
     dbScanNumber

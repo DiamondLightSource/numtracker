@@ -1,5 +1,5 @@
-query PathQuery($beamline: String!, $visit: String!) {
-    paths(beamline: $beamline, visit: $visit) {
-        directory
+query PathQuery($instrument: String!, $instrumentSession: String!) {
+    paths(instrument: $instrument, instrumentSession: $instrumentSession) {
+        path
     }
 }

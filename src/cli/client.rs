@@ -37,7 +37,7 @@ pub enum ClientCommand {
 #[derive(Debug, Parser)]
 pub struct ConfigurationOptions {
     #[clap(long)]
-    pub visit: Option<String>,
+    pub directory: Option<String>,
     #[clap(long)]
     pub scan: Option<String>,
     #[clap(long, alias = "det")]

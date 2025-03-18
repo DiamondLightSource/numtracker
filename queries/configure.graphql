@@ -1,12 +1,12 @@
-mutation ConfigureMutation($beamline: String!, $scan: String, $visit: String, $detector: String, $scan_number: Int, $ext: String) {
-    configure(beamline: $beamline, config: {
+mutation ConfigureMutation($instrument: String!, $scan: String, $directory: String, $detector: String, $scan_number: Int, $ext: String) {
+    configure(instrument: $instrument, config: {
         scan: $scan,
-        visit: $visit,
+        directory: $directory,
         detector: $detector,
         scanNumber: $scan_number,
         trackerFileExtension: $ext
     }) {
-        visitTemplate
+        directoryTemplate
         scanTemplate
         detectorTemplate
         dbScanNumber
