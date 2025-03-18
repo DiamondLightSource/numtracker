@@ -1,0 +1,11 @@
+query ConfigurationQuery($instrument: [String!]) {
+  configurations(instrumentFilters: $instrument) {
+    instrument
+    scanTemplate
+    directoryTemplate
+    detectorTemplate
+    fileScanNumber
+    dbScanNumber
+    trackerFileExtension
+  }
+}

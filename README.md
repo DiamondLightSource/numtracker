@@ -298,5 +298,109 @@ mutation {
 }
 ```
 
+## Using CLI client
+
+If the application is built with the `client` feature enabled, there is a
+`client` subcommand available from the CLI to query and configure the service.
+The help covers the basic use.
+
+<details><summary>Output from `numtracker client --help`</summary>
+
+```
+View and update beamline configurations provided by an instance of the service
+
+Usage: numtracker client [OPTIONS] <COMMAND>
+
+Commands:
+  configuration    Query existing configurations
+  configure        Update or add new configurations
+  visit-directory  Query for templated data
+  help             Print this message or the help of the given subcommand(s)
+
+Options:
+  -H, --host <HOST>  [env: NUMTRACKER_SERVICE_HOST=]
+      --auth <AUTH>  [env: NUMTRACKER_AUTH_HOST=]
+  -h, --help         Print help
+
+Logging/Debug:
+  -v, --verbose...  Increase the level of logs written to stderr
+  -q, --quiet       Disable all output to stderr/stdout
+```
+</details>
+
+### Configure
+
+The `configure` subcommand corresponds to the `configure` mutation from graphql.
+If a beamline is already present, this can be used to update individual fields.
+If the beamline is not present, all template fields must be present.
+
+```bash
+$ numtracker client configure i22 \
+    --visit '/tmp/{instrument}/data/{year}/{visit}'\
+    --scan '{subdirectory}/{instrument}-{scan_number}'\
+    --detector '{subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}'
+Visit Template: /tmp/{instrument}/data/{year}/{visit}
+Scan Template: {subdirectory}/{instrument}-{scan_number}
+Detector Template: {subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}
+DB Scan Number: 0
+File Scan Number: 122
+Tracker File Extension: None
+```
+
+### Configurations
+
+The `configuration` subcommand corresponds to the `configurations` graphql
+query. If no beamlines are included in the command, all configurations are
+returned, otherwise only those matching the given beamlines are returned
+(possible none if no beamlines match).
+
+#### List all configurations
+```bash
+$ numtracker client configuration
+Beamline: i11
+    Visit Template: ...
+    Scan Template: ...
+    Detector Template: ...
+    DB Scan Number: ...
+    File Scan Number: ...
+    Tracker File Extension: ...
+Beamline: i22
+    Visit Template: ...
+    Scan Template: ...
+    Detector Template: ...
+    DB Scan Number: ...
+    File Scan Number: ...
+    Tracker File Extension: ...
+Beamline: b21
+    Visit Template: ...
+    Scan Template: ...
+    Detector Template: ...
+    DB Scan Number: ...
+    File Scan Number: ...
+    Tracker File Extension: ...
+```
+
+#### Filter configurations
+```bash
+$ numtracker client configuration -b i22
+Beamline: i22
+    Visit Template: ...
+    Scan Template: ...
+    Detector Template: ...
+    DB Scan Number: ...
+    File Scan Number: ...
+    Tracker File Extension: ...
+```
+
+### Visit Directory
+
+The `visit-directory` subcommand is a reduced version of the `paths` graphql
+query. It only returns the directory path.
+
+```bash
+$ numtracker client visit-directory i22 cm12345-6
+/tmp/i22/data/2025/cm12345-6/
+```
+
 [_graphiql]:https://github.com/graphql/graphiql/
 [_jq]:https://jqlang.github.io/jq/
