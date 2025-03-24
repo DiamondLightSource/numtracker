@@ -23,7 +23,7 @@ opentelemetry = "0.28.0"
 opentelemetry-otlp = { version = "0.28.0", features = ["grpc-tonic"] }
 opentelemetry-semantic-conventions = "0.28.0"
 opentelemetry_sdk = { version = "0.28.0", features = ["rt-tokio"] }
-reqwest = { version = "0.12.14", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12.15", features = ["json", "rustls-tls"], default-features = false }
 serde = { version = "1.0.219", features = ["derive"] }
 sqlx = { version = "0.8.2", features = ["runtime-tokio", "sqlite"] }
 tokio = { version = "1.44.1", features = ["full"] }
@@ -38,7 +38,7 @@ async-std = { version = "1.13.1", features = ["attributes"], default-features = 
 httpmock = { version = "0.7.0", default-features = false }
 rstest = "0.25.0"
 serde_json = { version = "1.0.140", features = ["preserve_order"] }
-tempfile = "3.19.0"
+tempfile = "3.19.1"
 
 [build-dependencies]
 built = { version = "0.7.7", features = ["git2", "chrono"] }
