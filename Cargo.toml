@@ -11,8 +11,8 @@ rust-version = "1.83"
 unwrap_used = "deny"
 
 [dependencies]
-async-graphql = { version = "7.0.15", features = ["tracing"] }
-async-graphql-axum = "7.0.15"
+async-graphql = { version = "7.0.16", features = ["tracing"] }
+async-graphql-axum = "7.0.16"
 axum = "0.8.3"
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
 chrono = "0.4.40"
