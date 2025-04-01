@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use opentelemetry::trace::{TraceError, TracerProvider as _};
+use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::{global, KeyValue};
-use opentelemetry_otlp::{SpanExporter, WithExportConfig as _};
+use opentelemetry_otlp::{ExporterBuildError, SpanExporter, WithExportConfig as _};
 use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::Resource;
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_VERSION};
@@ -53,7 +53,7 @@ where
     })
 }
 
-fn init_tracing<S>(endpoint: Option<Url>, level: Level) -> Result<impl Layer<S>, TraceError>
+fn init_tracing<S>(endpoint: Option<Url>, level: Level) -> Result<impl Layer<S>, ExporterBuildError>
 where
     S: Subscriber + for<'s> LookupSpan<'s>,
 {
@@ -77,7 +77,7 @@ where
     }
 }
 
-pub fn init(logging: Option<Level>, tracing: &TracingOptions) -> Result<(), TraceError> {
+pub fn init(logging: Option<Level>, tracing: &TracingOptions) -> Result<(), ExporterBuildError> {
     let log_layer = init_stdout(logging);
     let trace_layer = init_tracing(tracing.tracing_url(), tracing.level())?;
 
