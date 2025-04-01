@@ -1,0 +1,16 @@
+mutation ConfigureMutation($instrument: String!, $scan: String, $directory: String, $detector: String, $scan_number: Int, $ext: String) {
+    configure(instrument: $instrument, config: {
+        scan: $scan,
+        directory: $directory,
+        detector: $detector,
+        scanNumber: $scan_number,
+        trackerFileExtension: $ext
+    }) {
+        directoryTemplate
+        scanTemplate
+        detectorTemplate
+        dbScanNumber
+        fileScanNumber
+        trackerFileExtension
+    }
+}

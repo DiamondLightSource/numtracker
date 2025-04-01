@@ -17,7 +17,7 @@ use std::borrow::Cow;
 use std::fmt::Display;
 use std::future::Future;
 use std::io::Write;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, PathBuf};
 use std::sync::Arc;
 
 use async_graphql::extensions::Tracing;
@@ -39,7 +39,7 @@ use axum_extra::TypedHeader;
 use chrono::{Datelike, Local};
 use derive_more::{Display, Error};
 use tokio::net::TcpListener;
-use tracing::{info, instrument, trace, warn};
+use tracing::{debug, info, instrument, trace, warn};
 
 use crate::build_info::ServerStatus;
 use crate::cli::ServeOptions;
@@ -55,9 +55,10 @@ use crate::template::{FieldSource, PathTemplate};
 
 mod auth;
 
-pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
+pub async fn serve_graphql(opts: ServeOptions) {
+    debug!(?opts, "Starting numtracker service");
     let server_status = Json(ServerStatus::new());
-    let db = SqliteScanPathService::connect(db)
+    let db = SqliteScanPathService::connect(&opts.db)
         .await
         .expect("Unable to open DB");
     let directory_numtracker = NumTracker::for_root_directory(opts.root_directory())
@@ -82,7 +83,7 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
             get((
                 StatusCode::METHOD_NOT_ALLOWED,
                 [("Allow", "POST")],
-                Html(include_str!("../static/get_graphql_warning.html")),
+                Html(include_str!("../../static/get_graphql_warning.html")),
             )),
         )
         // Interactive graphiql playground
@@ -90,7 +91,7 @@ pub async fn serve_graphql(db: &Path, opts: ServeOptions) {
         // Make it look less like something is broken when going to any other page
         .fallback((
             StatusCode::NOT_FOUND,
-            Html(include_str!("../static/404.html")),
+            Html(include_str!("../../static/404.html")),
         ))
         .layer(Extension(schema));
     let listener = TcpListener::bind(addr)
@@ -1163,7 +1164,7 @@ mod tests {
         graphql_schema(&mut buf).unwrap();
         assert_eq!(
             String::from_utf8(buf).unwrap(),
-            include_str!("../static/service_schema")
+            include_str!("../../static/service_schema.graphql")
         );
     }
 }

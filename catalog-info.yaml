@@ -31,4 +31,4 @@ spec:
   lifecycle: production
   owner: group:data-acquisition
   definition:
-    $text: ./static/service_schema
+    $text: ./static/service_schema.graphql

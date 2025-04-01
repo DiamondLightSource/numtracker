@@ -1,0 +1,5 @@
+query PathQuery($instrument: String!, $instrumentSession: String!) {
+    paths(instrument: $instrument, instrumentSession: $instrumentSession) {
+        path
+    }
+}
