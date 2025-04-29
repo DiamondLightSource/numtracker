@@ -19,7 +19,7 @@ async-graphql = { version = "7.0.16", features = ["tracing"] }
 async-graphql-axum = "7.0.16"
 axum = "0.8.3"
 axum-extra = { version = "0.10.1", features = ["typed-header"] }
-chrono = "0.4.40"
+chrono = "0.4.41"
 clap = { version = "4.5.37", features = ["cargo", "derive", "env", "string"] }
 derive_more = { version = "2.0.1", features = ["error", "display", "from", "deref"] }
 futures = "0.3.31"
@@ -40,7 +40,7 @@ url = "2.5.4"
 dirs = { version = "6.0.0", optional = true }
 graphql_client = { version = "0.14.0", optional = true }
 openidconnect = { version = "4.0.0", optional = true }
-toml = { version = "0.8.20", optional = true }
+toml = { version = "0.8.22", optional = true }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
