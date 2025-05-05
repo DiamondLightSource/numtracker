@@ -51,4 +51,4 @@ serde_json = { version = "1.0.140", features = ["preserve_order"] }
 tempfile = "3.19.1"
 
 [build-dependencies]
-built = { version = "0.7.7", features = ["git2", "chrono"] }
+built = { version = "0.8.0", features = ["git2", "chrono"] }
