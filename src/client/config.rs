@@ -36,12 +36,16 @@ impl ClientConfiguration {
     }
 
     pub async fn from_default_file() -> Result<Self, ConfigFileError> {
-        let default_file = dirs::config_dir()
-            .expect("Config dir should be known")
-            .join("numtracker")
-            .join("config");
-        match Self::from_file(default_file).await {
-            Err(ConfigFileError::MissingFile) => Ok(Self::default()),
+        let Some(file) = dirs::config_dir().map(|cnf| cnf.join("numtracker").join("config")) else {
+            debug!("Unable to determine default file location - using default config");
+            return Ok(Self::default());
+        };
+
+        match Self::from_file(&file).await {
+            Err(ConfigFileError::MissingFile) => {
+                debug!("Config file {file:?} not present - using default config");
+                Ok(Self::default())
+            }
             res => res,
         }
     }
