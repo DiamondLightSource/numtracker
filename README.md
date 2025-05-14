@@ -281,7 +281,8 @@ mutation {
       directoryTemplate
       scanTemplate
       detectorTemplate
-      latestScanNumber
+      dbScanNumber
+      fileScanNumber
     }
   }
 }
@@ -293,7 +294,8 @@ mutation {
     "directoryTemplate": "/tmp/{instrument}/data/{year}/{visit}",
     "scanTemplate": "{subdirectory}/{instrument}-{scan_number}",
     "detectorTemplate": "{subdirectory}/{instrument}-{scan_number}-{detector}",
-    "latestScanNumber": 12345
+    "dbScanNumber": 12345
+    "fileScanNumber": 12345
   }
 }
 ```
@@ -336,7 +338,7 @@ If the beamline is not present, all template fields must be present.
 
 ```bash
 $ numtracker client configure i22 \
-    --visit '/tmp/{instrument}/data/{year}/{visit}'\
+    --directory '/tmp/{instrument}/data/{year}/{visit}'\
     --scan '{subdirectory}/{instrument}-{scan_number}'\
     --detector '{subdirectory}/{scan_number}/{instrument}-{scan_number}-{detector}'
 Visit Template: /tmp/{instrument}/data/{year}/{visit}
