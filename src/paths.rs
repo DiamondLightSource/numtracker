@@ -89,7 +89,7 @@ impl TryFrom<String> for DetectorField {
 }
 
 pub trait PathSpec {
-    type Field: TryFrom<String> + Eq + Hash + Display + 'static;
+    type Field: TryFrom<String> + Eq + Hash + Display + Send + Sync + 'static;
     const REQUIRED: &'static [Self::Field];
     const ABSOLUTE: bool;
 

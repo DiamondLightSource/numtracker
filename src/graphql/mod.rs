@@ -14,18 +14,15 @@
 
 use std::any;
 use std::borrow::Cow;
-use std::fmt::Display;
 use std::future::Future;
 use std::io::Write;
 use std::path::{Component, PathBuf};
-use std::sync::Arc;
 
 use async_graphql::extensions::Tracing;
 use async_graphql::http::GraphiQLSource;
-use async_graphql::registry::{MetaType, MetaTypeId, Registry};
 use async_graphql::{
-    Context, EmptySubscription, InputObject, InputType, InputValueError, InputValueResult, Object,
-    Scalar, ScalarType, Schema, SimpleObject, Value,
+    Context, Description, EmptySubscription, InputObject, InputValueError, InputValueResult,
+    Object, Scalar, ScalarType, Schema, SimpleObject, TypeName, Value,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
@@ -503,29 +500,33 @@ impl ConfigurationUpdates {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Display)]
+#[display("{_0}")]
 struct InputTemplate<S: PathSpec>(PathTemplate<S::Field>);
 
-impl<S, F> InputType for InputTemplate<S>
-where
-    F: Send + Sync + TryFrom<String> + Display,
-    S: PathSpec<Field = F> + Send + Sync,
-{
-    type RawValueType = PathTemplate<F>;
-    fn parse(value: Option<Value>) -> InputValueResult<Self> {
+impl<S: PathSpec> Description for InputTemplate<S> {
+    fn description() -> &'static str {
+        S::describe()
+    }
+}
+
+#[Scalar(use_type_description, name_type)]
+impl<S: PathSpec> ScalarType for InputTemplate<S> {
+    fn parse(value: Value) -> InputValueResult<Self> {
         match value {
-            Some(Value::String(txt)) => match S::new_checked(&txt) {
+            Value::String(txt) => match S::new_checked(&txt) {
                 Ok(pt) => Ok(Self(pt)),
                 Err(e) => Err(InputValueError::custom(e)),
             },
-            Some(other) => Err(InputValueError::expected_type(other)),
-            None => Err(InputValueError::expected_type(Value::Null)),
+            other => Err(InputValueError::expected_type(other)),
         }
     }
     fn to_value(&self) -> Value {
         Value::String(self.0.to_string())
     }
+}
 
+impl<S: PathSpec> TypeName for InputTemplate<S> {
     fn type_name() -> Cow<'static, str> {
         // best effort remove the `numtracker::paths::` prefix
         any::type_name::<S>()
@@ -533,23 +534,6 @@ where
             .last()
             .expect("There is always a last value for a split")
             .into()
-    }
-
-    fn create_type_info(registry: &mut Registry) -> String {
-        registry.create_input_type::<Self, _>(MetaTypeId::Scalar, |_| MetaType::Scalar {
-            name: Self::type_name().into(),
-            description: Some(S::describe().into()),
-            is_valid: Some(Arc::new(|v| matches!(v, Value::String(_)))),
-            visible: None,
-            inaccessible: false,
-            tags: vec![],
-            specified_by_url: None,
-            directive_invocations: vec![],
-        })
-    }
-
-    fn as_raw_value(&self) -> Option<&Self::RawValueType> {
-        Some(&self.0)
     }
 }
 
