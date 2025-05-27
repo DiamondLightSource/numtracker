@@ -88,12 +88,8 @@ impl TryFrom<String> for DetectorField {
     }
 }
 
-#[allow(unused)] // not actually unused: see github.com/rust-lang/rust/issues/128839
-pub trait PathField: TryFrom<String> + Eq + Hash + Display + 'static {}
-impl<F> PathField for F where F: TryFrom<String> + Eq + Hash + Display + 'static {}
-
 pub trait PathSpec {
-    type Field: PathField;
+    type Field: TryFrom<String> + Eq + Hash + Display + 'static;
     const REQUIRED: &'static [Self::Field];
     const ABSOLUTE: bool;
 
