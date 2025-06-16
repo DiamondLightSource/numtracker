@@ -36,12 +36,6 @@ pub struct SqliteScanPathService {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct NumtrackerConfig {
-    pub directory: String,
-    pub extension: String,
-}
-
-#[derive(Debug, PartialEq, Eq)]
 struct RawPathTemplate<F>(String, PhantomData<F>);
 
 impl<Spec> RawPathTemplate<Spec>
