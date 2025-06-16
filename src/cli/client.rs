@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 use url::Url;
 
 #[derive(Debug, Parser)]
+#[clap(max_term_width = 100)]
 pub struct ClientOptions {
     #[clap(flatten)]
     pub connection: ConnectionOptions,
@@ -11,8 +12,18 @@ pub struct ClientOptions {
 
 #[derive(Debug, Parser)]
 pub struct ConnectionOptions {
+    /// The host address of the numtracker service
+    ///
+    /// This should be the root of the service address including the scheme and
+    /// port (if non-standard) but not including the graphql path,
+    /// eg https://numtracker.example.com
     #[clap(long, short = 'H', env = "NUMTRACKER_SERVICE_HOST")]
     pub host: Option<Url>,
+    /// The host address of the authorisation provider
+    ///
+    /// This should be the domain that has the .well-known/openid-configuration
+    /// endpoint including scheme and port (if non-standard).
+    /// eg https://authn.example.com/realms/master
     #[clap(long, env = "NUMTRACKER_AUTH_HOST")]
     pub auth: Option<Url>,
 }
