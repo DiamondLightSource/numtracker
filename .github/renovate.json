@@ -5,6 +5,12 @@
   ],
   "packageRules": [
       {
+          "groupName": "patches",
+          "matchUpdateTypes": ["patch"],
+          "desription": "Limit patch updates to once per month",
+          "schedule": ["* * 1 * *"]
+      },
+      {
           "groupName": "tracing",
           "matchDepNames": ["tracing*"]
       },
