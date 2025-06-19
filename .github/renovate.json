@@ -7,7 +7,7 @@
       {
           "groupName": "patches",
           "matchUpdateTypes": ["patch"],
-          "desription": "Limit patch updates to once per month",
+          "description": ["Limit patch updates to once per month"],
           "schedule": ["* * 1 * *"]
       },
       {
