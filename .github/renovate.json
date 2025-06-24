@@ -11,12 +11,8 @@
           "schedule": ["* * 1 * *"]
       },
       {
-          "groupName": "tracing",
-          "matchDepNames": ["tracing*"]
-      },
-      {
-          "groupName": "opentelemetry",
-          "matchDepNames": ["opentelemetry*"]
+          "groupName": "tracing_and_logs",
+          "matchDepNames": ["tracing*", "opentelemetry*"]
       },
       {
           "groupName": "axum",
