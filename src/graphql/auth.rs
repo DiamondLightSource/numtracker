@@ -228,7 +228,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn successful_access_check() {
+    async fn successful_check_access() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|when, then| {
@@ -313,7 +313,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn denied_access_check() {
+    async fn denied_check_access() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|when, then| {
@@ -406,7 +406,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unauthorised_access_check() {
+    async fn unauthorised_check_access() {
         let server = MockServer::start();
         let mock = server
             .mock_async(|_, _| {
