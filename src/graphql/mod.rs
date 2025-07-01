@@ -14,6 +14,7 @@
 
 use std::any;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::future::Future;
 use std::io::Write;
 use std::path::{Component, PathBuf};
@@ -41,7 +42,7 @@ use tracing::{debug, info, instrument, trace, warn};
 use crate::build_info::ServerStatus;
 use crate::cli::ServeOptions;
 use crate::db_service::{
-    InstrumentConfiguration, InstrumentConfigurationUpdate, SqliteScanPathService,
+    InstrumentConfiguration, InstrumentConfigurationUpdate, NamedTemplate, SqliteScanPathService,
 };
 use crate::numtracker::NumTracker;
 use crate::paths::{
@@ -144,6 +145,7 @@ struct DirectoryPath {
 /// GraphQL type to provide path data for the next scan for a given instrument session
 struct ScanPaths {
     directory: DirectoryPath,
+    extra_templates: HashMap<String, PathTemplate<ScanField>>,
     subdirectory: Subdirectory,
 }
 
@@ -224,6 +226,12 @@ impl ScanPaths {
         self.directory.info.scan_number()
     }
 
+    async fn template(&self, name: String) -> async_graphql::Result<String> {
+        Ok(path_to_string(
+            self.extra_templates.get(&name).unwrap().render(self),
+        )?)
+    }
+
     /// The paths where the given detectors should write their files.
     ///
     /// Detector names are normalised before being used in file names by replacing any
@@ -299,6 +307,23 @@ impl CurrentConfiguration {
             db_config,
             high_file,
         })
+    }
+}
+
+#[derive(Debug, InputObject)]
+struct TemplateInput {
+    name: String,
+    template: String,
+}
+
+#[Object]
+impl NamedTemplate {
+    async fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn template(&self) -> &str {
+        &self.template
     }
 }
 
@@ -384,6 +409,24 @@ impl Query {
         .into_iter()
         .collect()
     }
+
+    #[instrument(skip(self, ctx))]
+    async fn named_templates<'ctx>(
+        &self,
+        ctx: &Context<'ctx>,
+        beamline: String,
+        names: Option<Vec<String>>,
+    ) -> async_graphql::Result<Vec<NamedTemplate>> {
+        check_auth(ctx, |policy, token| {
+            policy.check_instrument_admin(token, &beamline)
+        })
+        .await?;
+        let db = ctx.data::<SqliteScanPathService>()?;
+        match names {
+            Some(names) => Ok(db.additional_templates(&beamline, names).await?),
+            None => Ok(db.all_additional_templates(&beamline).await?),
+        }
+    }
 }
 
 #[Object]
@@ -420,11 +463,38 @@ impl Mutation {
             warn!("Failed to increment tracker file: {e}");
         }
 
+        let required_templates = ctx
+            .field()
+            .selection_set()
+            .filter(|slct| slct.name() == "template")
+            .flat_map(|slct| slct.arguments())
+            .filter_map(|args| {
+                args.get(0).map(|arg| {
+                    let Value::String(name) = &arg.1 else {
+                        panic!("name isn't a string")
+                    };
+                    name.into()
+                })
+            })
+            .collect::<Vec<_>>();
+        let extra_templates = db
+            .additional_templates(&instrument, required_templates)
+            .await?
+            .into_iter()
+            .map(|template| {
+                (
+                    template.name,
+                    ScanTemplate::new_checked(&template.template).unwrap(),
+                )
+            })
+            .collect();
+
         Ok(ScanPaths {
             directory: DirectoryPath {
                 instrument_session,
                 info: next_scan,
             },
+            extra_templates,
             subdirectory: sub.unwrap_or_default(),
         })
     }
@@ -450,6 +520,20 @@ impl Mutation {
             None => upd.insert_new(db).await?,
         };
         CurrentConfiguration::for_config(db_config, nt).await
+    }
+
+    #[instrument(skip(self, ctx))]
+    async fn register_template<'ctx>(
+        &self,
+        ctx: &Context<'ctx>,
+        beamline: String,
+        template: TemplateInput,
+    ) -> async_graphql::Result<NamedTemplate> {
+        check_auth(ctx, |pc, token| pc.check_instrument_admin(token, &beamline)).await?;
+        let db = ctx.data::<SqliteScanPathService>()?;
+        Ok(db
+            .register_template(&beamline, template.name, template.template)
+            .await?)
     }
 }
 
