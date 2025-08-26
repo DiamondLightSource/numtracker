@@ -358,24 +358,24 @@ impl SqliteScanPathService {
 
     pub async fn all_additional_templates(
         &self,
-        beamline: &str,
+        instrument: &str,
     ) -> Result<Vec<NamedTemplate>, ConfigurationError> {
         Ok(query_as!(
             NamedTemplate,
-            "SELECT name, template FROM beamline_template WHERE beamline = ?",
-            beamline
+            "SELECT name, template FROM instrument_template WHERE instrument = ?",
+            instrument
         )
         .fetch_all(&self.pool)
         .await?)
     }
     pub async fn additional_templates(
         &self,
-        beamline: &str,
+        instrument: &str,
         names: Vec<String>,
     ) -> Result<Vec<NamedTemplate>, ConfigurationError> {
         let mut q =
-            QueryBuilder::new("SELECT name, template FROM beamline_template WHERE beamline = ");
-        q.push_bind(beamline);
+            QueryBuilder::new("SELECT name, template FROM instrument_template WHERE instrument = ");
+        q.push_bind(instrument);
         q.push(" AND name IN (");
         let mut name_query = q.separated(", ");
         for name in names {
@@ -388,17 +388,17 @@ impl SqliteScanPathService {
 
     pub async fn register_template(
         &self,
-        beamline: &str,
+        instrument: &str,
         name: String,
         template: String,
     ) -> Result<NamedTemplate, NamedTemplateError> {
         Ok(query_as!(
             NamedTemplate,
-            "INSERT INTO template (name, template, beamline)
-                VALUES (?, ?, (SELECT id FROM beamline WHERE name = ?)) RETURNING name, template;",
+            "INSERT INTO template (name, template, instrument)
+                VALUES (?, ?, (SELECT id FROM instrument WHERE name = ?)) RETURNING name, template;",
             name,
             template,
-            beamline
+            instrument
         )
         .fetch_one(&self.pool)
         .await?)
@@ -460,8 +460,8 @@ mod error {
 
     #[derive(Debug, Display, Error)]
     pub enum NamedTemplateError {
-        #[display("No configuration for beamline")]
-        MissingBeamline,
+        #[display("No configuration for instrument")]
+        MissingInstrument,
         #[display("Template name was empty")]
         EmptyName,
         #[display("Template was empty")]
@@ -474,8 +474,8 @@ mod error {
         fn from(value: sqlx::Error) -> Self {
             match value {
                 sqlx::Error::Database(err) => match (err.kind(), err.message().split_once(": ")) {
-                    (ErrorKind::NotNullViolation, Some((_, "template.beamline"))) => {
-                        NamedTemplateError::MissingBeamline
+                    (ErrorKind::NotNullViolation, Some((_, "template.instrument"))) => {
+                        NamedTemplateError::MissingInstrument
                     }
                     // pretty sure these two are not possible as strings can't be null
                     (ErrorKind::NotNullViolation, Some((_, "template.name"))) => {

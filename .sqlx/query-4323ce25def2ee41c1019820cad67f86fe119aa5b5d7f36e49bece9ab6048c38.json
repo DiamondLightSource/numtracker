@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT name, template FROM beamline_template WHERE beamline = ?",
+  "query": "SELECT name, template FROM instrument_template WHERE instrument = ?",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "15bdb26777072892c7feb712ae373379f45ec83a36351fc19353f8f48262c79e"
+  "hash": "4323ce25def2ee41c1019820cad67f86fe119aa5b5d7f36e49bece9ab6048c38"
 }
