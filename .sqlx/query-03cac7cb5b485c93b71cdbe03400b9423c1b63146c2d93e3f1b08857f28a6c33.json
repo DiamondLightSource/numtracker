@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "INSERT INTO template (name, template, beamline)\n                VALUES (?, ?, (SELECT id FROM beamline WHERE name = ?)) RETURNING name, template;",
+  "query": "INSERT INTO template (name, template, instrument)\n                VALUES (?, ?, (SELECT id FROM instrument WHERE name = ?)) RETURNING name, template;",
   "describe": {
     "columns": [
       {
@@ -22,5 +22,5 @@
       false
     ]
   },
-  "hash": "b09ef7bc16a56728acaf3b4a9e899bf4d9e2893f77b02765f9c9712f74b0e56b"
+  "hash": "03cac7cb5b485c93b71cdbe03400b9423c1b63146c2d93e3f1b08857f28a6c33"
 }
