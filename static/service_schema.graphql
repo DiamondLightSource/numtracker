@@ -124,12 +124,17 @@ type Mutation {
 	Add or modify the stored configuration for an instrument
 	"""
 	configure(instrument: String!, config: ConfigurationUpdates!): CurrentConfiguration!
-	registerTemplate(beamline: String!, template: TemplateInput!): NamedTemplate!
+	registerTemplate(instrument: String!, template: NamedTemplateInput!): NamedTemplate!
 }
 
 type NamedTemplate {
 	name: String!
 	template: String!
+}
+
+input NamedTemplateInput {
+	name: String!
+	template: ScanTemplate!
 }
 
 """
@@ -150,7 +155,7 @@ type Query {
 	Can be filtered to provide one or more specific instruments
 	"""
 	configurations(instrumentFilters: [String!]): [CurrentConfiguration!]!
-	namedTemplates(beamline: String!, names: [String!]): [NamedTemplate!]!
+	namedTemplates(instrument: String!, names: [String!]): [NamedTemplate!]!
 }
 
 """
@@ -188,11 +193,6 @@ A template describing the location within a session data directory where the roo
 scalar ScanTemplate
 
 scalar Subdirectory
-
-input TemplateInput {
-	name: String!
-	template: String!
-}
 
 """
 Directs the executor to include this field or fragment only when the `if` argument is true.
