@@ -228,7 +228,10 @@ impl ScanPaths {
 
     async fn template(&self, name: String) -> async_graphql::Result<String> {
         Ok(path_to_string(
-            self.extra_templates.get(&name).unwrap().render(self),
+            self.extra_templates
+                .get(&name)
+                .ok_or(NoSuchTemplate(name))?
+                .render(self),
         )?)
     }
 
@@ -315,6 +318,10 @@ struct TemplateInput {
     name: String,
     template: String,
 }
+
+#[derive(Debug, Display, Error)]
+#[display("Template {_0:?} not found")]
+struct NoSuchTemplate(#[error(ignore)] String);
 
 #[Object]
 impl NamedTemplate {
@@ -469,7 +476,7 @@ impl Mutation {
             .filter(|slct| slct.name() == "template")
             .flat_map(|slct| slct.arguments())
             .filter_map(|args| {
-                args.get(0).map(|arg| {
+                args.first().map(|arg| {
                     let Value::String(name) = &arg.1 else {
                         panic!("name isn't a string")
                     };
@@ -482,12 +489,9 @@ impl Mutation {
             .await?
             .into_iter()
             .map(|template| {
-                (
-                    template.name,
-                    ScanTemplate::new_checked(&template.template).unwrap(),
-                )
+                ScanTemplate::new_checked(&template.template).map(|tmpl| (template.name, tmpl))
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
 
         Ok(ScanPaths {
             directory: DirectoryPath {
