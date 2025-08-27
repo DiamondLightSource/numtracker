@@ -314,9 +314,9 @@ impl CurrentConfiguration {
 }
 
 #[derive(Debug, InputObject)]
-struct TemplateInput {
+struct NamedTemplateInput {
     name: String,
-    template: String,
+    template: InputTemplate<ScanTemplate>,
 }
 
 #[derive(Debug, Display, Error)]
@@ -421,17 +421,17 @@ impl Query {
     async fn named_templates<'ctx>(
         &self,
         ctx: &Context<'ctx>,
-        beamline: String,
+        instrument: String,
         names: Option<Vec<String>>,
     ) -> async_graphql::Result<Vec<NamedTemplate>> {
         check_auth(ctx, |policy, token| {
-            policy.check_instrument_admin(token, &beamline)
+            policy.check_instrument_admin(token, &instrument)
         })
         .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         match names {
-            Some(names) => Ok(db.additional_templates(&beamline, names).await?),
-            None => Ok(db.all_additional_templates(&beamline).await?),
+            Some(names) => Ok(db.additional_templates(&instrument, names).await?),
+            None => Ok(db.all_additional_templates(&instrument).await?),
         }
     }
 }
@@ -530,13 +530,16 @@ impl Mutation {
     async fn register_template<'ctx>(
         &self,
         ctx: &Context<'ctx>,
-        beamline: String,
-        template: TemplateInput,
+        instrument: String,
+        template: NamedTemplateInput,
     ) -> async_graphql::Result<NamedTemplate> {
-        check_auth(ctx, |pc, token| pc.check_instrument_admin(token, &beamline)).await?;
+        check_auth(ctx, |pc, token| {
+            pc.check_instrument_admin(token, &instrument)
+        })
+        .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         Ok(db
-            .register_template(&beamline, template.name, template.template)
+            .register_template(&instrument, template.name, template.template.to_string())
             .await?)
     }
 }
