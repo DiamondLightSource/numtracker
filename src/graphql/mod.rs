@@ -250,8 +250,8 @@ impl ScanPaths {
 /// The current configuration for an instrument
 impl CurrentConfiguration {
     /// The name of the instrument
-    pub async fn instrument(&self) -> async_graphql::Result<&str> {
-        Ok(self.db_config.name())
+    pub async fn instrument(&self) -> &str {
+        self.db_config.name()
     }
     /// The template used to build the path to the data directory for an instrument
     pub async fn directory_template(&self) -> async_graphql::Result<String> {
@@ -270,19 +270,19 @@ impl CurrentConfiguration {
     /// The latest scan number stored in the DB. This is the last scan number provided by this
     /// service but may not reflect the most recent scan number for an instrument if an external
     /// service (eg GDA) has incremented its own number tracker.
-    pub async fn db_scan_number(&self) -> async_graphql::Result<u32> {
-        Ok(self.db_config.scan_number())
+    pub async fn db_scan_number(&self) -> u32 {
+        self.db_config.scan_number()
     }
     /// The highest matching number file for this instrument in the configured tracking directory.
     /// May be null if no directory is available for this instrument or if there are no matching
     /// number files.
-    pub async fn file_scan_number(&self) -> async_graphql::Result<Option<u32>> {
-        Ok(self.high_file)
+    pub async fn file_scan_number(&self) -> Option<u32> {
+        self.high_file
     }
     /// The file extension used for the file based tracking, eg using an extension of 'ext'
     /// would create files `1.ext`, `2.ext` etc
-    pub async fn tracker_file_extension(&self) -> async_graphql::Result<Option<&str>> {
-        Ok(self.db_config.tracker_file_extension())
+    pub async fn tracker_file_extension(&self) -> Option<&str> {
+        self.db_config.tracker_file_extension()
     }
 }
 
