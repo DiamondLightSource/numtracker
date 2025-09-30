@@ -422,7 +422,7 @@ mod tests {
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
-        mock.assert_hits(0);
+        mock.assert_calls(0);
     }
 
     #[tokio::test]
@@ -442,7 +442,7 @@ mod tests {
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
-        mock.assert_hits(0);
+        mock.assert_calls(0);
     }
 
     #[tokio::test]
@@ -462,7 +462,7 @@ mod tests {
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
-        mock.assert_hits(0);
+        mock.assert_calls(0);
     }
 
     #[tokio::test]
