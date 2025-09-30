@@ -391,9 +391,9 @@ impl Query {
 impl Mutation {
     /// Generate scan file locations for the next scan
     #[instrument(skip(self, ctx))]
-    async fn scan<'ctx>(
+    async fn scan(
         &self,
-        ctx: &Context<'ctx>,
+        ctx: &Context<'_>,
         instrument: String,
         instrument_session: String,
         sub: Option<Subdirectory>,
@@ -431,9 +431,9 @@ impl Mutation {
 
     /// Add or modify the stored configuration for an instrument
     #[instrument(skip(self, ctx))]
-    async fn configure<'ctx>(
+    async fn configure(
         &self,
-        ctx: &Context<'ctx>,
+        ctx: &Context<'_>,
         instrument: String,
         config: ConfigurationUpdates,
     ) -> async_graphql::Result<CurrentConfiguration> {
