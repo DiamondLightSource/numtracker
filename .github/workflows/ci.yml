@@ -10,20 +10,29 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  lint:
+  format:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@stable
       with:
           toolchain: nightly
-          components: rustfmt, clippy
-    - uses: Swatinem/rust-cache@v2
+          components: rustfmt
     - name: Check formatting
       # Use nightly for formatting to enable unstable formatting styles
       # * group imports
       # * import_granularity
       run: cargo +nightly fmt -- --check
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: stable
+          components: clippy
+    - uses: Swatinem/rust-cache@v2
     - name: Clippy
       run: |
         cargo --version
