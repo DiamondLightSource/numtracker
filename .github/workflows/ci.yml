@@ -65,10 +65,20 @@ jobs:
           toolchain: stable
     - uses: Swatinem/rust-cache@v2
 
-    - name: Build Everything
-      run: cargo build --all-targets
-    - name: Run tests
-      run: cargo test --all-targets --verbose
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@cargo-llvm-cov
+    
+    - name: Run tests and generate code coverage
+      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@18283e04ce6e62d37312384ff67231eb8fd56d24 # v5
+      with:
+        files: lcov.info
+        fail_ci_if_error: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
     # Ensure that no files (most likely the Cargo.lock file) have changed
     - name: Unstaged Changes
       run: git diff --exit-code
