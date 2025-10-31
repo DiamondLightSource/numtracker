@@ -624,13 +624,14 @@ mod tests {
     use std::error::Error;
     use std::fs;
 
-    use async_graphql::{EmptySubscription, InputType as _, Request, Schema, SchemaBuilder, Value};
+    use async_graphql::{
+        value, EmptySubscription, InputType as _, Request, Schema, SchemaBuilder, Value,
+    };
     use axum::http::HeaderValue;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
     use httpmock::MockServer;
     use rstest::{fixture, rstest};
-    use serde_json::json;
     use tempfile::TempDir;
 
     use super::auth::PolicyCheck;
@@ -671,13 +672,6 @@ mod tests {
             scan_number: num,
             tracker_file_extension: ext.map(|e| e.into()),
         }
-    }
-
-    /// Helper for creating graphql values from literals
-    macro_rules! value {
-        ($tree:tt) => {
-            Value::from_json(json!($tree)).unwrap()
-        };
     }
 
     #[fixture]
