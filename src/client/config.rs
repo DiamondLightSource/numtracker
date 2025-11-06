@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::io::ErrorKind;
 use std::path::Path;
 
@@ -58,5 +59,22 @@ impl ClientConfiguration {
     pub(crate) fn with_auth(mut self, auth: Option<Url>) -> Self {
         self.auth = auth.or(self.auth);
         self
+    }
+}
+
+impl Display for ClientConfiguration {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ClientConfiguration(host: ")?;
+        match self.host {
+            Some(ref h) => write!(f, "{h}")?,
+            None => write!(f, "None")?,
+        }
+        write!(f, ", auth: ")?;
+        match self.auth {
+            Some(ref a) => write!(f, "{a}")?,
+            None => write!(f, "None")?,
+        }
+        write!(f, ")")?;
+        Ok(())
     }
 }
