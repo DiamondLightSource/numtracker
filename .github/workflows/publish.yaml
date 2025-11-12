@@ -40,8 +40,8 @@ jobs:
         with:
           context: .
           cache-from: type=gha
-          cache-to: type=gha
-          tags: ${{ steps.meta.outputs.tags }}
+          cache-to: type=gha,mode=max
+          tags: diamondlightsource/numtracker:dev
           load: true
 
       - name: Login to GHCR
