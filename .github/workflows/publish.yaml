@@ -39,9 +39,9 @@ jobs:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          tags: diamondlightsource/numtracker:dev
+          cache-from: type=registry,ref=DiamondLightSource/numtracker:buildcache
+          cache-to: type=registry,ref=DiamondLightSource/numtracker:buildcache,mode=max
+          tags: DiamondLightSource/numtracker:dev
           load: true
 
       - name: Login to GHCR
