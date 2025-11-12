@@ -37,7 +37,7 @@ jobs:
         if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io/${{ github.repository_owner }}
+          registry: ghcr.io/diamondlightsource
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
