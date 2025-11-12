@@ -34,7 +34,6 @@ jobs:
         run: sed -i 's/^version = ".*"$/version = "${{ steps.meta.outputs.version }}"/' Cargo.toml
 
       - name: Login to GHCR
-        if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
         uses: docker/login-action@v3
         with:
           registry: ghcr.io/diamondlightsource
