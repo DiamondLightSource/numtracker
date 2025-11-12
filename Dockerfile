@@ -7,8 +7,10 @@ RUN rustup target add x86_64-unknown-linux-musl && \
 
 WORKDIR /build
 
+RUN cargo init --name empty-build-init
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
+RUN cargo build --release --target x86_64-unknown-linux-musl
 COPY ./build.rs ./build.rs
 COPY ./.env ./.env
 COPY ./src ./src
