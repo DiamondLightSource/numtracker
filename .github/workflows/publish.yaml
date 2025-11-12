@@ -47,9 +47,9 @@ jobs:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/numtracker:buildcache
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository_owner }}/numtracker:buildcache,mode=max
-          tags: DiamondLightSource/numtracker:dev
+          cache-from: type=registry,ref=ghcr.io/diamondlightsource/numtracker:buildcache
+          cache-to: type=registry,ref=ghcr.io/diamondlightsource/numtracker:buildcache,mode=max
+          tags: numtracker-build-cache
           load: true
 
       - name: Publish image
