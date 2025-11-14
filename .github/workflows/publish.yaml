@@ -33,24 +33,23 @@ jobs:
         if: ${{ github.ref_type == 'tag' }}
         run: sed -i 's/^version = ".*"$/version = "${{ steps.meta.outputs.version }}"/' Cargo.toml
 
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io/diamondlightsource
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Build image
         uses: docker/build-push-action@v6
         env:
           DOCKER_BUILD_RECORD_UPLOAD: false
         with:
           context: .
-          cache-from: type=gha
-          cache-to: type=gha
-          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=registry,ref=ghcr.io/diamondlightsource/numtracker:buildcache
+          cache-to: type=registry,ref=ghcr.io/diamondlightsource/numtracker:buildcache,mode=max
+          tags: numtracker-build-cache
           load: true
-
-      - name: Login to GHCR
-        if: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io/${{ github.repository_owner }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish image
         uses: docker/build-push-action@v6
