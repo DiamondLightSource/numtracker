@@ -36,6 +36,8 @@ use axum_extra::TypedHeader;
 use chrono::{Datelike, Local};
 use derive_more::{Display, Error};
 use tokio::net::TcpListener;
+use tokio::select;
+use tokio::signal::unix::{signal, SignalKind};
 use tracing::{debug, info, instrument, trace, warn};
 
 use crate::build_info::ServerStatus;
@@ -95,8 +97,21 @@ pub async fn serve_graphql(opts: ServeOptions) {
         .await
         .unwrap_or_else(|e| panic!("Could not listen on {:?}:{}: {e}", addr.0, addr.1));
     axum::serve(listener, app)
+        .with_graceful_shutdown(create_signal_handler())
         .await
         .expect("Can't serve graphql endpoint");
+}
+
+async fn create_signal_handler() {
+    let mut term = signal(SignalKind::terminate()).expect("Failed to create SIGTERM listener");
+    let mut int = signal(SignalKind::interrupt()).expect("Failed to create SIGINT listener");
+    let mut quit = signal(SignalKind::quit()).expect("Failed to create SIGQUIT listener");
+    let sig = select! {
+        _ = term.recv() => "SIGTERM",
+        _ = int.recv() => "SIGINT",
+        _ = quit.recv() => "SIGQUIT",
+    };
+    info!("Server interrupted by {sig}");
 }
 
 pub fn graphql_schema<W: Write>(mut out: W) -> Result<(), std::io::Error> {
