@@ -118,7 +118,13 @@ impl NumtrackerClient {
             None => client,
             Some(token) => client.bearer_auth(token),
         };
-        client.json(&content).send().await?.json().await
+        client
+            .json(&content)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await
     }
 
     async fn query_configuration(self, instrument: Option<Vec<String>>) -> Result<(), ClientError> {
@@ -144,6 +150,8 @@ impl NumtrackerClient {
                     conf.tracker_file_extension.unwrap_or(conf.instrument)
                 );
             }
+        } else if data.errors.is_none() {
+            println!("Query returned no data or errors");
         }
         Ok(())
     }
