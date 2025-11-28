@@ -5,6 +5,7 @@ use graphql_client::{GraphQLQuery, Response};
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use tracing::info;
 use url::Url;
 
 use crate::cli::client::{ClientCommand, ClientOptions, ConfigurationOptions};
@@ -25,12 +26,17 @@ pub async fn run_client(options: ClientOptions) {
     } = options;
 
     let conf = match ClientConfiguration::from_default_file().await {
-        Ok(conf) => conf.with_host(connection.host).with_auth(connection.auth),
+        Ok(conf) => {
+            info!("Configuration from file: {conf}");
+            conf.with_host(connection.host).with_auth(connection.auth)
+        }
         Err(e) => {
             println!("Could not read configuration: {e}");
             return;
         }
     };
+
+    info!("Configuration with CLI args included: {conf}");
 
     let client = match NumtrackerClient::from_config(conf).await {
         Ok(client) => client,
@@ -86,14 +92,16 @@ struct ConfigureMutation;
 
 impl NumtrackerClient {
     async fn from_config(config: ClientConfiguration) -> Result<Self, ClientError> {
-        let host = config
-            .host
-            .unwrap_or(Url::parse("http://localhost:8000").expect("Constant URL is valid"));
+        let host = config.host.unwrap_or_else(|| {
+            info!("No host specified, defaulting to localhost:8000");
+            Url::parse("http://localhost:8000").expect("Constant URL is valid")
+        });
 
         let auth = match config.auth {
             Some(auth) => Some(cli_auth::get_access_token(&auth).await?),
             None => None,
         };
+        info!("Querying {host} with auth: {auth:?}");
         Ok(NumtrackerClient { auth, host })
     }
 
@@ -110,7 +118,13 @@ impl NumtrackerClient {
             None => client,
             Some(token) => client.bearer_auth(token),
         };
-        client.json(&content).send().await?.json().await
+        client
+            .json(&content)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await
     }
 
     async fn query_configuration(self, instrument: Option<Vec<String>>) -> Result<(), ClientError> {
@@ -136,6 +150,8 @@ impl NumtrackerClient {
                     conf.tracker_file_extension.unwrap_or(conf.instrument)
                 );
             }
+        } else if data.errors.is_none() {
+            println!("Query returned no data or errors");
         }
         Ok(())
     }
