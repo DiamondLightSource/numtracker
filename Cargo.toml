@@ -38,7 +38,7 @@ url = "2.5.4"
 
 # Dependencies required if building with client subcommand
 dirs = { version = "6.0.0", optional = true }
-graphql_client = { version = "0.14.0", optional = true }
+graphql_client = { version = "0.15.0", optional = true }
 openidconnect = { version = "4.0.0", optional = true }
 toml = { version = "0.9.5", optional = true }
 
