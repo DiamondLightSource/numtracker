@@ -18,7 +18,7 @@ client = ["dep:dirs", "dep:graphql_client", "dep:openidconnect", "dep:toml"]
 async-graphql = { version = "7.0.17", features = ["tracing"] }
 async-graphql-axum = "7.0.17"
 axum = "0.8.4"
-axum-extra = { version = "0.10.1", features = ["typed-header"] }
+axum-extra = { version = "0.12.0", features = ["typed-header"] }
 chrono = "0.4.41"
 clap = { version = "4.5.38", features = ["cargo", "derive", "env", "string", "wrap_help"] }
 derive_more = { version = "2.0.1", features = ["error", "display", "from", "deref"] }
