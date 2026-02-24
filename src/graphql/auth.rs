@@ -14,11 +14,12 @@
 
 use std::str::FromStr;
 
+use async_graphql::{Context, Guard};
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use derive_more::{Display, Error, From};
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, trace};
 
 use crate::cli::PolicyOptions;
 
@@ -172,6 +173,49 @@ impl PolicyCheck {
             Ok(())
         } else {
             Err(AuthError::Failed)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum AuthGuard<'a> {
+    Access {
+        instrument: &'a str,
+        instrument_session: &'a str,
+    },
+    InstrumentAdmin {
+        instrument: &'a str,
+    },
+    Admin,
+}
+
+impl<'a> Guard for AuthGuard<'a> {
+    async fn check(&self, ctx: &Context<'_>) -> async_graphql::Result<()> {
+        if let Some(policy) = ctx.data::<Option<PolicyCheck>>()? {
+            trace!("Auth enabled: checking token");
+            let token = ctx.data::<Option<Authorization<Bearer>>>()?;
+            let check = match self {
+                AuthGuard::Access {
+                    instrument,
+                    instrument_session,
+                } => {
+                    policy
+                        .check_access(token.as_ref(), instrument, instrument_session)
+                        .await
+                }
+                AuthGuard::InstrumentAdmin { instrument } => {
+                    policy
+                        .check_instrument_admin(token.as_ref(), instrument)
+                        .await
+                }
+                AuthGuard::Admin => policy.check_admin(token.as_ref()).await,
+            };
+            check
+                .inspect_err(|e| info!("Authorization failed: {e:?}"))
+                .map_err(async_graphql::Error::from)
+        } else {
+            trace!("No authorization configured");
+            Ok(())
         }
     }
 }
