@@ -1,4 +1,4 @@
-FROM rust:1.93.0-slim AS build
+FROM rust:1.93.1-slim AS build
 
 RUN rustup target add x86_64-unknown-linux-musl && \
     apt-get update && \
