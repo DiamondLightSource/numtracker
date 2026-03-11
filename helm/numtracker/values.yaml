@@ -25,7 +25,7 @@ numtracker:
     level: DEBUG
     # host: OTEL compatible host
   graylog:
-    enabled: true
+    enabled: false
     level: INFO
     # host: DAQ Graylog GELF TCP input eg. tcp://graylog-log-target.diamond.ac.uk:12231
   auth:
