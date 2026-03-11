@@ -3,3 +3,6 @@
 # Demo database and file number directories
 *.db
 trackers/
+
+# Local IDE settings
+.vscode/settings.json
