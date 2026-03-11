@@ -43,6 +43,12 @@ pub struct TracingOptions {
     /// The minimum level of tracing events to send
     #[clap(long, default_value_t = Level::INFO, env = "NUMTRACKER_TRACING_LEVEL")]
     tracing_level: Level,
+    /// The URL of the Graylog instance
+    #[clap(long = "graylog", env = "NUMTRACKER_GRAYLOG")]
+    graylog_url: Option<Url>,
+    /// The minimum level of logging events to send
+    #[clap(long, default_value_t = Level::INFO, env = "NUMTRACKER_GRAYLOG_LOG_LEVEL")]
+    logging_level: Level,
 }
 
 #[derive(Debug, Subcommand)]
@@ -157,9 +163,14 @@ impl TracingOptions {
     pub(crate) fn tracing_url(&self) -> Option<Url> {
         self.tracing_url.clone()
     }
-
-    pub(crate) fn level(&self) -> Level {
+        pub(crate) fn level(&self) -> Level {
         self.tracing_level
+    }
+    pub(crate) fn graylog_url(&self) -> Option<Url> {
+        self.graylog_url.clone()
+    }
+    pub(crate) fn logging_level(&self) -> Level {
+        self.logging_level
     }
 }
 
@@ -333,6 +344,32 @@ mod tests {
             Some("https://tracing.example.com".parse().unwrap())
         );
         assert_eq!(cli.tracing().level(), Level::DEBUG);
+    }
+
+    #[test]
+    fn graylog_opts() {
+        let cli = Cli::try_parse_from([APP, "--graylog", "tcp://graylog.example.com:12201", "serve"])
+            .unwrap();
+        assert_eq!(
+            cli.tracing().graylog_url(),
+            Some("tcp://graylog.example.com:12201".parse().unwrap())
+        );
+        assert_eq!(cli.tracing().logging_level(), Level::INFO);
+
+        let cli = Cli::try_parse_from([
+            APP,
+            "--graylog",
+            "tcp://graylog.example.com:12201",
+            "--logging-level",
+            "WARN",
+            "serve",
+        ])
+        .unwrap();
+        assert_eq!(
+            cli.tracing().graylog_url(),
+            Some("tcp://graylog.example.com:12201".parse().unwrap())
+        );
+        assert_eq!(cli.tracing().logging_level(), Level::WARN);
     }
 
     #[test]

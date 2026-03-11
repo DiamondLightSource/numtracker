@@ -19,16 +19,26 @@ use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::Resource;
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_VERSION};
 use opentelemetry_semantic_conventions::SCHEMA_URL;
-use tracing::{Level, Subscriber};
+use tracing::{error, warn, Level, Subscriber};
+use tracing_gelf::Logger;
 use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::filter::{FilterFn,LevelFilter};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::{EnvFilter, Layer};
 use url::Url;
 
+use crate::build_info::GIT_COMMIT_HASH;
 use crate::cli::TracingOptions;
+
+#[derive(Debug, thiserror::Error)]
+pub enum LoggingError {
+    #[error("Exporter build error: {0}")]
+    Exporter(#[from] ExporterBuildError),
+    #[error("Graylog error: {0}")]
+    Graylog(#[from] std::io::Error),
+}
 
 fn resource() -> Resource {
     Resource::builder()
@@ -77,10 +87,57 @@ where
     }
 }
 
-pub fn init(logging: Option<Level>, tracing: &TracingOptions) -> Result<(), ExporterBuildError> {
+fn init_graylog<S>(endpoint: Option<Url>,level: Level,) -> Result<Option<impl Layer<S>>, LoggingError>
+where
+    S: Subscriber + for<'s> LookupSpan<'s>,
+{
+    let Some(endpoint) = endpoint else {
+        return Ok(None);
+    };
+
+    let address = format!(
+        "{}:{}",
+        endpoint.host_str().unwrap_or("localhost"),
+        endpoint.port().unwrap_or(12201),
+    );
+
+    match Logger::builder()
+        .additional_field("version", env!("CARGO_PKG_VERSION"))
+        .additional_field("build", GIT_COMMIT_HASH.unwrap_or("unknown"))
+        .connect_tcp(address)
+    {
+        Ok((logger, mut handle)) => {
+            tokio::spawn(async move {
+                let errors = handle.connect().await;
+                if errors.0.is_empty() {
+                    error!("Failed to connect to graylog - address lookup failed");
+                } else {
+                    warn!(
+                        "Connection to graylog {:?} closed: {:?}",
+                        handle.address(),
+                        errors
+                    );
+                }
+            });
+            Ok(Some(
+                logger
+                    .with_filter(LevelFilter::from_level(level))
+                    .with_filter(FilterFn::new(|m| {
+                        m.target().starts_with(env!("CARGO_PKG_NAME"))
+                    })),
+            ))
+        }
+        Err(e) => {
+            eprintln!("Couldn't create graylog logger: {e}");
+            Ok(None)
+        }
+    }
+}
+
+pub fn init(logging: Option<Level>, tracing: &TracingOptions) -> Result<(), LoggingError> {
     let log_layer = init_stdout(logging);
     let trace_layer = init_tracing(tracing.tracing_url(), tracing.level())?;
-
+    let graylog_layer = init_graylog(tracing.graylog_url(), tracing.logging_level())?;
     // Whatever level is set for logging/tracing, ignore the noise from the low-level libraries
     let filter = EnvFilter::new("trace") // let everything through
         .add_directive("h2=info".parse().expect("Static string is valid")) // except http,
@@ -91,6 +148,36 @@ pub fn init(logging: Option<Level>, tracing: &TracingOptions) -> Result<(), Expo
         .with(filter)
         .with(trace_layer)
         .with(log_layer)
+        .with(graylog_layer)
         .init();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::TcpListener;
+
+    use tracing::Level;
+    use tracing_subscriber::Registry;
+
+    use super::init_graylog;
+
+    #[test]
+    fn no_graylog_endpoint_returns_none() {
+        // No URL configured means no layer should be added
+        let result = init_graylog::<Registry>(None, Level::INFO);
+        assert!(matches!(result, Ok(None)));
+    }
+
+    #[tokio::test]
+    async fn graylog_with_endpoint_returns_layer() {
+        // Bind a random local port to accept the TCP connection
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind local port");
+        let port = listener.local_addr().expect("local addr").port();
+        let url = format!("tcp://127.0.0.1:{port}")
+            .parse()
+            .expect("valid url");
+        let result = init_graylog::<Registry>(Some(url), Level::INFO);
+        assert!(matches!(result, Ok(Some(_))));
+    }
 }
