@@ -47,6 +47,12 @@ spec:
             - name: NUMTRACKER_TRACING_LEVEL
               value: {{ .Values.numtracker.tracing.level }}
             {{- end }}
+            {{- if .Values.numtracker.graylog.enabled }}
+            - name: NUMTRACKER_GRAYLOG
+              value: {{ .Values.numtracker.graylog.host }}
+            - name: NUMTRACKER_GRAYLOG_LOG_LEVEL
+              value: {{ .Values.numtracker.graylog.level }}
+            {{- end }}
             {{- if .Values.numtracker.auth.enabled }}
             - name: NUMTRACKER_AUTH_HOST
               value: {{ .Values.numtracker.auth.host }}
