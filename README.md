@@ -48,6 +48,25 @@ Additional logging output is available via `-v` verbose flags.
 | `-vv`  |Debug|
 | `-vvv` |Trace|
 
+### Graylog
+
+Logs can be sent to a [Graylog][_graylog] instance using the `--graylog` flag:
+
+```bash
+cargo run -- --graylog tcp://graylog.example.com:12201 serve
+```
+
+The minimum log level sent to Graylog can be set independently of the stderr
+output level using `--logging-level` (default: `INFO`):
+
+```bash
+cargo run -- --graylog tcp://graylog.example.com:12201 --logging-level WARN serve
+```
+
+Both options can also be set via environment variables:
+- `NUMTRACKER_GRAYLOG` — Graylog URL
+- `NUMTRACKER_GRAYLOG_LOG_LEVEL` — log level (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`)
+
 ## Schema
 
 The schema is available via the `schema` command. This is also available via the
@@ -405,4 +424,5 @@ $ numtracker client visit-directory i22 cm12345-6
 ```
 
 [_graphiql]:https://github.com/graphql/graphiql/
+[_graylog]:https://graylog.org/
 [_jq]:https://jqlang.github.io/jq/
