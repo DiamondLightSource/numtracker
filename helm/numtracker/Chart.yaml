@@ -1,5 +1,6 @@
 apiVersion: v2
 name: numtracker
+home: https://github.com/DiamondLightSource/numtracker
 description: Helm chart to deploy the numtracker service for unifying instrument filenaming
 type: application
 
