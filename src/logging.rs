@@ -29,8 +29,7 @@ use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::{EnvFilter, Layer};
 use url::Url;
 
-use crate::build_info::GIT_COMMIT_HASH;
-use crate::cli::TracingOptions;
+use crate::cli::{GraylogOptions, TracingOptions};
 
 #[derive(Debug, thiserror::Error)]
 pub enum LoggingError {
@@ -38,6 +37,8 @@ pub enum LoggingError {
     Exporter(#[from] ExporterBuildError),
     #[error("Graylog error: {0}")]
     Graylog(#[from] std::io::Error),
+    #[error("Graylog configuration error: {0}")]
+    Config(String),
 }
 
 fn resource() -> Resource {
@@ -87,57 +88,53 @@ where
     }
 }
 
-fn init_graylog<S>(endpoint: Option<Url>,level: Level,) -> Result<Option<impl Layer<S>>, LoggingError>
+fn init_graylog<S>(opts: &GraylogOptions) -> Result<Option<impl Layer<S>>, LoggingError>
 where
     S: Subscriber + for<'s> LookupSpan<'s>,
 {
-    let Some(endpoint) = endpoint else {
-        return Ok(None);
-    };
+    if let Some(address) = opts.address().map_err(LoggingError::Config)? {
+        let level = opts.logging_level;
 
-    let address = format!(
-        "{}:{}",
-        endpoint.host_str().unwrap_or("localhost"),
-        endpoint.port().unwrap_or(12201),
-    );
-
-    match Logger::builder()
-        .additional_field("version", env!("CARGO_PKG_VERSION"))
-        .additional_field("build", GIT_COMMIT_HASH.unwrap_or("unknown"))
-        .connect_tcp(address)
-    {
-        Ok((logger, mut handle)) => {
-            tokio::spawn(async move {
-                let errors = handle.connect().await;
-                if errors.0.is_empty() {
-                    error!("Failed to connect to graylog - address lookup failed");
-                } else {
-                    warn!(
-                        "Connection to graylog {:?} closed: {:?}",
-                        handle.address(),
-                        errors
-                    );
-                }
-            });
-            Ok(Some(
-                logger
-                    .with_filter(LevelFilter::from_level(level))
-                    .with_filter(FilterFn::new(|m| {
-                        m.target().starts_with(env!("CARGO_PKG_NAME"))
-                    })),
-            ))
+        match Logger::builder().connect_tcp(address) {
+            Ok((logger, mut handle)) => {
+                tokio::spawn(async move {
+                    loop {
+                        let errors = handle.connect().await;
+                        if errors.0.is_empty() {
+                            error!(
+                                "Graylog DNS lookup failed for {:?} - no addresses resolved",
+                                handle.address()
+                            );
+                            break;
+                        } else {
+                            for (addr, err) in &errors.0 {
+                                warn!("Graylog connection to {addr} failed: {err} - reconnecting");
+                            }
+                        }
+                    }
+                });
+                Ok(Some(
+                    logger
+                        .with_filter(LevelFilter::from_level(level))
+                        .with_filter(FilterFn::new(|m| {
+                            m.target().starts_with(env!("CARGO_PKG_NAME"))
+                        })),
+                ))
+            }
+            Err(e) => {
+                eprintln!("Couldn't create graylog logger: {e}");
+                Ok(None)
+            }
         }
-        Err(e) => {
-            eprintln!("Couldn't create graylog logger: {e}");
-            Ok(None)
-        }
+    } else {
+        Ok(None)
     }
 }
 
-pub fn init(logging: Option<Level>, tracing: &TracingOptions) -> Result<(), LoggingError> {
+pub fn init(logging: Option<Level>, tracing: &TracingOptions, graylog: &GraylogOptions) -> Result<(), LoggingError> {
     let log_layer = init_stdout(logging);
     let trace_layer = init_tracing(tracing.tracing_url(), tracing.level())?;
-    let graylog_layer = init_graylog(tracing.graylog_url(), tracing.logging_level())?;
+    let graylog_layer = init_graylog(graylog)?;
     // Whatever level is set for logging/tracing, ignore the noise from the low-level libraries
     let filter = EnvFilter::new("trace") // let everything through
         .add_directive("h2=info".parse().expect("Static string is valid")) // except http,
@@ -161,23 +158,34 @@ mod tests {
     use tracing_subscriber::Registry;
 
     use super::init_graylog;
+    use crate::cli::GraylogOptions;
 
     #[test]
     fn no_graylog_endpoint_returns_none() {
-        // No URL configured means no layer should be added
-        let result = init_graylog::<Registry>(None, Level::INFO);
+        let opts = GraylogOptions { graylog_url: None, logging_level: Level::INFO };
+        let result = init_graylog::<Registry>(&opts);
         assert!(matches!(result, Ok(None)));
+    }
+
+    #[test]
+    fn graylog_url_without_port_is_an_error() {
+        let opts = GraylogOptions {
+            graylog_url: Some("tcp://graylog.example.com".parse().expect("valid url")),
+            logging_level: Level::INFO,
+        };
+        let result = init_graylog::<Registry>(&opts);
+        assert!(matches!(result, Err(_)));
     }
 
     #[tokio::test]
     async fn graylog_with_endpoint_returns_layer() {
-        // Bind a random local port to accept the TCP connection
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind local port");
         let port = listener.local_addr().expect("local addr").port();
-        let url = format!("tcp://127.0.0.1:{port}")
-            .parse()
-            .expect("valid url");
-        let result = init_graylog::<Registry>(Some(url), Level::INFO);
+        let opts = GraylogOptions {
+            graylog_url: Some(format!("tcp://127.0.0.1:{port}").parse().expect("valid url")),
+            logging_level: Level::INFO,
+        };
+        let result = init_graylog::<Registry>(&opts);
         assert!(matches!(result, Ok(Some(_))));
     }
 }
