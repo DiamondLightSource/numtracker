@@ -29,8 +29,10 @@ pub mod client;
 pub struct Cli {
     #[clap(flatten, next_help_heading = "Logging/Debug")]
     verbose: Verbosity,
-    #[clap(flatten, next_help_heading = "Tracing and Logging")]
+    #[clap(flatten, next_help_heading = "Tracing")]
     tracing: TracingOptions,
+    #[clap(flatten, next_help_heading = "Graylog")]
+    pub graylog: GraylogOptions,
     #[clap(subcommand)]
     pub(crate) command: Command,
 }
@@ -43,12 +45,32 @@ pub struct TracingOptions {
     /// The minimum level of tracing events to send
     #[clap(long, default_value_t = Level::INFO, env = "NUMTRACKER_TRACING_LEVEL")]
     tracing_level: Level,
+}
+
+#[derive(Debug, Parser)]
+pub struct GraylogOptions {
     /// The URL of the Graylog instance
     #[clap(long = "graylog", env = "NUMTRACKER_GRAYLOG")]
-    graylog_url: Option<Url>,
+    pub graylog_url: Option<Url>,
     /// The minimum level of logging events to send
     #[clap(long, default_value_t = Level::INFO, env = "NUMTRACKER_GRAYLOG_LOG_LEVEL")]
-    logging_level: Level,
+    pub logging_level: Level,
+}
+
+impl GraylogOptions {
+    /// Returns the `host:port` address string for connecting to Graylog, or `None` if no URL is
+    /// configured. Returns an error if the URL has no port — a missing port is always a
+    /// misconfiguration and should not be silently defaulted.
+    pub fn address(&self) -> Result<Option<String>, String> {
+        let endpoint = match &self.graylog_url {
+            Some(u) => u,
+            None => return Ok(None),
+        };
+        let port = endpoint
+            .port()
+            .ok_or_else(|| format!("Graylog URL '{}' has no port - please specify a port (e.g. tcp://{}:12201)", endpoint, endpoint.host_str().unwrap_or("host")))?;
+        Ok(Some(format!("{}:{}", endpoint.host_str().expect("Graylog URL has no host"), port)))
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -163,14 +185,8 @@ impl TracingOptions {
     pub(crate) fn tracing_url(&self) -> Option<Url> {
         self.tracing_url.clone()
     }
-        pub(crate) fn level(&self) -> Level {
+    pub(crate) fn level(&self) -> Level {
         self.tracing_level
-    }
-    pub(crate) fn graylog_url(&self) -> Option<Url> {
-        self.graylog_url.clone()
-    }
-    pub(crate) fn logging_level(&self) -> Level {
-        self.logging_level
     }
 }
 
@@ -351,10 +367,10 @@ mod tests {
         let cli = Cli::try_parse_from([APP, "--graylog", "tcp://graylog.example.com:12201", "serve"])
             .unwrap();
         assert_eq!(
-            cli.tracing().graylog_url(),
+            cli.graylog.graylog_url,
             Some("tcp://graylog.example.com:12201".parse().unwrap())
         );
-        assert_eq!(cli.tracing().logging_level(), Level::INFO);
+        assert_eq!(cli.graylog.logging_level, Level::INFO);
 
         let cli = Cli::try_parse_from([
             APP,
@@ -366,10 +382,10 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(
-            cli.tracing().graylog_url(),
+            cli.graylog.graylog_url,
             Some("tcp://graylog.example.com:12201".parse().unwrap())
         );
-        assert_eq!(cli.tracing().logging_level(), Level::WARN);
+        assert_eq!(cli.graylog.logging_level, Level::WARN);
     }
 
     #[test]
