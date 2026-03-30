@@ -22,7 +22,7 @@ use opentelemetry_semantic_conventions::SCHEMA_URL;
 use tracing::{error, warn, Level, Subscriber};
 use tracing_gelf::Logger;
 use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::filter::{FilterFn,LevelFilter};
+use tracing_subscriber::filter::{FilterFn, LevelFilter};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt as _;
@@ -131,7 +131,11 @@ where
     }
 }
 
-pub fn init(logging: Option<Level>, tracing: &TracingOptions, graylog: &GraylogOptions) -> Result<(), LoggingError> {
+pub fn init(
+    logging: Option<Level>,
+    tracing: &TracingOptions,
+    graylog: &GraylogOptions,
+) -> Result<(), LoggingError> {
     let log_layer = init_stdout(logging);
     let trace_layer = init_tracing(tracing.tracing_url(), tracing.level())?;
     let graylog_layer = init_graylog(graylog)?;
@@ -162,7 +166,10 @@ mod tests {
 
     #[test]
     fn no_graylog_endpoint_returns_none() {
-        let opts = GraylogOptions { graylog_url: None, logging_level: Level::INFO };
+        let opts = GraylogOptions {
+            graylog_url: None,
+            logging_level: Level::INFO,
+        };
         let result = init_graylog::<Registry>(&opts);
         assert!(matches!(result, Ok(None)));
     }
@@ -182,7 +189,11 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind local port");
         let port = listener.local_addr().expect("local addr").port();
         let opts = GraylogOptions {
-            graylog_url: Some(format!("tcp://127.0.0.1:{port}").parse().expect("valid url")),
+            graylog_url: Some(
+                format!("tcp://127.0.0.1:{port}")
+                    .parse()
+                    .expect("valid url"),
+            ),
             logging_level: Level::INFO,
         };
         let result = init_graylog::<Registry>(&opts);

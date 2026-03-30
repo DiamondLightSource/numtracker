@@ -66,10 +66,18 @@ impl GraylogOptions {
             Some(u) => u,
             None => return Ok(None),
         };
-        let port = endpoint
-            .port()
-            .ok_or_else(|| format!("Graylog URL '{}' has no port - please specify a port (e.g. tcp://{}:12201)", endpoint, endpoint.host_str().unwrap_or("host")))?;
-        Ok(Some(format!("{}:{}", endpoint.host_str().expect("Graylog URL has no host"), port)))
+        let port = endpoint.port().ok_or_else(|| {
+            format!(
+                "Graylog URL '{}' has no port - please specify a port (e.g. tcp://{}:12201)",
+                endpoint,
+                endpoint.host_str().unwrap_or("host")
+            )
+        })?;
+        Ok(Some(format!(
+            "{}:{}",
+            endpoint.host_str().expect("Graylog URL has no host"),
+            port
+        )))
     }
 }
 
@@ -364,8 +372,9 @@ mod tests {
 
     #[test]
     fn graylog_opts() {
-        let cli = Cli::try_parse_from([APP, "--graylog", "tcp://graylog.example.com:12201", "serve"])
-            .unwrap();
+        let cli =
+            Cli::try_parse_from([APP, "--graylog", "tcp://graylog.example.com:12201", "serve"])
+                .unwrap();
         assert_eq!(
             cli.graylog.graylog_url,
             Some("tcp://graylog.example.com:12201".parse().unwrap())
