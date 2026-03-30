@@ -174,7 +174,7 @@ mod tests {
             logging_level: Level::INFO,
         };
         let result = init_graylog::<Registry>(&opts);
-        assert!(matches!(result, Err(_)));
+        assert!(result.is_err());
     }
 
     #[tokio::test]
