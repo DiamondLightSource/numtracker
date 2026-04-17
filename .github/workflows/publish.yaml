@@ -10,6 +10,8 @@ on:
       - main
   # but all PRs
   pull_request:
+  # ...including once put on a merge queue
+  merge_group:
 
 jobs:
   build:
