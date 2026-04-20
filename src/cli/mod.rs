@@ -29,8 +29,10 @@ pub mod client;
 pub struct Cli {
     #[clap(flatten, next_help_heading = "Logging/Debug")]
     verbose: Verbosity,
-    #[clap(flatten, next_help_heading = "Tracing and Logging")]
+    #[clap(flatten, next_help_heading = "Tracing")]
     tracing: TracingOptions,
+    #[clap(flatten, next_help_heading = "Graylog")]
+    graylog: GraylogOptions,
     #[clap(subcommand)]
     pub(crate) command: Command,
 }
@@ -43,6 +45,23 @@ pub struct TracingOptions {
     /// The minimum level of tracing events to send
     #[clap(long, default_value_t = Level::INFO, env = "NUMTRACKER_TRACING_LEVEL")]
     tracing_level: Level,
+}
+
+#[derive(Debug, Parser)]
+pub struct GraylogOptions {
+    /// The hostname of the Graylog GELF TCP input
+    #[clap(long = "graylog-host", env = "NUMTRACKER_GRAYLOG_HOST")]
+    pub(crate) graylog_host: Option<String>,
+    /// The port of the Graylog GELF TCP input
+    #[clap(
+        long = "graylog-port",
+        default_value_t = 12201,
+        env = "NUMTRACKER_GRAYLOG_PORT"
+    )]
+    pub(crate) graylog_port: u16,
+    /// The minimum level of logging events to send
+    #[clap(long, default_value_t = Level::INFO, env = "NUMTRACKER_GRAYLOG_LEVEL")]
+    pub(crate) graylog_level: Level,
 }
 
 #[derive(Debug, Subcommand)]
@@ -115,6 +134,9 @@ impl Cli {
     pub fn tracing(&self) -> &TracingOptions {
         &self.tracing
     }
+    pub fn graylog(&self) -> &GraylogOptions {
+        &self.graylog
+    }
     pub fn log_level(&self) -> Option<Level> {
         self.verbose.log_level()
     }
@@ -157,9 +179,21 @@ impl TracingOptions {
     pub(crate) fn tracing_url(&self) -> Option<Url> {
         self.tracing_url.clone()
     }
-
     pub(crate) fn level(&self) -> Level {
         self.tracing_level
+    }
+}
+
+impl GraylogOptions {
+    /// Returns the `host:port` address string for connecting to Graylog,
+    /// or `None` if no host is configured.
+    pub(crate) fn address(&self) -> Option<String> {
+        self.graylog_host
+            .as_ref()
+            .map(|h| format!("{}:{}", h, self.graylog_port))
+    }
+    pub(crate) fn level(&self) -> Level {
+        self.graylog_level
     }
 }
 
@@ -333,6 +367,44 @@ mod tests {
             Some("https://tracing.example.com".parse().unwrap())
         );
         assert_eq!(cli.tracing().level(), Level::DEBUG);
+    }
+
+    #[test]
+    fn graylog_opts() {
+        // Host and port are combined into a "host:port" address string
+        let cli = Cli::try_parse_from([
+            APP,
+            "--graylog-host",
+            "graylog.example.com",
+            "--graylog-port",
+            "12201",
+            "serve",
+        ])
+        .unwrap();
+        assert_eq!(
+            cli.graylog().address(),
+            Some("graylog.example.com:12201".to_string())
+        );
+        // Level defaults to INFO when not specified
+        assert_eq!(cli.graylog().level(), Level::INFO);
+
+        // Level can be overridden independently of host/port
+        let cli = Cli::try_parse_from([
+            APP,
+            "--graylog-host",
+            "graylog.example.com",
+            "--graylog-port",
+            "12231",
+            "--graylog-level",
+            "WARN",
+            "serve",
+        ])
+        .unwrap();
+        assert_eq!(
+            cli.graylog().address(),
+            Some("graylog.example.com:12231".to_string())
+        );
+        assert_eq!(cli.graylog().level(), Level::WARN);
     }
 
     #[test]

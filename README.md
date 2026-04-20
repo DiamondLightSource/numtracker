@@ -48,6 +48,33 @@ Additional logging output is available via `-v` verbose flags.
 | `-vv`  |Debug|
 | `-vvv` |Trace|
 
+### Graylog
+
+Logs can be sent to a [Graylog][_graylog] instance via GELF TCP using the
+`--graylog-host` flag:
+
+```bash
+cargo run -- --graylog-host graylog.example.com serve
+```
+
+The port defaults to `12201` but can be overridden with `--graylog-port`:
+
+```bash
+cargo run -- --graylog-host graylog.example.com --graylog-port 12231 serve
+```
+
+The minimum log level sent to Graylog can be set independently of the stderr
+output level using `--graylog-level` (default: `INFO`):
+
+```bash
+cargo run -- --graylog-host graylog.example.com --graylog-level WARN serve
+```
+
+All options can also be set via environment variables:
+- `NUMTRACKER_GRAYLOG_HOST` — Graylog hostname
+- `NUMTRACKER_GRAYLOG_PORT` — Graylog GELF TCP port (default: `12201`)
+- `NUMTRACKER_GRAYLOG_LEVEL` — log level (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`)
+
 ## Schema
 
 The schema is available via the `schema` command. This is also available via the
@@ -405,4 +432,5 @@ $ numtracker client visit-directory i22 cm12345-6
 ```
 
 [_graphiql]:https://github.com/graphql/graphiql/
+[_graylog]:https://graylog.org/
 [_jq]:https://jqlang.github.io/jq/
