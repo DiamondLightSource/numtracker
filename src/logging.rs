@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::time::Duration;
+
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::{ExporterBuildError, SpanExporter, WithExportConfig as _};
@@ -19,7 +21,7 @@ use opentelemetry_sdk::trace::SdkTracerProvider;
 use opentelemetry_sdk::Resource;
 use opentelemetry_semantic_conventions::resource::{SERVICE_NAME, SERVICE_VERSION};
 use opentelemetry_semantic_conventions::SCHEMA_URL;
-use tracing::{error, warn, Level, Subscriber};
+use tracing::{warn, Level, Subscriber};
 use tracing_gelf::Logger;
 use tracing_opentelemetry::OpenTelemetryLayer;
 use tracing_subscriber::filter::{FilterFn, LevelFilter};
@@ -29,16 +31,34 @@ use tracing_subscriber::util::SubscriberInitExt as _;
 use tracing_subscriber::{EnvFilter, Layer};
 use url::Url;
 
+use crate::build_info;
 use crate::cli::{GraylogOptions, TracingOptions};
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum LoggingError {
-    #[error("Exporter build error: {0}")]
-    Exporter(#[from] ExporterBuildError),
-    #[error("Graylog error: {0}")]
-    Graylog(#[from] std::io::Error),
-    #[error("Graylog configuration error: {0}")]
-    Config(String),
+    Exporter(ExporterBuildError),
+}
+
+impl std::fmt::Display for LoggingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LoggingError::Exporter(e) => write!(f, "Exporter build error: {e}"),
+        }
+    }
+}
+
+impl std::error::Error for LoggingError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            LoggingError::Exporter(e) => Some(e),
+        }
+    }
+}
+
+impl From<ExporterBuildError> for LoggingError {
+    fn from(e: ExporterBuildError) -> Self {
+        LoggingError::Exporter(e)
+    }
 }
 
 fn resource() -> Resource {
@@ -92,25 +112,36 @@ fn init_graylog<S>(opts: &GraylogOptions) -> Result<Option<impl Layer<S>>, Loggi
 where
     S: Subscriber + for<'s> LookupSpan<'s>,
 {
-    if let Some(address) = opts.address().map_err(LoggingError::Config)? {
-        let level = opts.logging_level;
+    if let Some(address) = opts.address() {
+        let level = opts.level();
 
-        match Logger::builder().connect_tcp(address) {
+        match Logger::builder()
+            .additional_field("version", build_info::PKG_VERSION)
+            .additional_field(
+                "build",
+                build_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown"),
+            )
+            .connect_tcp(address)
+        {
             Ok((logger, mut handle)) => {
                 tokio::spawn(async move {
                     loop {
+                        // This seems odd but the connection should remain open for the life
+                        // of the process. If it returns with errors it means the connection failed
+                        // or was closed. If there are no errors, it means there were no attempts
+                        // to connect - most likely because the DNS lookup failed.
                         let errors = handle.connect().await;
                         if errors.0.is_empty() {
-                            error!(
+                            warn!(
                                 "Graylog DNS lookup failed for {:?} - no addresses resolved",
                                 handle.address()
                             );
-                            break;
                         } else {
                             for (addr, err) in &errors.0 {
-                                warn!("Graylog connection to {addr} failed: {err} - reconnecting");
+                                warn!("Graylog connection to {addr} failed: {err}");
                             }
                         }
+                        tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                 });
                 Ok(Some(
@@ -122,7 +153,11 @@ where
                 ))
             }
             Err(e) => {
+                // print instead of warn in case graylog is only logging configured and logging would
+                // be dropped.
                 eprintln!("Couldn't create graylog logger: {e}");
+                // Don't return an error as graylog being unavailable should not prevent the numtracker
+                // from starting/running
                 Ok(None)
             }
         }
@@ -167,21 +202,12 @@ mod tests {
     #[test]
     fn no_graylog_endpoint_returns_none() {
         let opts = GraylogOptions {
-            graylog_url: None,
-            logging_level: Level::INFO,
+            graylog_host: None,
+            graylog_port: 12201,
+            graylog_level: Level::INFO,
         };
         let result = init_graylog::<Registry>(&opts);
         assert!(matches!(result, Ok(None)));
-    }
-
-    #[test]
-    fn graylog_url_without_port_is_an_error() {
-        let opts = GraylogOptions {
-            graylog_url: Some("tcp://graylog.example.com".parse().expect("valid url")),
-            logging_level: Level::INFO,
-        };
-        let result = init_graylog::<Registry>(&opts);
-        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -189,12 +215,9 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind local port");
         let port = listener.local_addr().expect("local addr").port();
         let opts = GraylogOptions {
-            graylog_url: Some(
-                format!("tcp://127.0.0.1:{port}")
-                    .parse()
-                    .expect("valid url"),
-            ),
-            logging_level: Level::INFO,
+            graylog_host: Some("127.0.0.1".to_string()),
+            graylog_port: port,
+            graylog_level: Level::INFO,
         };
         let result = init_graylog::<Registry>(&opts);
         assert!(matches!(result, Ok(Some(_))));

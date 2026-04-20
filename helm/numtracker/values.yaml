@@ -27,7 +27,8 @@ numtracker:
   graylog:
     enabled: false
     level: INFO
-    # host: DAQ Graylog GELF TCP input eg. tcp://graylog-log-target.diamond.ac.uk:12231
+    port: 12201
+    # host: DAQ Graylog GELF TCP hostname eg. graylog-log-target.diamond.ac.uk
   auth:
     enabled: false
     # host: OPA instance

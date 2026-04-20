@@ -30,7 +30,7 @@ mod template;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let args = Cli::init();
-    let _ = logging::init(args.log_level(), args.tracing(), &args.graylog);
+    logging::init(args.log_level(), args.tracing(), args.graylog())?;
     match args.command {
         Command::Serve(opts) => graphql::serve_graphql(opts).await,
         #[cfg(not(feature = "client"))]

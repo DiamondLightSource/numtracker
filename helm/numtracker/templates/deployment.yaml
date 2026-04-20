@@ -48,9 +48,11 @@ spec:
               value: {{ .Values.numtracker.tracing.level }}
             {{- end }}
             {{- if .Values.numtracker.graylog.enabled }}
-            - name: NUMTRACKER_GRAYLOG
+            - name: NUMTRACKER_GRAYLOG_HOST
               value: {{ .Values.numtracker.graylog.host }}
-            - name: NUMTRACKER_GRAYLOG_LOG_LEVEL
+            - name: NUMTRACKER_GRAYLOG_PORT
+              value: "{{ .Values.numtracker.graylog.port }}"
+            - name: NUMTRACKER_GRAYLOG_LEVEL
               value: {{ .Values.numtracker.graylog.level }}
             {{- end }}
             {{- if .Values.numtracker.auth.enabled }}
