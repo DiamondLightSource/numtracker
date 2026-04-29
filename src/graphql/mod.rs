@@ -14,7 +14,6 @@
 
 use std::any;
 use std::borrow::Cow;
-use std::future::Future;
 use std::io::Write;
 use std::path::{Component, PathBuf};
 
@@ -25,7 +24,7 @@ use async_graphql::{
     Object, Scalar, ScalarType, Schema, SimpleObject, TypeName, Value,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
-use auth::{AuthError, PolicyCheck};
+use auth::{AuthGuard, PolicyCheck};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
@@ -357,16 +356,13 @@ impl Query {
     }
 
     /// Get the current configuration for the given instrument
+    #[graphql(guard = "AuthGuard::InstrumentAdmin{instrument: &instrument}")]
     #[instrument(skip(self, ctx))]
     async fn configuration(
         &self,
         ctx: &Context<'_>,
         instrument: String,
     ) -> async_graphql::Result<CurrentConfiguration> {
-        check_auth(ctx, |policy, token| {
-            policy.check_instrument_admin(token, &instrument)
-        })
-        .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         trace!("Getting config for {instrument:?}");
@@ -376,13 +372,13 @@ impl Query {
 
     /// Get the configurations for all available instruments
     /// Can be filtered to provide one or more specific instruments
+    #[graphql(guard = "AuthGuard::Admin")]
     #[instrument(skip(self, ctx))]
     async fn configurations(
         &self,
         ctx: &Context<'_>,
         instrument_filters: Option<Vec<String>>,
     ) -> async_graphql::Result<Vec<CurrentConfiguration>> {
-        check_auth(ctx, |policy, token| policy.check_admin(token)).await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         let configurations = match instrument_filters {
@@ -405,6 +401,9 @@ impl Query {
 /// Queries that modify the state of the numtracker configuration in some way
 impl Mutation {
     /// Generate scan file locations for the next scan
+    #[graphql(
+        guard = "AuthGuard::Access{instrument: &instrument, instrument_session: &instrument_session}"
+    )]
     #[instrument(skip(self, ctx))]
     async fn scan(
         &self,
@@ -413,10 +412,6 @@ impl Mutation {
         instrument_session: String,
         sub: Option<Subdirectory>,
     ) -> async_graphql::Result<ScanPaths> {
-        check_auth(ctx, |policy, token| {
-            policy.check_access(token, &instrument, &instrument_session)
-        })
-        .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         // There is a race condition here if a process increments the file
@@ -445,6 +440,7 @@ impl Mutation {
     }
 
     /// Add or modify the stored configuration for an instrument
+    #[graphql(guard = "AuthGuard::InstrumentAdmin{instrument: &instrument}")]
     #[instrument(skip(self, ctx))]
     async fn configure(
         &self,
@@ -452,10 +448,6 @@ impl Mutation {
         instrument: String,
         config: ConfigurationUpdates,
     ) -> async_graphql::Result<CurrentConfiguration> {
-        check_auth(ctx, |pc, token| {
-            pc.check_instrument_admin(token, &instrument)
-        })
-        .await?;
         let db = ctx.data::<SqliteScanPathService>()?;
         let nt = ctx.data::<NumTracker>()?;
         trace!("Configuring: {instrument}: {config:?}");
@@ -465,24 +457,6 @@ impl Mutation {
             None => upd.insert_new(db).await?,
         };
         CurrentConfiguration::for_config(db_config, nt).await
-    }
-}
-
-async fn check_auth<'ctx, Check, R>(ctx: &Context<'ctx>, check: Check) -> async_graphql::Result<()>
-where
-    Check: Fn(&'ctx PolicyCheck, Option<&'ctx Authorization<Bearer>>) -> R,
-    R: Future<Output = Result<(), AuthError>>,
-{
-    if let Some(policy) = ctx.data::<Option<PolicyCheck>>()? {
-        trace!("Auth enabled: checking token");
-        let token = ctx.data::<Option<Authorization<Bearer>>>()?;
-        check(policy, token.as_ref())
-            .await
-            .inspect_err(|e| info!("Authorization failed: {e:?}"))
-            .map_err(async_graphql::Error::from)
-    } else {
-        trace!("No authorization configured");
-        Ok(())
     }
 }
 
