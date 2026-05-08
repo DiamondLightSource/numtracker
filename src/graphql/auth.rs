@@ -14,7 +14,6 @@
 
 use std::str::FromStr;
 use async_graphql::{Error, ErrorExtensions};
-
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use derive_more::{Display, Error, From};
@@ -196,7 +195,6 @@ impl ErrorExtensions for AuthError {
         })
     }
 }
-
 
 #[cfg(test)]
 mod tests {
