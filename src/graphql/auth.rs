@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::str::FromStr;
-use async_graphql::{ErrorExtensions}
+use async_graphql::{Error, ErrorExtensions};
 
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
@@ -190,7 +190,7 @@ pub enum AuthError {
 impl ErrorExtensions for AuthError {
     fn extend(&self) -> Error {
         self.extend_with(|err, e| match err {
-            AuthError::ServerError() => e.set("code", "AUTH_SERVER_ERROR"),
+            AuthError::ServerError(_) => e.set("code", "AUTH_SERVER_ERROR"),
             AuthError::Failed => e.set("code", "AUTH_FAILED"),
             AuthError::Missing => e.set("code", "AUTH_MISSING"),
         })
