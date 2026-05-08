@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::str::FromStr;
 use async_graphql::{Error, ErrorExtensions};
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use derive_more::{Display, Error, From};
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use tracing::info;
 
 use crate::cli::PolicyOptions;
