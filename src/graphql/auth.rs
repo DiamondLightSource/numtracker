@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::str::FromStr;
+
 use async_graphql::{Error, ErrorExtensions};
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use derive_more::{Display, Error, From};
 use serde::{Deserialize, Serialize};
-use std::str::FromStr;
 use tracing::info;
 
 use crate::cli::PolicyOptions;
@@ -201,6 +202,7 @@ mod tests {
     use std::str::FromStr as _;
 
     use assert_matches::assert_matches;
+    use async_graphql::{ErrorExtensions, Value as ConstValue};
     use axum::http::HeaderValue;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
@@ -496,5 +498,18 @@ mod tests {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
         mock.assert();
+    }
+
+    #[rstest]
+    #[tokio::test]
+    #[case(AuthError::ServerError(reqwest::get("http://example").await.unwrap_err()), "AUTH_SERVER_ERROR")]
+    #[case(AuthError::Failed, "AUTH_FAILED")]
+    #[case(AuthError::Missing, "AUTH_MISSING")]
+    async fn auth_error_extensions(#[case] input: AuthError, #[case] expected: &str) {
+        let e = input.extend();
+        let extensions = e.extensions.expect("REASON");
+        let code = extensions.get("code").unwrap();
+
+        assert!(matches!(code, ConstValue::String(s) if s == expected))
     }
 }
