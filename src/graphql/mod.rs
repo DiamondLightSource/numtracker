@@ -1037,6 +1037,16 @@ mod tests {
             result.errors[0].message,
             "No authentication token was provided"
         );
+        assert_eq!(
+            result.errors[0]
+                .extensions
+                .as_ref()
+                .unwrap()
+                .get("code")
+                .unwrap(),
+            &Value::from("AUTH_MISSING")
+        );
+
         assert_eq!(result.data, Value::Null);
     }
 
@@ -1063,6 +1073,15 @@ mod tests {
 
         println!("{result:#?}");
         assert_eq!(result.errors[0].message, "Authentication failed");
+        assert_eq!(
+            result.errors[0]
+                .extensions
+                .as_ref()
+                .unwrap()
+                .get("code")
+                .unwrap(),
+            &Value::from("AUTH_FAILED")
+        );
         assert_eq!(result.data, Value::Null);
 
         // Ensure that the number wasn't incremented
