@@ -21,8 +21,8 @@ use std::path::{Component, PathBuf};
 use async_graphql::extensions::Tracing;
 use async_graphql::http::GraphiQLSource;
 use async_graphql::{
-    Context, Description, EmptySubscription, InputObject, InputValueError, InputValueResult,
-    Object, Scalar, ScalarType, Schema, SimpleObject, TypeName, Value,
+    Context, Description, EmptySubscription, ErrorExtensions, InputObject, InputValueError,
+    InputValueResult, Object, Scalar, ScalarType, Schema, SimpleObject, TypeName, Value,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
@@ -479,7 +479,7 @@ where
         check(policy, token.as_ref())
             .await
             .inspect_err(|e| info!("Authorization failed: {e:?}"))
-            .map_err(async_graphql::Error::from)
+            .map_err(|e| e.extend())
     } else {
         trace!("No authorization configured");
         Ok(())

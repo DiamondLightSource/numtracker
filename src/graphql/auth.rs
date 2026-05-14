@@ -202,11 +202,12 @@ mod tests {
     use std::str::FromStr as _;
 
     use assert_matches::assert_matches;
-    use async_graphql::{ErrorExtensions, Value as ConstValue};
+    use async_graphql::{ErrorExtensions, Value};
     use axum::http::HeaderValue;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
     use httpmock::MockServer;
+    use reqwest::Client;
     use rstest::rstest;
     use serde_json::json;
 
@@ -358,6 +359,22 @@ mod tests {
         mock.assert();
     }
 
+    fn check_auth_error_and_exts(
+        result: Result<(), AuthError>,
+        expected_auth_err_type: fn(&AuthError) -> bool,
+        expected_error_extension: String,
+    ) {
+        let err = result.expect_err("Expected error");
+        assert!(expected_auth_err_type(&err), "Unexpected error type");
+
+        let extensions = err
+            .extend()
+            .extensions
+            .expect("Error should contain extensions");
+        let code = extensions.get("code").unwrap();
+        assert_eq!(code, &Value::String(expected_error_extension))
+    }
+
     #[tokio::test]
     async fn denied_check_instrument_admin() {
         let server = MockServer::start();
@@ -383,9 +400,16 @@ mod tests {
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")
             .await;
-        let Err(AuthError::Failed) = result else {
-            panic!("Unexpected result from unauthorised check: {result:?}");
-        };
+
+        check_auth_error_and_exts(
+            result,
+            |e| matches!(e, AuthError::Failed),
+            "AUTH_FAILED".to_string(),
+        );
+
+        //let Err(AuthError::Failed) = result else {
+        //    panic!("Unexpected result from unauthorised check: {result:?}");
+        //};
         mock.assert();
     }
 
@@ -411,9 +435,16 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_admin(token("token").as_ref()).await;
-        let Err(AuthError::Failed) = result else {
-            panic!("Unexpected result from unauthorised check: {result:?}");
-        };
+
+        check_auth_error_and_exts(
+            result,
+            |e| matches!(e, AuthError::Failed),
+            "AUTH_FAILED".to_string(),
+        );
+
+        //let Err(AuthError::Failed) = result else {
+        //    panic!("Unexpected result from unauthorised check: {result:?}");
+        //};
         mock.assert();
     }
 
@@ -431,9 +462,16 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_access(None, "i22", "cm1234-4").await;
-        let Err(AuthError::Missing) = result else {
-            panic!("Unexpected result from unauthorised check: {result:?}");
-        };
+
+        check_auth_error_and_exts(
+            result,
+            |e| matches!(e, AuthError::Missing),
+            "AUTH_MISSING".to_string(),
+        );
+
+        //let Err(AuthError::Missing) = result else {
+        //    panic!("Unexpected result from unauthorised check: {result:?}");
+        //};
         mock.assert_calls(0);
     }
 
@@ -451,9 +489,16 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_instrument_admin(None, "i22").await;
-        let Err(AuthError::Missing) = result else {
-            panic!("Unexpected result from unauthorised check: {result:?}");
-        };
+
+        check_auth_error_and_exts(
+            result,
+            |e| matches!(e, AuthError::Missing),
+            "AUTH_MISSING".to_string(),
+        );
+
+        //let Err(AuthError::Missing) = result else {
+        //    panic!("Unexpected result from unauthorised check: {result:?}");
+        //};
         mock.assert_calls(0);
     }
 
@@ -471,9 +516,16 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_admin(None).await;
-        let Err(AuthError::Missing) = result else {
-            panic!("Unexpected result from unauthorised check: {result:?}");
-        };
+
+        check_auth_error_and_exts(
+            result,
+            |e| matches!(e, AuthError::Missing),
+            "AUTH_MISSING".to_string(),
+        );
+
+        //let Err(AuthError::Missing) = result else {
+        //    panic!("Unexpected result from unauthorised check: {result:?}");
+        //};
         mock.assert_calls(0);
     }
 
@@ -494,22 +546,30 @@ mod tests {
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")
             .await;
-        let Err(AuthError::ServerError(_)) = result else {
-            panic!("Unexpected result from unauthorised check: {result:?}");
-        };
+
+        check_auth_error_and_exts(
+            result,
+            |e| matches!(e, AuthError::ServerError(_)),
+            "AUTH_SERVER_ERROR".to_string(),
+        );
+
+        //let Err(AuthError::ServerError(_)) = result else {
+        //    panic!("Unexpected result from unauthorised check: {result:?}");
+        //};
         mock.assert();
     }
 
     #[rstest]
+    #[case::server_error(AuthError::ServerError(Client::new().get("invalid").build().unwrap_err()), "AUTH_SERVER_ERROR")]
+    #[case::failed(AuthError::Failed, "AUTH_FAILED")]
+    #[case::missing(AuthError::Missing, "AUTH_MISSING")]
     #[tokio::test]
-    #[case(AuthError::ServerError(reqwest::get("http://example").await.unwrap_err()), "AUTH_SERVER_ERROR")]
-    #[case(AuthError::Failed, "AUTH_FAILED")]
-    #[case(AuthError::Missing, "AUTH_MISSING")]
-    async fn auth_error_extensions(#[case] input: AuthError, #[case] expected: &str) {
+
+    async fn auth_error_extensions(#[case] input: AuthError, #[case] expected: String) {
         let e = input.extend();
-        let extensions = e.extensions.expect("REASON");
+        let extensions = e.extensions.expect("Error should have extensions");
         let code = extensions.get("code").unwrap();
 
-        assert!(matches!(code, ConstValue::String(s) if s == expected))
+        assert_eq!(code, &Value::String(expected))
     }
 }
