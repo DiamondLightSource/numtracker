@@ -640,7 +640,8 @@ mod tests {
     use std::fs;
 
     use async_graphql::{
-        value, EmptySubscription, InputType as _, Request, Schema, SchemaBuilder, Value,
+        value, EmptySubscription, ErrorExtensionValues, InputType as _, Request, Schema,
+        SchemaBuilder, Value,
     };
     use axum::http::HeaderValue;
     use axum_extra::headers::authorization::{Bearer, Credentials};
@@ -1037,15 +1038,10 @@ mod tests {
             result.errors[0].message,
             "No authentication token was provided"
         );
-        assert_eq!(
-            result.errors[0]
-                .extensions
-                .as_ref()
-                .unwrap()
-                .get("code")
-                .unwrap(),
-            &Value::from("AUTH_MISSING")
-        );
+
+        let mut ext = ErrorExtensionValues::default();
+        ext.set("code", "AUTH_MISSING");
+        assert_eq!(result.errors[0].extensions, Some(ext));
 
         assert_eq!(result.data, Value::Null);
     }
@@ -1073,15 +1069,11 @@ mod tests {
 
         println!("{result:#?}");
         assert_eq!(result.errors[0].message, "Authentication failed");
-        assert_eq!(
-            result.errors[0]
-                .extensions
-                .as_ref()
-                .unwrap()
-                .get("code")
-                .unwrap(),
-            &Value::from("AUTH_FAILED")
-        );
+
+        let mut ext = ErrorExtensionValues::default();
+        ext.set("code", "AUTH_FAILED");
+        assert_eq!(result.errors[0].extensions, Some(ext));
+
         assert_eq!(result.data, Value::Null);
 
         // Ensure that the number wasn't incremented

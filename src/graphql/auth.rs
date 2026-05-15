@@ -359,22 +359,6 @@ mod tests {
         mock.assert();
     }
 
-    fn check_auth_error_and_exts(
-        result: Result<(), AuthError>,
-        expected_auth_err_type: fn(&AuthError) -> bool,
-        expected_error_extension: String,
-    ) {
-        let err = result.expect_err("Expected error");
-        assert!(expected_auth_err_type(&err), "Unexpected error type");
-
-        let extensions = err
-            .extend()
-            .extensions
-            .expect("Error should contain extensions");
-        let code = extensions.get("code").unwrap();
-        assert_eq!(code, &Value::String(expected_error_extension))
-    }
-
     #[tokio::test]
     async fn denied_check_instrument_admin() {
         let server = MockServer::start();
@@ -401,15 +385,9 @@ mod tests {
             .check_instrument_admin(token("token").as_ref(), "i22")
             .await;
 
-        check_auth_error_and_exts(
-            result,
-            |e| matches!(e, AuthError::Failed),
-            "AUTH_FAILED".to_string(),
-        );
-
-        //let Err(AuthError::Failed) = result else {
-        //    panic!("Unexpected result from unauthorised check: {result:?}");
-        //};
+        let Err(AuthError::Failed) = result else {
+            panic!("Unexpected result from unauthorised check: {result:?}");
+        };
         mock.assert();
     }
 
@@ -436,15 +414,9 @@ mod tests {
         });
         let result = check.check_admin(token("token").as_ref()).await;
 
-        check_auth_error_and_exts(
-            result,
-            |e| matches!(e, AuthError::Failed),
-            "AUTH_FAILED".to_string(),
-        );
-
-        //let Err(AuthError::Failed) = result else {
-        //    panic!("Unexpected result from unauthorised check: {result:?}");
-        //};
+        let Err(AuthError::Failed) = result else {
+            panic!("Unexpected result from unauthorised check: {result:?}");
+        };
         mock.assert();
     }
 
@@ -463,15 +435,9 @@ mod tests {
         });
         let result = check.check_access(None, "i22", "cm1234-4").await;
 
-        check_auth_error_and_exts(
-            result,
-            |e| matches!(e, AuthError::Missing),
-            "AUTH_MISSING".to_string(),
-        );
-
-        //let Err(AuthError::Missing) = result else {
-        //    panic!("Unexpected result from unauthorised check: {result:?}");
-        //};
+        let Err(AuthError::Missing) = result else {
+            panic!("Unexpected result from unauthorised check: {result:?}");
+        };
         mock.assert_calls(0);
     }
 
@@ -490,15 +456,9 @@ mod tests {
         });
         let result = check.check_instrument_admin(None, "i22").await;
 
-        check_auth_error_and_exts(
-            result,
-            |e| matches!(e, AuthError::Missing),
-            "AUTH_MISSING".to_string(),
-        );
-
-        //let Err(AuthError::Missing) = result else {
-        //    panic!("Unexpected result from unauthorised check: {result:?}");
-        //};
+        let Err(AuthError::Missing) = result else {
+            panic!("Unexpected result from unauthorised check: {result:?}");
+        };
         mock.assert_calls(0);
     }
 
@@ -517,15 +477,9 @@ mod tests {
         });
         let result = check.check_admin(None).await;
 
-        check_auth_error_and_exts(
-            result,
-            |e| matches!(e, AuthError::Missing),
-            "AUTH_MISSING".to_string(),
-        );
-
-        //let Err(AuthError::Missing) = result else {
-        //    panic!("Unexpected result from unauthorised check: {result:?}");
-        //};
+        let Err(AuthError::Missing) = result else {
+            panic!("Unexpected result from unauthorised check: {result:?}");
+        };
         mock.assert_calls(0);
     }
 
@@ -547,15 +501,9 @@ mod tests {
             .check_instrument_admin(token("token").as_ref(), "i22")
             .await;
 
-        check_auth_error_and_exts(
-            result,
-            |e| matches!(e, AuthError::ServerError(_)),
-            "AUTH_SERVER_ERROR".to_string(),
-        );
-
-        //let Err(AuthError::ServerError(_)) = result else {
-        //    panic!("Unexpected result from unauthorised check: {result:?}");
-        //};
+        let Err(AuthError::ServerError(_)) = result else {
+            panic!("Unexpected result from unauthorised check: {result:?}");
+        };
         mock.assert();
     }
 
