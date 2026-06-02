@@ -35,7 +35,7 @@ jobs:
 
       - name: Set application version
         if: ${{ github.ref_type == 'tag' }}
-        run: sed -i 's/^version = ".*"$/version = "${STEPS_META_OUTPUTS_VERSION}"/' Cargo.toml
+        run: sed -i "s/^version = \".*\"$/version = \"${STEPS_META_OUTPUTS_VERSION}\"/" Cargo.toml
         env:
           STEPS_META_OUTPUTS_VERSION: ${{ steps.meta.outputs.version }}
 
