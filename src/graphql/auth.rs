@@ -14,6 +14,7 @@
 
 use std::str::FromStr;
 
+use async_graphql::{Error, ErrorExtensions};
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use derive_more::{Display, Error, From};
@@ -186,15 +187,27 @@ pub enum AuthError {
     Missing,
 }
 
+impl ErrorExtensions for AuthError {
+    fn extend(&self) -> Error {
+        self.extend_with(|err, e| match err {
+            AuthError::ServerError(_) => e.set("code", "AUTH_SERVER_ERROR"),
+            AuthError::Failed => e.set("code", "AUTH_FAILED"),
+            AuthError::Missing => e.set("code", "AUTH_MISSING"),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr as _;
 
     use assert_matches::assert_matches;
+    use async_graphql::{ErrorExtensions, Value};
     use axum::http::HeaderValue;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
     use httpmock::MockServer;
+    use reqwest::Client;
     use rstest::rstest;
     use serde_json::json;
 
@@ -371,6 +384,7 @@ mod tests {
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")
             .await;
+
         let Err(AuthError::Failed) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -399,6 +413,7 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_admin(token("token").as_ref()).await;
+
         let Err(AuthError::Failed) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -419,6 +434,7 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_access(None, "i22", "cm1234-4").await;
+
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -439,6 +455,7 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_instrument_admin(None, "i22").await;
+
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -459,6 +476,7 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_admin(None).await;
+
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -482,9 +500,24 @@ mod tests {
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")
             .await;
+
         let Err(AuthError::ServerError(_)) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
         mock.assert();
+    }
+
+    #[rstest]
+    #[case::server_error(AuthError::ServerError(Client::new().get("invalid").build().unwrap_err()), "AUTH_SERVER_ERROR")]
+    #[case::failed(AuthError::Failed, "AUTH_FAILED")]
+    #[case::missing(AuthError::Missing, "AUTH_MISSING")]
+    #[tokio::test]
+
+    async fn auth_error_extensions(#[case] input: AuthError, #[case] expected: String) {
+        let e = input.extend();
+        let extensions = e.extensions.expect("Error should have extensions");
+        let code = extensions.get("code").unwrap();
+
+        assert_eq!(code, &Value::String(expected))
     }
 }

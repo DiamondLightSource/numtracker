@@ -21,8 +21,8 @@ use std::path::{Component, PathBuf};
 use async_graphql::extensions::Tracing;
 use async_graphql::http::GraphiQLSource;
 use async_graphql::{
-    Context, Description, EmptySubscription, InputObject, InputValueError, InputValueResult,
-    Object, Scalar, ScalarType, Schema, SimpleObject, TypeName, Value,
+    Context, Description, EmptySubscription, ErrorExtensions, InputObject, InputValueError,
+    InputValueResult, Object, Scalar, ScalarType, Schema, SimpleObject, TypeName, Value,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
@@ -479,7 +479,7 @@ where
         check(policy, token.as_ref())
             .await
             .inspect_err(|e| info!("Authorization failed: {e:?}"))
-            .map_err(async_graphql::Error::from)
+            .map_err(|e| e.extend())
     } else {
         trace!("No authorization configured");
         Ok(())
@@ -640,7 +640,8 @@ mod tests {
     use std::fs;
 
     use async_graphql::{
-        value, EmptySubscription, InputType as _, Request, Schema, SchemaBuilder, Value,
+        value, EmptySubscription, ErrorExtensionValues, InputType as _, Request, Schema,
+        SchemaBuilder, Value,
     };
     use axum::http::HeaderValue;
     use axum_extra::headers::authorization::{Bearer, Credentials};
@@ -1037,6 +1038,11 @@ mod tests {
             result.errors[0].message,
             "No authentication token was provided"
         );
+
+        let mut ext = ErrorExtensionValues::default();
+        ext.set("code", "AUTH_MISSING");
+        assert_eq!(result.errors[0].extensions, Some(ext));
+
         assert_eq!(result.data, Value::Null);
     }
 
@@ -1063,6 +1069,11 @@ mod tests {
 
         println!("{result:#?}");
         assert_eq!(result.errors[0].message, "Authentication failed");
+
+        let mut ext = ErrorExtensionValues::default();
+        ext.set("code", "AUTH_FAILED");
+        assert_eq!(result.errors[0].extensions, Some(ext));
+
         assert_eq!(result.data, Value::Null);
 
         // Ensure that the number wasn't incremented
