@@ -127,7 +127,7 @@ impl PolicyCheck {
         Self {
             client: reqwest::Client::new(),
             admin: format!("{}/{}", endpoint.policy_host, endpoint.admin_query),
-            access: format!("{}/{}", endpoint.policy_host, &endpoint.access_query),
+            access: format!("{}/{}", endpoint.policy_host, endpoint.access_query),
         }
     }
     pub async fn check_access(
