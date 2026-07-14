@@ -193,10 +193,13 @@ pub fn init(
 mod tests {
     use std::net::TcpListener;
 
+    use opentelemetry_otlp::ExporterBuildError;
     use tracing::Level;
+    use tracing_subscriber::layer::SubscriberExt as _;
     use tracing_subscriber::Registry;
+    use url::Url;
 
-    use super::init_graylog;
+    use super::{init_graylog, init_stdout, init_tracing, LoggingError};
     use crate::cli::GraylogOptions;
 
     #[test]
@@ -221,5 +224,49 @@ mod tests {
         };
         let result = init_graylog::<Registry>(&opts);
         assert!(matches!(result, Ok(Some(_))));
+    }
+
+    #[test]
+    fn logging_error_display_includes_source_message() {
+        let err = LoggingError::from(ExporterBuildError::NoHttpClient);
+        assert_eq!(
+            err.to_string(),
+            "Exporter build error: no http client specified"
+        );
+    }
+
+    #[test]
+    fn logging_error_source_returns_inner_error() {
+        use std::error::Error;
+
+        let err = LoggingError::from(ExporterBuildError::NoHttpClient);
+        assert!(err.source().is_some());
+    }
+
+    #[test]
+    fn init_stdout_none_when_no_level() {
+        let layer = init_stdout::<Registry>(None);
+        // Should not panic when composed into a subscriber with no output configured.
+        let _ = tracing_subscriber::registry().with(layer);
+    }
+
+    #[test]
+    fn init_stdout_some_when_level_given() {
+        let layer = init_stdout::<Registry>(Some(Level::INFO));
+        let _ = tracing_subscriber::registry().with(layer);
+    }
+
+    #[test]
+    fn init_tracing_none_when_no_endpoint() {
+        let layer = init_tracing::<Registry>(None, Level::INFO).expect("no exporter to build");
+        let _ = tracing_subscriber::registry().with(layer);
+    }
+
+    #[tokio::test]
+    async fn init_tracing_some_when_endpoint_given() {
+        let url = Url::parse("http://127.0.0.1:4317").expect("valid url");
+        let layer =
+            init_tracing::<Registry>(Some(url), Level::INFO).expect("valid exporter config");
+        let _ = tracing_subscriber::registry().with(layer);
     }
 }
