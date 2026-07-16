@@ -38,6 +38,10 @@ pub enum ScanField {
     Subdirectory,
     #[display("scan_number")]
     ScanNumber,
+    #[display("ts_ymd")]
+    YearMonthDay,
+    #[display("ts_hms")]
+    HourMinuteSecond,
     #[display("{_0}")]
     Directory(DirectoryField),
 }
@@ -73,6 +77,8 @@ impl TryFrom<String> for ScanField {
         match value.as_str() {
             "scan_number" => Ok(ScanField::ScanNumber),
             "subdirectory" => Ok(ScanField::Subdirectory),
+            "ts_hms" => Ok(ScanField::HourMinuteSecond),
+            "ts_ymd" => Ok(ScanField::YearMonthDay),
             _ => Ok(ScanField::Directory(DirectoryField::try_from(value)?)),
         }
     }
