@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO template (name, template, instrument)\n                VALUES (?, ?, (SELECT id FROM instrument WHERE name = ?)) RETURNING name, template;",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "template",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "03cac7cb5b485c93b71cdbe03400b9423c1b63146c2d93e3f1b08857f28a6c33"
+}
