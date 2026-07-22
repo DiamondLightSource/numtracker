@@ -70,7 +70,8 @@ output level using `--graylog-level` (default: `INFO`):
 cargo run -- --graylog-host graylog.example.com --graylog-level WARN serve
 ```
 
-All options can also be set via environment variables:
+All options can also be set via environment variables. If both are set, the
+command-line flag takes precedence over the environment variable:
 - `NUMTRACKER_GRAYLOG_HOST` — Graylog hostname
 - `NUMTRACKER_GRAYLOG_PORT` — Graylog GELF TCP port (default: `12201`)
 - `NUMTRACKER_GRAYLOG_LEVEL` — log level (`TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`)
