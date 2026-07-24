@@ -50,14 +50,10 @@ pub struct TracingOptions {
 #[derive(Debug, Parser)]
 pub struct GraylogOptions {
     /// The hostname of the Graylog GELF TCP input
-    #[clap(long = "graylog-host", env = "NUMTRACKER_GRAYLOG_HOST")]
+    #[clap(long, env = "NUMTRACKER_GRAYLOG_HOST")]
     pub(crate) graylog_host: Option<String>,
     /// The port of the Graylog GELF TCP input
-    #[clap(
-        long = "graylog-port",
-        default_value_t = 12201,
-        env = "NUMTRACKER_GRAYLOG_PORT"
-    )]
+    #[clap(long, default_value_t = 12201, env = "NUMTRACKER_GRAYLOG_PORT")]
     pub(crate) graylog_port: u16,
     /// The minimum level of logging events to send
     #[clap(long, default_value_t = Level::INFO, env = "NUMTRACKER_GRAYLOG_LEVEL")]
@@ -387,7 +383,10 @@ mod tests {
         );
         // Level defaults to INFO when not specified
         assert_eq!(cli.graylog().level(), Level::INFO);
+    }
 
+    #[test]
+    fn graylog_opts_level_override() {
         // Level can be overridden independently of host/port
         let cli = Cli::try_parse_from([
             APP,

@@ -24,7 +24,7 @@ use opentelemetry_semantic_conventions::SCHEMA_URL;
 use tracing::{warn, Level, Subscriber};
 use tracing_gelf::Logger;
 use tracing_opentelemetry::OpenTelemetryLayer;
-use tracing_subscriber::filter::{FilterFn, LevelFilter};
+use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt as _;
@@ -33,33 +33,6 @@ use url::Url;
 
 use crate::build_info;
 use crate::cli::{GraylogOptions, TracingOptions};
-
-#[derive(Debug)]
-pub enum LoggingError {
-    Exporter(ExporterBuildError),
-}
-
-impl std::fmt::Display for LoggingError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LoggingError::Exporter(e) => write!(f, "Exporter build error: {e}"),
-        }
-    }
-}
-
-impl std::error::Error for LoggingError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            LoggingError::Exporter(e) => Some(e),
-        }
-    }
-}
-
-impl From<ExporterBuildError> for LoggingError {
-    fn from(e: ExporterBuildError) -> Self {
-        LoggingError::Exporter(e)
-    }
-}
 
 fn resource() -> Resource {
     Resource::builder()
@@ -108,61 +81,52 @@ where
     }
 }
 
-fn init_graylog<S>(opts: &GraylogOptions) -> Result<Option<impl Layer<S>>, LoggingError>
+fn init_graylog<S>(opts: &GraylogOptions) -> Option<impl Layer<S>>
 where
     S: Subscriber + for<'s> LookupSpan<'s>,
 {
-    if let Some(address) = opts.address() {
-        let level = opts.level();
+    let address = opts.address()?;
+    let level = opts.level();
 
-        match Logger::builder()
-            .additional_field("version", build_info::PKG_VERSION)
-            .additional_field(
-                "build",
-                build_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown"),
-            )
-            .connect_tcp(address)
-        {
-            Ok((logger, mut handle)) => {
-                tokio::spawn(async move {
-                    loop {
-                        // This seems odd but the connection should remain open for the life
-                        // of the process. If it returns with errors it means the connection failed
-                        // or was closed. If there are no errors, it means there were no attempts
-                        // to connect - most likely because the DNS lookup failed.
-                        let errors = handle.connect().await;
-                        if errors.0.is_empty() {
-                            warn!(
-                                "Graylog DNS lookup failed for {:?} - no addresses resolved",
-                                handle.address()
-                            );
-                        } else {
-                            for (addr, err) in &errors.0 {
-                                warn!("Graylog connection to {addr} failed: {err}");
-                            }
+    match Logger::builder()
+        .additional_field("version", build_info::PKG_VERSION)
+        .additional_field(
+            "build",
+            build_info::GIT_COMMIT_HASH_SHORT.unwrap_or("unknown"),
+        )
+        .connect_tcp(address)
+    {
+        Ok((logger, mut handle)) => {
+            tokio::spawn(async move {
+                loop {
+                    // This seems odd but the connection should remain open for the life
+                    // of the process. If it returns with errors it means the connection failed
+                    // or was closed. If there are no errors, it means there were no attempts
+                    // to connect - most likely because the DNS lookup failed.
+                    let errors = handle.connect().await;
+                    if errors.0.is_empty() {
+                        warn!(
+                            "Graylog DNS lookup failed for {:?} - no addresses resolved",
+                            handle.address()
+                        );
+                    } else {
+                        for (addr, err) in &errors.0 {
+                            warn!("Graylog connection to {addr} failed: {err}");
                         }
-                        tokio::time::sleep(Duration::from_secs(5)).await;
                     }
-                });
-                Ok(Some(
-                    logger
-                        .with_filter(LevelFilter::from_level(level))
-                        .with_filter(FilterFn::new(|m| {
-                            m.target().starts_with(env!("CARGO_PKG_NAME"))
-                        })),
-                ))
-            }
-            Err(e) => {
-                // print instead of warn in case graylog is only logging configured and logging would
-                // be dropped.
-                eprintln!("Couldn't create graylog logger: {e}");
-                // Don't return an error as graylog being unavailable should not prevent the numtracker
-                // from starting/running
-                Ok(None)
-            }
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+            });
+            Some(logger.with_filter(LevelFilter::from_level(level)))
         }
-    } else {
-        Ok(None)
+        Err(e) => {
+            // print instead of warn in case graylog is only logging configured and logging would
+            // be dropped.
+            eprintln!("Couldn't create graylog logger: {e}");
+            // Don't return an error as graylog being unavailable should not prevent the numtracker
+            // from starting/running
+            None
+        }
     }
 }
 
@@ -170,10 +134,10 @@ pub fn init(
     logging: Option<Level>,
     tracing: &TracingOptions,
     graylog: &GraylogOptions,
-) -> Result<(), LoggingError> {
+) -> Result<(), ExporterBuildError> {
     let log_layer = init_stdout(logging);
     let trace_layer = init_tracing(tracing.tracing_url(), tracing.level())?;
-    let graylog_layer = init_graylog(graylog)?;
+    let graylog_layer = init_graylog(graylog);
     // Whatever level is set for logging/tracing, ignore the noise from the low-level libraries
     let filter = EnvFilter::new("trace") // let everything through
         .add_directive("h2=info".parse().expect("Static string is valid")) // except http,
@@ -193,13 +157,12 @@ pub fn init(
 mod tests {
     use std::net::TcpListener;
 
-    use opentelemetry_otlp::ExporterBuildError;
     use tracing::Level;
     use tracing_subscriber::layer::SubscriberExt as _;
     use tracing_subscriber::Registry;
     use url::Url;
 
-    use super::{init_graylog, init_stdout, init_tracing, LoggingError};
+    use super::{init_graylog, init_stdout, init_tracing};
     use crate::cli::GraylogOptions;
 
     #[test]
@@ -210,7 +173,7 @@ mod tests {
             graylog_level: Level::INFO,
         };
         let result = init_graylog::<Registry>(&opts);
-        assert!(matches!(result, Ok(None)));
+        assert!(result.is_none());
     }
 
     #[tokio::test]
@@ -223,24 +186,7 @@ mod tests {
             graylog_level: Level::INFO,
         };
         let result = init_graylog::<Registry>(&opts);
-        assert!(matches!(result, Ok(Some(_))));
-    }
-
-    #[test]
-    fn logging_error_display_includes_source_message() {
-        let err = LoggingError::from(ExporterBuildError::NoHttpClient);
-        assert_eq!(
-            err.to_string(),
-            "Exporter build error: no http client specified"
-        );
-    }
-
-    #[test]
-    fn logging_error_source_returns_inner_error() {
-        use std::error::Error;
-
-        let err = LoggingError::from(ExporterBuildError::NoHttpClient);
-        assert!(err.source().is_some());
+        assert!(result.is_some());
     }
 
     #[test]
