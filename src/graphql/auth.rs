@@ -305,7 +305,6 @@ mod tests {
         mock.assert();
     }
 
-
     #[tokio::test]
     async fn successful_check_access_with_leading_slashes() {
         let server = MockServer::start();
@@ -336,7 +335,6 @@ mod tests {
             .unwrap();
         mock.assert();
     }
-
 
     #[tokio::test]
     async fn successful_check_instrument_admin() {
