@@ -124,10 +124,13 @@ impl PolicyCheck {
             "Checking authorization against {:?} using {:?} for admin and {:?} for access",
             endpoint.policy_host, endpoint.admin_query, endpoint.access_query
         );
+
+        let host = endpoint.policy_host.trim_end_matches('/');
+
         Self {
             client: reqwest::Client::new(),
-            admin: format!("{}/{}", endpoint.policy_host, endpoint.admin_query),
-            access: format!("{}/{}", endpoint.policy_host, endpoint.access_query),
+            admin: format!("{}/{}", host, endpoint.admin_query),
+            access: format!("{}/{}", host, endpoint.access_query),
         }
     }
     pub async fn check_access(
