@@ -294,7 +294,7 @@ mod tests {
             })
             .await;
         let check = PolicyCheck::new(PolicyOptions {
-            policy_host: format!("{}/", server.url("")),
+            policy_host: server.url("/"),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
         });
