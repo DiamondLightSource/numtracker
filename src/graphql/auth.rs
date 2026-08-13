@@ -129,8 +129,8 @@ impl PolicyCheck {
 
         Self {
             client: reqwest::Client::new(),
-            admin: format!("{}/{}", host, endpoint.admin_query),
-            access: format!("{}/{}", host, endpoint.access_query),
+            admin: format!("{}/{}", host, endpoint.admin_query.trim_start_matches('/')),
+            access: format!("{}/{}", host, endpoint.access_query.trim_start_matches('/')),
         }
     }
     pub async fn check_access(
@@ -304,6 +304,39 @@ mod tests {
             .unwrap();
         mock.assert();
     }
+
+
+    #[tokio::test]
+    async fn successful_check_access_with_leading_slashes() {
+        let server = MockServer::start();
+        let mock = server
+            .mock_async(|when, then| {
+                when.method("POST")
+                    .path("/demo/access")
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "beamline": "i22",
+                            "visit": 4,
+                            "proposal": 1234,
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": true}));
+            })
+            .await;
+        let check = PolicyCheck::new(PolicyOptions {
+            policy_host: server.url(""),
+            access_query: "/demo/access".into(),
+            admin_query: "/demo/admin".into(),
+        });
+        check
+            .check_access(token("token").as_ref(), "i22", "cm1234-4")
+            .await
+            .unwrap();
+        mock.assert();
+    }
+
 
     #[tokio::test]
     async fn successful_check_instrument_admin() {
