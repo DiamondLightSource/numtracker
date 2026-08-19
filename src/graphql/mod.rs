@@ -26,6 +26,7 @@ use async_graphql::{
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
+use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
@@ -67,7 +68,7 @@ pub async fn serve_graphql(opts: ServeOptions) {
     let schema = Schema::build(Query, Mutation, EmptySubscription)
         .extension(Tracing)
         .limit_directives(32)
-        .data(db)
+        .data(db.clone())
         .data(directory_numtracker)
         .data(opts.policy.map(PolicyCheck::new))
         .finish();
@@ -75,6 +76,8 @@ pub async fn serve_graphql(opts: ServeOptions) {
         // status check endpoint allows external processes to monitor status of server without
         // making graphql queries
         .route("/status", get(server_status))
+        .route("/admin/export", get(export_handler))
+        // .route("/admin/restore", post(restore_handler))
         .route("/graphql", post(graphql_handler))
         // make it obvious that /graphql isn't expected to work when visiting from a browser
         .route(
@@ -88,6 +91,7 @@ pub async fn serve_graphql(opts: ServeOptions) {
         // Interactive graphiql playground
         .route("/graphiql", get(graphiql))
         // Make it look less like something is broken when going to any other page
+        .with_state(db)
         .fallback((
             StatusCode::NOT_FOUND,
             Html(include_str!("../../static/404.html")),
@@ -100,6 +104,11 @@ pub async fn serve_graphql(opts: ServeOptions) {
         .with_graceful_shutdown(create_signal_handler())
         .await
         .expect("Can't serve graphql endpoint");
+}
+
+async fn export_handler(State(db): State<SqliteScanPathService>) -> String {
+    let configs = db.all_configurations().await;
+    return format!("{configs:?}");
 }
 
 async fn create_signal_handler() {

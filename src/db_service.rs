@@ -323,6 +323,13 @@ impl SqliteScanPathService {
             .collect())
     }
 
+    pub async fn insert_configurations(
+        &self,
+        configs: &[InstrumentConfiguration],
+    ) -> Result<(), ()> {
+        todo!()
+    }
+
     pub async fn next_scan_configuration(
         &self,
         instrument: &str,
