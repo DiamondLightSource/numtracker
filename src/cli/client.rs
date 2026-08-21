@@ -17,7 +17,7 @@ pub struct ClientOptions {
     pub command: ClientCommand,
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, PartialEq)]
 pub struct AuthConfig {
     /// The host address of the authorisation provider
     ///

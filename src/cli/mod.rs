@@ -202,8 +202,7 @@ mod tests {
     use clap::Parser;
     use tracing::Level;
 
-    use super::Cli;
-    use crate::cli::Command;
+    use super::*;
     const APP: &str = "numtracker";
 
     #[test]
@@ -412,5 +411,21 @@ mod tests {
         let Command::Schema = cli.command else {
             panic!("Unexpected command: {:?}", cli.command);
         };
+    }
+
+    #[test]
+    fn minimal_client_command() {
+        let cli = Cli::try_parse_from([APP, "client", "configuration"]).unwrap();
+        let Command::Client(opts) = cli.command else {
+            panic!("Client command returned {cli:?}");
+        };
+        assert_eq!(opts.host, None);
+        assert_eq!(
+            opts.auth,
+            client::AuthConfig {
+                auth: None,
+                client_id: None
+            }
+        );
     }
 }
