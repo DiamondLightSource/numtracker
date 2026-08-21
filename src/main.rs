@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             println!("Client subcommand requires 'client' feature to be enabled when building")
         }
         #[cfg(feature = "client")]
-        Command::Client(opts) => client::run_client(opts).await,
+        Command::Client(opts) => client::run_client(*opts).await,
         Command::Schema => {
             graphql::graphql_schema(std::io::stdout()).expect("Failed to write schema")
         }

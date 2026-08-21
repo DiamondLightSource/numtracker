@@ -4,14 +4,6 @@ use url::Url;
 #[derive(Debug, Parser)]
 #[clap(max_term_width = 100)]
 pub struct ClientOptions {
-    #[clap(flatten)]
-    pub connection: ConnectionOptions,
-    #[clap(subcommand)]
-    pub command: ClientCommand,
-}
-
-#[derive(Debug, Parser)]
-pub struct ConnectionOptions {
     /// The host address of the numtracker service
     ///
     /// This should be the root of the service address including the scheme and
@@ -19,6 +11,14 @@ pub struct ConnectionOptions {
     /// eg https://numtracker.example.com
     #[clap(long, short = 'H', env = "NUMTRACKER_SERVICE_HOST")]
     pub host: Option<Url>,
+    #[clap(flatten)]
+    pub auth: AuthConfig,
+    #[clap(subcommand)]
+    pub command: ClientCommand,
+}
+
+#[derive(Debug, Parser)]
+pub struct AuthConfig {
     /// The host address of the authorisation provider
     ///
     /// This should be the domain that has the .well-known/openid-configuration
@@ -26,6 +26,9 @@ pub struct ConnectionOptions {
     /// eg https://authn.example.com/realms/master
     #[clap(long, env = "NUMTRACKER_AUTH_HOST")]
     pub auth: Option<Url>,
+    /// The client ID to use when authenticating
+    #[clap(long, env = "NUMTRACKER_AUTHN_CLIENTID")]
+    pub client_id: Option<String>,
 }
 
 #[derive(Debug, Subcommand)]

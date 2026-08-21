@@ -71,7 +71,7 @@ pub enum Command {
     Client { _ignored: Vec<String> },
     /// View and update beamline configurations provided by an instance of the service
     #[cfg(feature = "client")]
-    Client(client::ClientOptions),
+    Client(Box<client::ClientOptions>),
     /// Generate the graphql schema
     Schema,
 }

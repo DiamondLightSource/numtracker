@@ -8,10 +8,13 @@ use tokio::fs;
 use tracing::debug;
 use url::Url;
 
+use crate::cli::client::AuthConfig;
+
 #[derive(Debug, Deserialize, Default)]
 pub struct ClientConfiguration {
     pub host: Option<Url>,
     pub auth: Option<Url>,
+    pub client_id: Option<String>,
 }
 
 #[derive(Debug, Display, Error, From)]
@@ -53,13 +56,22 @@ impl ClientConfiguration {
         }
     }
 
+    pub(crate) fn auth_config(&self) -> Option<(&Url, &str)> {
+        let auth = self.auth.as_ref()?;
+        Some((
+            auth,
+            self.client_id.as_deref().unwrap_or(Self::DEFAULT_CLIENT),
+        ))
+    }
+
     pub(crate) fn with_host(mut self, host: Option<Url>) -> Self {
         self.host = host.or(self.host);
         self
     }
 
-    pub(crate) fn with_auth(mut self, auth: Option<Url>) -> Self {
-        self.auth = auth.or(self.auth);
+    pub(crate) fn with_auth(mut self, auth: AuthConfig) -> Self {
+        self.auth = auth.auth.or(self.auth);
+        self.client_id = auth.client_id.or(self.client_id);
         self
     }
 }
