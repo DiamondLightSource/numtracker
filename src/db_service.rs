@@ -172,7 +172,7 @@ impl InstrumentConfigurationUpdate {
 
         trace!(
             instrument = self.name,
-            query = q.sql(),
+            query = q.sql().as_str(),
             "Updating instrument configuration",
         );
 
