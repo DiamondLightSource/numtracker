@@ -111,7 +111,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let cfg_file = dir.as_ref().join("config.toml");
         let mut file = File::create_new(&cfg_file).unwrap();
-        write!(file, "host={HOST:?}\n").unwrap();
+        writeln!(file, "host={HOST:?}").unwrap();
 
         let cfg = ClientConfiguration::from_file(cfg_file).await.unwrap();
         assert_eq!(cfg.host, Some(Url::parse(HOST).unwrap()));
@@ -126,7 +126,7 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let cfg_file = dir.as_ref().join("config.toml");
         let mut file = File::create_new(&cfg_file).unwrap();
-        write!(file, "host={HOST:?}\nauth={AUTH:?}\n").unwrap();
+        writeln!(file, "host={HOST:?}\nauth={AUTH:?}").unwrap();
 
         let cfg = ClientConfiguration::from_file(cfg_file).await.unwrap();
         assert_eq!(cfg.host, Some(Url::parse(HOST).unwrap()));
@@ -144,9 +144,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let cfg_file = dir.as_ref().join("config.toml");
         let mut file = File::create_new(&cfg_file).unwrap();
-        write!(
+        writeln!(
             file,
-            "host={HOST:?}\nauth={AUTH:?}\nclient_id={CLIENT_ID:?}\n"
+            "host={HOST:?}\nauth={AUTH:?}\nclient_id={CLIENT_ID:?}"
         )
         .unwrap();
 
