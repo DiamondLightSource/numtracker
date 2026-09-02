@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::marker::PhantomData;
 use std::path::Path;
@@ -348,7 +349,7 @@ impl SqliteScanPathService {
         tx.commit().await?;
         Ok(())
     }
-}
+
     pub async fn next_scan_configuration(
         &self,
         instrument: &str,
@@ -406,6 +407,8 @@ impl fmt::Debug for SqliteScanPathService {
 mod error {
     use derive_more::{Display, Error, From};
 
+use crate::db_service::InstrumentConfiguration;
+
     #[derive(Debug, Display, Error, From)]
     pub enum ConfigurationError {
         #[display("No configuration available for instrument {_0:?}")]
@@ -428,6 +431,46 @@ mod error {
             Self::MissingField(value.into())
         }
     }
+
+    #[derive(Debug, Serialize, Deserialize)] // Adding DTO (Data Transfer Object) for serialisation and deserialisation of instrument configuration data 
+    pub struct InstrumentConfigurationData  {
+        pub name: String, 
+        pub scan_number: u32,
+        pub directory: String,
+        pub scan: String,
+        pub detector: String,
+        pub tracker_file_extension: Option<String>,
+    }
+
+
+    impl From<InstrumentConfiguration> for Instrument ConfigurationData {
+        fn from(config: InstrumentConfiguration) -> Self {
+            Self {
+                name: config.name,
+                scan_number: config.scan_number,
+                directory: config.directory.to_string(),
+                scan: config.scan.to_string(),
+                detector: config.detector.to_string(),
+                tracker_file_extension: config.tracker_file_extension,
+            }
+        }
+    }
+    impl From<InstrumentConfigurationData> for Instrument Configuration {
+        fn from(data: InstrumentConfigurationData) -> Self {
+            Self {
+                name:data.name,
+                scan_number:data.scan_number,
+                directory:data.directory.to_string(),
+                scan:data.scan.to_string(),
+                detector:data.detector.to_string(),
+                tracker_file_extension:data.tracker_file_extension,
+            }
+        }
+    }
+
+
+
+
 }
 
 #[cfg(test)]
