@@ -326,8 +326,37 @@ impl SqliteScanPathService {
     pub async fn insert_configurations(
         &self,
         configs: &[InstrumentConfiguration],
-    ) -> Result<(), ()> {
-        todo!()
+    ) -> Result<(), sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query!("DelETE FROM instrument").execute(&mut tx).await?;
+
+        for config in configs {
+            sqlx::query!(
+                "INSERT INTO instrument (name, scan_number, directory, scan, detector, tracker_file_extension) VALUES (?, ?, ?, ?, ?, ?)",
+                config.name,
+                config.scan_number,
+                config.directory,
+                config.scan,
+                config.detector,
+                config.tracker_file_extension
+            )
+            .execute(&mut tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+}
+    pub async fn next_scan_configuration(
+        &self,
+        instrument: &str,
+        current_high: Option<u32>,
+    ) -> Result<InstrumentConfiguration, ConfigurationError> {
+        let exp = current_high.unwrap_or(0);
+        query_as!(
+            DbInstrumentConfig,
     }
 
     pub async fn next_scan_configuration(
