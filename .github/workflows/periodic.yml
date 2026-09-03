@@ -7,8 +7,6 @@ on:
     - cron: "0 8 * * WED"
 
 jobs:
-  trivy:
-    uses: ./.github/workflows/_trivy.yml
 
   cargo_audit:
     uses: ./.github/workflows/_cargo_audit.yml

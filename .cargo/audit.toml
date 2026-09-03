@@ -6,9 +6,6 @@
 # All of the options which can be passed via CLI arguments can also be
 # permanently specified in this file.
 
-[advisories]
-ignore = ["RUSTSEC-2023-0071","RUSTSEC-2025-0052"] # advisory IDs to ignore e.g. ["RUSTSEC-2019-0001", ...]
-
 # Crate:     rsa
 # Version:   0.9.10
 # Title:     Marvin Attack: potential key recovery through timing sidechannels
@@ -32,6 +29,9 @@ ignore = ["RUSTSEC-2023-0071","RUSTSEC-2025-0052"] # advisory IDs to ignore e.g.
 # Dependency tree:
 # async-std 1.13.2
 # └── numtracker 0.0.0
+
+[advisories]
+ignore = ["RUSTSEC-2023-0071","RUSTSEC-2025-0052"] # advisory IDs to ignore e.g. ["RUSTSEC-2019-0001", ...]
 
 informational_warnings = ["unmaintained"] # warn for categories of informational advisories
 severity_threshold = "low" # CVSS severity ("none", "low", "medium", "high", "critical")
