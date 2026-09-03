@@ -1,0 +1,24 @@
+[[repos]]
+repo = "builtin"
+hooks = [
+  { id = "check-added-large-files", exclude = "^Cargo.lock$" },
+  { id = "check-merge-conflict" },
+  { id = "check-toml" },
+  { id = "end-of-file-fixer" },
+  { id = "mixed-line-ending", args = ["--fix", "lf" ]},
+  { id = "trailing-whitespace", exclude = "static/service_schema.graphql"},
+]
+
+[[repos]]
+repo = "local"
+hooks = [
+    # fmt needs to be called via rustup to support nightly
+    { id = "format", name = "cargo fmt", entry = "rustup run nightly cargo fmt", language = "rust", pass_filenames = false },
+    { id = "compile", name = "cargo check", entry = "cargo check", language = "rust", pass_filenames = false },
+    { id = "lint", name = "cargo clippy", entry = "cargo clippy --all-targets --all-features -- --deny warnings", language = "rust" , pass_filenames = false },
+]
+
+[[repos]]
+repo = "https://github.com/gitleaks/gitleaks"
+rev = "v8.30.1"
+hooks = [{ id = "gitleaks" }]
