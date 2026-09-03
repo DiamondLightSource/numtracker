@@ -99,17 +99,17 @@ pub struct PolicyOptions {
     /// Authorization Policy service
     ///
     /// eg, https://authz.diamond.ac.uk
-    #[clap(long = "policy", required = false, env = "NUMTRACKER_AUTH_HOST")]
+    #[clap(long = "policy", required = false, env = "NUMTRACKER_AUTHZ_HOST")]
     pub policy_host: String,
     /// The Rego rule used to generate instrument access data
     ///
     /// eg. v1/data/diamond/policy/session/write_to_beamline_visit
-    #[clap(long, required = false, env = "NUMTRACKER_AUTH_ACCESS")]
+    #[clap(long, required = false, env = "NUMTRACKER_AUTHZ_ACCESS")]
     pub access_query: String,
     /// The Rego rule used to generate admin access data
     ///
     /// eg. v1/data/diamond/policy/admin/configure_beamline
-    #[clap(long, required = false, env = "NUMTRACKER_AUTH_ADMIN")]
+    #[clap(long, required = false, env = "NUMTRACKER_AUTHZ_ADMIN")]
     pub admin_query: String,
 }
 
