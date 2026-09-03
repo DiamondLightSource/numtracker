@@ -23,6 +23,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
 use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
 
+use crate::db_service::error::InsertConfigurationsError;
 use crate::paths::{
     DetectorField, DetectorTemplate, DirectoryField, DirectoryTemplate, InvalidPathTemplate,
     PathSpec, ScanField, ScanTemplate,
@@ -221,7 +222,7 @@ impl InstrumentConfigurationUpdate {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 struct DbInstrumentConfig {
     #[allow(unused)] // unused but allows use of 'SELECT * ...' queries
     id: Option<i64>,
@@ -327,10 +328,19 @@ impl SqliteScanPathService {
     pub async fn insert_configurations(
         &self,
         configs: &[InstrumentConfiguration],
-    ) -> Result<(), sqlx::Error> {
+        force_clear: bool,
+    ) -> Result<(), InsertConfigurationsError> {
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query!("DelETE FROM instrument").execute(&mut tx).await?;
+        if force_clear{ sqlx::query!("DELETE FROM instrument").execute(&mut tx).await?; } //User has chosen to overwrite existing data so delete the table before inserting new rows
+        else if !configs.is_empty() { // Not forcing clear and configs is not empty, check if table is empty
+            let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM instrument")
+                .fetch_one(&mut tx)
+                .await?;
+            if count.0 > 0 { //Table not empty, do not clear
+                return Err(InsertConfigurationsError::NotEmpty);
+            }
+        }
 
         for config in configs {
             sqlx::query!(
@@ -431,45 +441,15 @@ use crate::db_service::InstrumentConfiguration;
             Self::MissingField(value.into())
         }
     }
-
-    #[derive(Debug, Serialize, Deserialize)] // Adding DTO (Data Transfer Object) for serialisation and deserialisation of instrument configuration data 
-    pub struct InstrumentConfigurationData  {
-        pub name: String, 
-        pub scan_number: u32,
-        pub directory: String,
-        pub scan: String,
-        pub detector: String,
-        pub tracker_file_extension: Option<String>,
+    
+    #[derive(Debug, Display, Error, From)]
+    pub enum InsertConfigurationsError {
+        #[display("Instrument table not empty and force_clear not set to true")]
+        NotEmpty,
+        #[from]
+        #[display("Error inserting configurations: {_0}")]
+        Db(sqlx::Error),
     }
-
-
-    impl From<InstrumentConfiguration> for Instrument ConfigurationData {
-        fn from(config: InstrumentConfiguration) -> Self {
-            Self {
-                name: config.name,
-                scan_number: config.scan_number,
-                directory: config.directory.to_string(),
-                scan: config.scan.to_string(),
-                detector: config.detector.to_string(),
-                tracker_file_extension: config.tracker_file_extension,
-            }
-        }
-    }
-    impl From<InstrumentConfigurationData> for Instrument Configuration {
-        fn from(data: InstrumentConfigurationData) -> Self {
-            Self {
-                name:data.name,
-                scan_number:data.scan_number,
-                directory:data.directory.to_string(),
-                scan:data.scan.to_string(),
-                detector:data.detector.to_string(),
-                tracker_file_extension:data.tracker_file_extension,
-            }
-        }
-    }
-
-
-
 
 }
 
