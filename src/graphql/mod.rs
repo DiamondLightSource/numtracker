@@ -107,7 +107,7 @@ pub async fn serve_graphql(opts: ServeOptions) {
 }
 
 async fn export_handler(State(db): State<SqliteScanPathService>) -> String {
-    #let configs = db.all_configurations().await;
+    let configs = db.all_configurations().await;
     return format!("{configs:?}");
 }
 
