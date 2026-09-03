@@ -1,0 +1,28 @@
+
+Report Summary
+
+┌────────────┬───────┬─────────────────┐
+│   Target   │ Type  │ Vulnerabilities │
+├────────────┼───────┼─────────────────┤
+│ Cargo.lock │ cargo │        2        │
+└────────────┴───────┴─────────────────┘
+Legend:
+- '-': Not scanned
+- '0': Clean (no security findings detected)
+
+
+Cargo.lock (cargo)
+==================
+Total: 2 (HIGH: 2, CRITICAL: 0)
+
+┌───────────────┬─────────────────────┬──────────┬────────┬───────────────────┬───────────────────────────┬─────────────────────────────────────────────────────────────┐
+│    Library    │    Vulnerability    │ Severity │ Status │ Installed Version │       Fixed Version       │                            Title                            │
+├───────────────┼─────────────────────┼──────────┼────────┼───────────────────┼───────────────────────────┼─────────────────────────────────────────────────────────────┤
+│ quinn-proto   │ GHSA-4w2j-m93h-cj5j │ HIGH     │ fixed  │ 0.11.14           │ 0.11.15                   │ Quinn: Remote memory exhaustion in quinn-proto from         │
+│               │                     │          │        │                   │                           │ unbounded out-of-order stream reassembly                    │
+│               │                     │          │        │                   │                           │ https://github.com/advisories/GHSA-4w2j-m93h-cj5j           │
+├───────────────┼─────────────────────┤          │        ├───────────────────┼───────────────────────────┼─────────────────────────────────────────────────────────────┤
+│ rustls-webpki │ GHSA-82j2-j2ch-gfr8 │          │        │ 0.103.12          │ 0.103.13, 0.104.0-alpha.7 │ rustls-webpki: Denial of service via panic on malformed CRL │
+│               │                     │          │        │                   │                           │ BIT STRING                                                  │
+│               │                     │          │        │                   │                           │ https://github.com/advisories/GHSA-82j2-j2ch-gfr8           │
+└───────────────┴─────────────────────┴──────────┴────────┴───────────────────┴───────────────────────────┴─────────────────────────────────────────────────────────────┘
