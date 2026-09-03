@@ -107,6 +107,7 @@ pub async fn serve_graphql(opts: ServeOptions) {
         .expect("Can't serve graphql endpoint");
 }
 
+<<<<<<< HEAD
 async fn export_handler(State(db): State<SqliteScanPathService>,) -> Result<Json<Vec<InstrumentConfiguration>>, (StatusCode)> {
     let configs = db.all_configurations().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(configs))
@@ -121,6 +122,11 @@ async fn restore_handler(
         .await
         .map_err(|e|match e{InsertConfigurationsError::NotEmpty => StatusCode::CONFLICT, InstrumentConfigurationError::Db(_) =>StatusCode::INTERNAL_SERVER_ERROR})?;
     Ok("Configurations restored".into())
+=======
+async fn export_handler(State(db): State<SqliteScanPathService>) -> String {
+    let configs = db.all_configurations().await;
+    return format!("{configs:?}");
+>>>>>>> 6f2341aa6c32228eb280afc426ca7d77aaca598f
 }
 
 async fn create_signal_handler() {
