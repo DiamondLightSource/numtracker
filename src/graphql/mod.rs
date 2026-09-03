@@ -36,6 +36,8 @@ use axum_extra::headers::Authorization;
 use axum_extra::TypedHeader;
 use chrono::{Datelike, Local};
 use derive_more::{Display, Error};
+use serde::Deserialize;
+use serde::de::value::MapDeserializer;
 use tokio::net::TcpListener;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
@@ -43,8 +45,7 @@ use tracing::{debug, info, instrument, trace, warn};
 
 use crate::build_info::ServerStatus;
 use crate::cli::ServeOptions;
-use crate::db_service::{
-    InstrumentConfiguration, InstrumentConfigurationUpdate, SqliteScanPathService,
+use crate::db_service::{InsertConfigurationsError,InstrumentConfiguration, InstrumentConfigurationUpdate, SqliteScanPathService,
 };
 use crate::numtracker::NumTracker;
 use crate::paths::{
@@ -77,7 +78,7 @@ pub async fn serve_graphql(opts: ServeOptions) {
         // making graphql queries
         .route("/status", get(server_status))
         .route("/admin/export", get(export_handler))
-        // .route("/admin/restore", post(restore_handler))
+        .route("/admin/restore", post(restore_handler))
         .route("/graphql", post(graphql_handler))
         // make it obvious that /graphql isn't expected to work when visiting from a browser
         .route(
@@ -106,9 +107,20 @@ pub async fn serve_graphql(opts: ServeOptions) {
         .expect("Can't serve graphql endpoint");
 }
 
-async fn export_handler(State(db): State<SqliteScanPathService>) -> String {
-    #let configs = db.all_configurations().await;
-    return format!("{configs:?}");
+async fn export_handler(State(db): State<SqliteScanPathService>,) -> Result<Json<Vec<InstrumentConfiguration>>, (StatusCode)> {
+    let configs = db.all_configurations().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(configs))
+}
+
+async fn restore_handler(
+    State(db): State<SqliteScanPathService>,
+    Query(params): Query<ImportParams>,
+    Json(configs): Json<Vec<InstrumentConfiguration>>,
+) -> Result<String, (StatusCode, String)> {
+    db.insert_configurations(&configs, params.force_clear)
+        .await
+        .map_err(|e|match e{InsertConfigurationsError::NotEmpty => StatusCode::CONFLICT, InstrumentConfigurationError::Db(_) =>StatusCode::INTERNAL_SERVER_ERROR})?;
+    Ok("Configurations restored".into())
 }
 
 async fn create_signal_handler() {
@@ -142,6 +154,12 @@ async fn graphql_handler(
         .execute(req.into_inner().data(auth_token.map(|header| header.0)))
         .await
         .into()
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportParams{
+    #[serde(default)]
+    force_clear: bool,
 }
 
 /// Read-only API for GraphQL
