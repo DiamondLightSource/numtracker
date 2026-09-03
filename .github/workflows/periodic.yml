@@ -9,7 +9,7 @@ on:
 jobs:
 
   cargo_audit:
-    uses: ./.github/workflows/_cargo_audit.yml
+    uses: ./.github/workflows/cargo_audit.yml
     permissions:
       issues: write
       checks: write
