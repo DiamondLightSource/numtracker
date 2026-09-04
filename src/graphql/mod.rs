@@ -45,7 +45,7 @@ use tracing::{debug, info, instrument, trace, warn};
 
 use crate::build_info::ServerStatus;
 use crate::cli::ServeOptions;
-use crate::db_service::{InsertConfigurationsError,InstrumentConfiguration, InstrumentConfigurationUpdate, SqliteScanPathService,
+use crate::db_service::{InsertConfigurationsError, InstrumentConfiguration, InstrumentConfigurationUpdate, SqliteScanPathService,
 };
 use crate::numtracker::NumTracker;
 use crate::paths::{
@@ -107,7 +107,6 @@ pub async fn serve_graphql(opts: ServeOptions) {
         .expect("Can't serve graphql endpoint");
 }
 
-<<<<<<< HEAD
 async fn export_handler(State(db): State<SqliteScanPathService>,) -> Result<Json<Vec<InstrumentConfiguration>>, (StatusCode)> {
     let configs = db.all_configurations().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(configs))
@@ -122,15 +121,6 @@ async fn restore_handler(
         .await
         .map_err(|e|match e{InsertConfigurationsError::NotEmpty => StatusCode::CONFLICT, InstrumentConfigurationError::Db(_) =>StatusCode::INTERNAL_SERVER_ERROR})?;
     Ok("Configurations restored".into())
-=======
-async fn export_handler(State(db): State<SqliteScanPathService>) -> String {
-    let configs = db.all_configurations().await;
-    return format!("{configs:?}");
-<<<<<<< HEAD
->>>>>>> 6f2341a (patch up compiler errors)
-=======
->>>>>>> 6f2341aa6c32228eb280afc426ca7d77aaca598f
->>>>>>> 720de156c51a94e3cce8f3c8d893f927867cc658
 }
 
 async fn create_signal_handler() {
