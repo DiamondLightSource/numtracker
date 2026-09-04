@@ -126,7 +126,11 @@ async fn restore_handler(
 async fn export_handler(State(db): State<SqliteScanPathService>) -> String {
     let configs = db.all_configurations().await;
     return format!("{configs:?}");
+<<<<<<< HEAD
 >>>>>>> 6f2341a (patch up compiler errors)
+=======
+>>>>>>> 6f2341aa6c32228eb280afc426ca7d77aaca598f
+>>>>>>> 720de156c51a94e3cce8f3c8d893f927867cc658
 }
 
 async fn create_signal_handler() {
