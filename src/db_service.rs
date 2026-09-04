@@ -61,7 +61,7 @@ impl<F> From<&str> for RawPathTemplate<F> {
 }
 
 /// The current configuration for an instrument
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstrumentConfiguration {
     name: String,
     scan_number: u32,
@@ -337,6 +337,7 @@ impl SqliteScanPathService {
                 .execute(&mut *tx)
                 .await?;
         } else if !configs.is_empty() {
+            // maybe get rid of this
             // Not forcing clear, check if table is empty
             let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM instrument")
                 .fetch_one(&mut *tx)
