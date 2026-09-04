@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::marker::PhantomData;
 use std::path::Path;
 
-pub use error::ConfigurationError;
 use error::NewConfigurationError;
+pub use error::{ConfigurationError, InsertConfigurationsError};
+use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
 use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
 
-use crate::db_service::error::InsertConfigurationsError;
 use crate::paths::{
     DetectorField, DetectorTemplate, DirectoryField, DirectoryTemplate, InvalidPathTemplate,
     PathSpec, ScanField, ScanTemplate,
@@ -332,12 +331,18 @@ impl SqliteScanPathService {
     ) -> Result<(), InsertConfigurationsError> {
         let mut tx = self.pool.begin().await?;
 
-        if force_clear{ sqlx::query!("DELETE FROM instrument").execute(&mut tx).await?; } //User has chosen to overwrite existing data so delete the table before inserting new rows
-        else if !configs.is_empty() { // Not forcing clear and configs is not empty, check if table is empty
-            let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM instrument")
-                .fetch_one(&mut tx)
+        if force_clear {
+            //User has chosen to overwrite existing data so delete the table before inserting new rows
+            sqlx::query!("DELETE FROM instrument")
+                .execute(&mut *tx)
                 .await?;
-            if count.0 > 0 { //Table not empty, do not clear
+        } else if !configs.is_empty() {
+            // Not forcing clear, check if table is empty
+            let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM instrument")
+                .fetch_one(&mut *tx)
+                .await?;
+            if count > 0 {
+                //Table not empty, do not clear
                 return Err(InsertConfigurationsError::NotEmpty);
             }
         }
@@ -347,27 +352,17 @@ impl SqliteScanPathService {
                 "INSERT INTO instrument (name, scan_number, directory, scan, detector, tracker_file_extension) VALUES (?, ?, ?, ?, ?, ?)",
                 config.name,
                 config.scan_number,
-                config.directory,
-                config.scan,
-                config.detector,
+                config.directory.0,
+                config.scan.0,
+                config.detector.0,
                 config.tracker_file_extension
             )
-            .execute(&mut tx)
+            .execute(&mut *tx)
             .await?;
         }
 
         tx.commit().await?;
         Ok(())
-    }
-
-    pub async fn next_scan_configuration(
-        &self,
-        instrument: &str,
-        current_high: Option<u32>,
-    ) -> Result<InstrumentConfiguration, ConfigurationError> {
-        let exp = current_high.unwrap_or(0);
-        query_as!(
-            DbInstrumentConfig,
     }
 
     pub async fn next_scan_configuration(
@@ -417,8 +412,6 @@ impl fmt::Debug for SqliteScanPathService {
 mod error {
     use derive_more::{Display, Error, From};
 
-use crate::db_service::InstrumentConfiguration;
-
     #[derive(Debug, Display, Error, From)]
     pub enum ConfigurationError {
         #[display("No configuration available for instrument {_0:?}")]
@@ -441,7 +434,7 @@ use crate::db_service::InstrumentConfiguration;
             Self::MissingField(value.into())
         }
     }
-    
+
     #[derive(Debug, Display, Error, From)]
     pub enum InsertConfigurationsError {
         #[display("Instrument table not empty and force_clear not set to true")]
@@ -450,7 +443,6 @@ use crate::db_service::InstrumentConfiguration;
         #[display("Error inserting configurations: {_0}")]
         Db(sqlx::Error),
     }
-
 }
 
 #[cfg(test)]
