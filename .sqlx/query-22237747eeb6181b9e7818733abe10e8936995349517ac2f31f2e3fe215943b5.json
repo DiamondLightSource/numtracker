@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO instrument (name, scan_number, directory, scan, detector, tracker_file_extension) VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "22237747eeb6181b9e7818733abe10e8936995349517ac2f31f2e3fe215943b5"
+}
