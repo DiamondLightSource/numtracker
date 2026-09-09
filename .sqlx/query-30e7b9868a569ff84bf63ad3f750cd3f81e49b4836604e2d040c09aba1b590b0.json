@@ -6,37 +6,79 @@
       {
         "name": "id",
         "ordinal": 0,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "id"
+          }
+        }
       },
       {
         "name": "name",
         "ordinal": 1,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "name"
+          }
+        }
       },
       {
         "name": "scan_number",
         "ordinal": 2,
-        "type_info": "Integer"
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "scan_number"
+          }
+        }
       },
       {
         "name": "directory",
         "ordinal": 3,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "directory"
+          }
+        }
       },
       {
         "name": "scan",
         "ordinal": 4,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "scan"
+          }
+        }
       },
       {
         "name": "detector",
         "ordinal": 5,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "detector"
+          }
+        }
       },
       {
         "name": "tracker_file_extension",
         "ordinal": 6,
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "instrument",
+            "name": "tracker_file_extension"
+          }
+        }
       }
     ],
     "parameters": {
