@@ -8,10 +8,13 @@ use tokio::fs;
 use tracing::debug;
 use url::Url;
 
+use crate::cli::client::AuthConfig;
+
 #[derive(Debug, Deserialize, Default)]
 pub struct ClientConfiguration {
     pub host: Option<Url>,
     pub auth: Option<Url>,
+    pub client_id: Option<String>,
 }
 
 #[derive(Debug, Display, Error, From)]
@@ -25,6 +28,8 @@ pub enum ConfigFileError {
 }
 
 impl ClientConfiguration {
+    const DEFAULT_CLIENT: &str = "numtracker";
+
     pub async fn from_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigFileError> {
         debug!("Reading client config from {:?}", path.as_ref());
         match fs::read_to_string(path.as_ref()).await {
@@ -51,13 +56,22 @@ impl ClientConfiguration {
         }
     }
 
+    pub(crate) fn auth_config(&self) -> Option<(&Url, &str)> {
+        let auth = self.auth.as_ref()?;
+        Some((
+            auth,
+            self.client_id.as_deref().unwrap_or(Self::DEFAULT_CLIENT),
+        ))
+    }
+
     pub(crate) fn with_host(mut self, host: Option<Url>) -> Self {
         self.host = host.or(self.host);
         self
     }
 
-    pub(crate) fn with_auth(mut self, auth: Option<Url>) -> Self {
-        self.auth = auth.or(self.auth);
+    pub(crate) fn with_auth(mut self, auth: AuthConfig) -> Self {
+        self.auth = auth.auth.or(self.auth);
+        self.client_id = auth.client_id.or(self.client_id);
         self
     }
 }
@@ -76,5 +90,74 @@ impl Display for ClientConfiguration {
         }
         write!(f, ")")?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs::File;
+    use std::io::Write;
+
+    use tempfile::TempDir;
+
+    use super::*;
+
+    const HOST: &str = "http://numtracker.example.com";
+    const AUTH: &str = "https://auth.example.com";
+    const CLIENT_ID: &str = "custom_client";
+
+    #[tokio::test]
+    async fn load_from_file() {
+        let dir = TempDir::new().unwrap();
+        let cfg_file = dir.as_ref().join("config.toml");
+        let mut file = File::create_new(&cfg_file).unwrap();
+        writeln!(file, "host={HOST:?}").unwrap();
+
+        let cfg = ClientConfiguration::from_file(cfg_file).await.unwrap();
+        assert_eq!(cfg.host, Some(Url::parse(HOST).unwrap()));
+        assert_eq!(cfg.auth, None);
+        assert_eq!(cfg.client_id, None);
+
+        assert_eq!(cfg.auth_config(), None);
+    }
+
+    #[tokio::test]
+    async fn load_from_file_with_auth() {
+        let dir = TempDir::new().unwrap();
+        let cfg_file = dir.as_ref().join("config.toml");
+        let mut file = File::create_new(&cfg_file).unwrap();
+        writeln!(file, "host={HOST:?}\nauth={AUTH:?}").unwrap();
+
+        let cfg = ClientConfiguration::from_file(cfg_file).await.unwrap();
+        assert_eq!(cfg.host, Some(Url::parse(HOST).unwrap()));
+        assert_eq!(cfg.auth, Some(Url::parse(AUTH).unwrap()));
+        assert_eq!(cfg.client_id, None);
+
+        assert_eq!(
+            cfg.auth_config(),
+            Some((&Url::parse(AUTH).unwrap(), "numtracker"))
+        );
+    }
+
+    #[tokio::test]
+    async fn load_from_file_with_client_id() {
+        let dir = TempDir::new().unwrap();
+        let cfg_file = dir.as_ref().join("config.toml");
+        let mut file = File::create_new(&cfg_file).unwrap();
+        writeln!(
+            file,
+            "host={HOST:?}\nauth={AUTH:?}\nclient_id={CLIENT_ID:?}"
+        )
+        .unwrap();
+
+        let cfg = ClientConfiguration::from_file(cfg_file).await.unwrap();
+        assert_eq!(cfg.host, Some(Url::parse(HOST).unwrap()));
+        assert_eq!(cfg.auth, Some(Url::parse(AUTH).unwrap()));
+        assert_eq!(cfg.client_id, Some(CLIENT_ID.into()));
+
+        assert_eq!(
+            cfg.auth_config(),
+            Some((&Url::parse(AUTH).unwrap(), CLIENT_ID))
+        );
     }
 }

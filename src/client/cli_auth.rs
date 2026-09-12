@@ -96,7 +96,10 @@ pub enum AuthError {
 }
 
 impl AuthHandler {
-    pub async fn new(host: impl Into<Url>) -> Result<Self, AuthError> {
+    pub async fn new(
+        host: impl Into<Url>,
+        client_id: impl Into<String>,
+    ) -> Result<Self, AuthError> {
         let http_client = reqwest::ClientBuilder::new()
             .redirect(Policy::none())
             .build()?;
@@ -109,7 +112,7 @@ impl AuthHandler {
             .clone();
         let client = CoreClient::from_provider_metadata(
             meta_provider,
-            ClientId::new("numtracker".to_string()),
+            ClientId::new(client_id.into()),
             None,
         )
         .set_device_authorization_url(device_authorization_url)
@@ -203,9 +206,9 @@ async fn refresh_access_token(auth: &AuthHandler) -> Option<String> {
 
 /// Get a new access token from the auth server via the device flow.
 /// If successful, cache the refresh token to prevent needing to log in next time
-pub(crate) async fn get_access_token(h: &Url) -> Result<String, AuthError> {
+pub(crate) async fn get_access_token(host: &Url, client_id: &str) -> Result<String, AuthError> {
     debug!("Getting new access token");
-    let handler = AuthHandler::new(h.clone()).await?;
+    let handler = AuthHandler::new(host.clone(), client_id).await?;
     if let Some(token) = refresh_access_token(&handler).await {
         return Ok(token);
     }
