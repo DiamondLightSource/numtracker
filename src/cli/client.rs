@@ -24,7 +24,7 @@ pub struct ConnectionOptions {
     /// This should be the domain that has the .well-known/openid-configuration
     /// endpoint including scheme and port (if non-standard).
     /// eg https://authn.example.com/realms/master
-    #[clap(long, env = "NUMTRACKER_AUTH_HOST")]
+    #[clap(long, env = "NUMTRACKER_AUTHN_HOST")]
     pub auth: Option<Url>,
 }
 

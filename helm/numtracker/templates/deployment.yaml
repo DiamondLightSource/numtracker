@@ -56,11 +56,11 @@ spec:
               value: {{ .Values.numtracker.graylog.level }}
             {{- end }}
             {{- if .Values.numtracker.auth.enabled }}
-            - name: NUMTRACKER_AUTH_HOST
+            - name: NUMTRACKER_AUTHZ_HOST
               value: {{ .Values.numtracker.auth.host }}
-            - name: NUMTRACKER_AUTH_ACCESS
+            - name: NUMTRACKER_AUTHZ_ACCESS
               value: {{ .Values.numtracker.auth.access }}
-            - name: NUMTRACKER_AUTH_ADMIN
+            - name: NUMTRACKER_AUTHZ_ADMIN
               value: {{ .Values.numtracker.auth.admin }}
             {{- end }}
           securityContext:
