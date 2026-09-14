@@ -1,0 +1,15 @@
+name: Periodic
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run weekly to check for new vulnerabilities
+    - cron: "0 8 * * WED"
+
+jobs:
+
+  cargo_audit:
+    uses: ./.github/workflows/cargo_audit.yml
+    permissions:
+      issues: write
+      checks: write
