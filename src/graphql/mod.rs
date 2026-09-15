@@ -44,7 +44,9 @@ use tracing::{debug, info, instrument, trace, warn};
 
 use crate::build_info::ServerStatus;
 use crate::cli::ServeOptions;
-use crate::db_service::{InsertConfigurationsError, InstrumentConfiguration, InstrumentConfigurationUpdate, SqliteScanPathService,
+use crate::db_service::{
+    InsertConfigurationsError, InstrumentConfiguration, InstrumentConfigurationUpdate,
+    SqliteScanPathService,
 };
 use crate::numtracker::NumTracker;
 use crate::paths::{
@@ -106,8 +108,13 @@ pub async fn serve_graphql(opts: ServeOptions) {
         .expect("Can't serve graphql endpoint");
 }
 
-async fn export_handler(State(db): State<SqliteScanPathService>,) -> Result<Json<Vec<InstrumentConfiguration>>, StatusCode> {
-    let configs = db.all_configurations().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+async fn export_handler(
+    State(db): State<SqliteScanPathService>,
+) -> Result<Json<Vec<InstrumentConfiguration>>, StatusCode> {
+    let configs = db
+        .all_configurations()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(configs))
 }
 
@@ -116,9 +123,13 @@ async fn restore_handler(
     AxumQuery(params): AxumQuery<ImportParams>,
     Json(configs): Json<Vec<InstrumentConfiguration>>,
 ) -> Result<String, (StatusCode, String)> {
-    let _ =db.insert_configurations(&configs, params.force_clear)
+    let _ = db
+        .insert_configurations(&configs, params.force_clear)
         .await
-        .map_err(|e|match e{InsertConfigurationsError::NotEmpty => StatusCode::CONFLICT, InsertConfigurationsError::Db(_) =>StatusCode::INTERNAL_SERVER_ERROR});
+        .map_err(|e| match e {
+            InsertConfigurationsError::NotEmpty => StatusCode::CONFLICT,
+            InsertConfigurationsError::Db(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        });
     Ok("Configurations restored".into())
 }
 
@@ -156,7 +167,7 @@ async fn graphql_handler(
 }
 
 #[derive(Debug, Deserialize)]
-struct ImportParams{
+struct ImportParams {
     #[serde(default)]
     force_clear: bool,
 }
@@ -672,16 +683,17 @@ mod tests {
     use axum::http::HeaderValue;
     use axum::routing::{get, post};
     use axum::Router;
-    use axum_test::TestServer;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
+    use axum_test::TestServer;
     use httpmock::MockServer;
     use rstest::{fixture, rstest};
     use tempfile::TempDir;
 
     use super::auth::PolicyCheck;
-    use super::{ConfigurationUpdates, InputTemplate, Mutation, Query};
-    use super::{export_handler, restore_handler};
+    use super::{
+        export_handler, restore_handler, ConfigurationUpdates, InputTemplate, Mutation, Query,
+    };
     use crate::cli::PolicyOptions;
     use crate::db_service::{ConfigurationError, InstrumentConfiguration, SqliteScanPathService};
     use crate::graphql::graphql_schema;
@@ -1220,7 +1232,7 @@ mod tests {
             Some(122),
             None,
         );
-        cfg.into_update("i22").insert_new(&db).await.unwrap();  
+        cfg.into_update("i22").insert_new(&db).await.unwrap();
 
         let server = TestServer::new(app(db));
         let response = server.get("/admin/export").await;
@@ -1230,8 +1242,7 @@ mod tests {
 
         assert_eq!(configs.len(), 1);
         assert_eq!(configs[0].name(), "i22");
-        assert_eq!(configs[0].scan_number(), 122);    
-
+        assert_eq!(configs[0].scan_number(), 122);
     }
 
     #[rstest]
@@ -1262,7 +1273,6 @@ mod tests {
 
         assert!(configs.is_empty());
     }
-
 }
 #[cfg(test)]
 mod subdirectory_tests {
