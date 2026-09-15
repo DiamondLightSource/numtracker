@@ -26,7 +26,7 @@ use async_graphql::{
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
-use axum::extract::State;
+use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
@@ -119,7 +119,7 @@ async fn restore_handler(
 ) -> Result<String, (StatusCode, String)> {
     db.insert_configurations(&configs, params.force_clear)
         .await
-        .map_err(|e|match e{InsertConfigurationsError::NotEmpty => StatusCode::CONFLICT, InstrumentConfigurationError::Db(_) =>StatusCode::INTERNAL_SERVER_ERROR})?;
+        .map_err(|e|match e{InsertConfigurationsError::NotEmpty => StatusCode::CONFLICT, InsertConfigurationsError::Db(_) =>StatusCode::INTERNAL_SERVER_ERROR});
     Ok("Configurations restored".into())
 }
 
@@ -671,16 +671,21 @@ mod tests {
         SchemaBuilder, Value,
     };
     use axum::http::HeaderValue;
+    use axum::routing::{get, post};
+    use axum::Router;
+    use axum_test::TestServer;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
     use httpmock::MockServer;
+    use opentelemetry_sdk::metrics::Instrument;
     use rstest::{fixture, rstest};
     use tempfile::TempDir;
 
     use super::auth::PolicyCheck;
     use super::{ConfigurationUpdates, InputTemplate, Mutation, Query};
+    use super::{export_handler, restore_handler};
     use crate::cli::PolicyOptions;
-    use crate::db_service::{ConfigurationError, SqliteScanPathService};
+    use crate::db_service::{ConfigurationError, InstrumentConfiguration, SqliteScanPathService};
     use crate::graphql::graphql_schema;
     use crate::numtracker::TempTracker;
 
@@ -786,6 +791,13 @@ mod tests {
             db: components.2,
             server,
         }
+    }
+
+    fn app(db: SqliteScanPathService) -> Router {
+        Router::new()
+            .route("/admin/export", get(export_handler))
+            .route("/admin/restore", post(restore_handler))
+            .with_state(db)
     }
 
     #[rstest]
@@ -1198,6 +1210,32 @@ mod tests {
             include_str!("../../static/service_schema.graphql")
         );
     }
+
+    #[rstest]
+    #[tokio::test]
+    async fn export_single_configuration() {
+        let db = SqliteScanPathService::memory().await;
+        let cfg = updates(
+            Some("/tmp/{instrument}/data/{visit}/"),
+            Some("{subdirectory}/{instrument}-{scan_number}"),
+            Some("{subdirectory}/{instrument}-{scan_number}-{detector}"),
+            Some(122),
+            None,
+        );
+        cfg.into_update("i22").insert_new(&db).await.unwrap();  
+
+        let server = TestServer::new(app(db));
+        let response = server.get("/admin/export").await;
+
+        response.assert_status_ok();
+        let configs: Vec<InstrumentConfiguration> = response.json();
+
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].name(), "i22");
+        assert_eq!(configs[0].scan_number(), 122);    
+
+    }
+
 }
 #[cfg(test)]
 mod subdirectory_tests {
