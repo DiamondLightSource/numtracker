@@ -36,9 +36,8 @@ pub struct SqliteScanPathService {
     pool: SqlitePool,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct RawPathTemplate<F>(String, PhantomData<F>);
-
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct RawPathTemplate<F>(String, #[serde(skip)] PhantomData<F>);
 impl<Spec> RawPathTemplate<Spec>
 where
     Spec: PathSpec,
@@ -173,7 +172,7 @@ impl InstrumentConfigurationUpdate {
 
         trace!(
             instrument = self.name,
-            query = q.sql().as_str(),
+            query = q.sql().as_ref(),
             "Updating instrument configuration",
         );
 

@@ -26,7 +26,7 @@ use async_graphql::{
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
-use axum::extract::{Query, State};
+use axum::extract::{Query as AxumQuery, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
@@ -37,7 +37,6 @@ use axum_extra::TypedHeader;
 use chrono::{Datelike, Local};
 use derive_more::{Display, Error};
 use serde::Deserialize;
-use serde::de::value::MapDeserializer;
 use tokio::net::TcpListener;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
@@ -107,17 +106,17 @@ pub async fn serve_graphql(opts: ServeOptions) {
         .expect("Can't serve graphql endpoint");
 }
 
-async fn export_handler(State(db): State<SqliteScanPathService>,) -> Result<Json<Vec<InstrumentConfiguration>>, (StatusCode)> {
+async fn export_handler(State(db): State<SqliteScanPathService>,) -> Result<Json<Vec<InstrumentConfiguration>>, StatusCode> {
     let configs = db.all_configurations().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(Json(configs))
 }
 
 async fn restore_handler(
     State(db): State<SqliteScanPathService>,
-    Query(params): Query<ImportParams>,
+    AxumQuery(params): AxumQuery<ImportParams>,
     Json(configs): Json<Vec<InstrumentConfiguration>>,
 ) -> Result<String, (StatusCode, String)> {
-    db.insert_configurations(&configs, params.force_clear)
+    let _ =db.insert_configurations(&configs, params.force_clear)
         .await
         .map_err(|e|match e{InsertConfigurationsError::NotEmpty => StatusCode::CONFLICT, InsertConfigurationsError::Db(_) =>StatusCode::INTERNAL_SERVER_ERROR});
     Ok("Configurations restored".into())
@@ -677,7 +676,6 @@ mod tests {
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
     use httpmock::MockServer;
-    use opentelemetry_sdk::metrics::Instrument;
     use rstest::{fixture, rstest};
     use tempfile::TempDir;
 
@@ -1234,6 +1232,35 @@ mod tests {
         assert_eq!(configs[0].name(), "i22");
         assert_eq!(configs[0].scan_number(), 122);    
 
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn export_multiple_configurations(#[future(awt)] db: SqliteScanPathService) {
+        let server = TestServer::new(app(db));
+        let response = server.get("/admin/export").await;
+
+        response.assert_status_ok();
+        let configs: Vec<InstrumentConfiguration> = response.json();
+
+        assert_eq!(configs.len(), 2);
+        assert_eq!(configs[0].name(), "i22");
+        assert_eq!(configs[0].scan_number(), 122);
+        assert_eq!(configs[1].name(), "b21");
+        assert_eq!(configs[1].scan_number(), 621);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn export_empty_database() {
+        let db = SqliteScanPathService::memory().await;
+        let server = TestServer::new(app(db));
+        let response = server.get("/admin/export").await;
+
+        response.assert_status_ok();
+        let configs: Vec<InstrumentConfiguration> = response.json();
+
+        assert!(configs.is_empty());
     }
 
 }
