@@ -123,13 +123,15 @@ async fn restore_handler(
     AxumQuery(params): AxumQuery<ImportParams>,
     Json(configs): Json<Vec<InstrumentConfiguration>>,
 ) -> Result<String, (StatusCode, String)> {
-    let _ = db
-        .insert_configurations(&configs, params.force_clear)
+    db.insert_configurations(&configs, params.force_clear)
         .await
         .map_err(|e| match e {
-            InsertConfigurationsError::NotEmpty => StatusCode::CONFLICT,
-            InsertConfigurationsError::Db(_) => StatusCode::INTERNAL_SERVER_ERROR,
-        });
+            InsertConfigurationsError::NotEmpty => (
+                StatusCode::CONFLICT,
+                "Configurations already exist".to_string(),
+            ),
+            InsertConfigurationsError::Db(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        })?;
     Ok("Configurations restored".into())
 }
 
@@ -687,6 +689,7 @@ mod tests {
     use axum_extra::headers::Authorization;
     use axum_test::TestServer;
     use httpmock::MockServer;
+    use reqwest::StatusCode;
     use rstest::{fixture, rstest};
     use tempfile::TempDir;
 
@@ -1272,6 +1275,30 @@ mod tests {
         let configs: Vec<InstrumentConfiguration> = response.json();
 
         assert!(configs.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn restore_rejects_non_empty_database() {
+        let db = SqliteScanPathService::memory().await;
+        let cfg = updates(
+            Some("/tmp/{instrument}/data/{visit}/"),
+            Some("{subdirectory}/{instrument}-{scan_number}"),
+            Some("{subdirectory}/{instrument}-{scan_number}-{detector}"),
+            Some(122),
+            None,
+        );
+        cfg.into_update("i22").insert_new(&db).await.unwrap();
+
+        let existing = db.all_configurations().await.unwrap();
+
+        let server = TestServer::new(app(db.clone()));
+        let response = server.post("/admin/restore").json(&existing).await;
+
+        response.assert_status(StatusCode::CONFLICT);
+
+        assert_eq!(db.all_configurations().await.unwrap()[0].name(), "i22");
+        assert_eq!(db.all_configurations().await.unwrap()[0].scan_number(), 122);
     }
 }
 #[cfg(test)]
