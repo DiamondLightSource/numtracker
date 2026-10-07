@@ -43,12 +43,9 @@ pub struct AccessRequest<'a> {
     token: &'a str,
     audience: &'a str,
     proposal: u32,
-    // This should stay as visit instead of instrument session number until the
-    // rules in the authz service are updated.
-    visit: u16,
-    // This should stay as beamline instead of instrument until the rules in the authz service are
-    // updated to use instrument
-    beamline: &'a str,
+    proposal_category: String,
+    instrument_session: u16,
+    instrument: &'a str,
 }
 
 impl<'a> AccessRequest<'a> {
@@ -61,8 +58,9 @@ impl<'a> AccessRequest<'a> {
             token: token.ok_or(AuthError::Missing)?.token(),
             audience: AUDIENCE,
             proposal: instrument_session.proposal,
-            visit: instrument_session.session,
-            beamline: instrument,
+            proposal_category: instrument_session.category,
+            instrument_session: instrument_session.session,
+            instrument,
         })
     }
 }
@@ -71,10 +69,8 @@ impl<'a> AccessRequest<'a> {
 pub struct AdminRequest<'a> {
     token: &'a str,
     audience: &'a str,
-    // This should stay as beamline instead of instrument until the rules in the authz service are
-    // updated to use instrument
     #[serde(skip_serializing_if = "Option::is_none")]
-    beamline: Option<&'a str>,
+    instrument: Option<&'a str>,
 }
 
 impl<'r> AdminRequest<'r> {
@@ -82,7 +78,7 @@ impl<'r> AdminRequest<'r> {
         Ok(Self {
             token: token.ok_or(AuthError::Missing)?.token(),
             audience: AUDIENCE,
-            beamline: instrument,
+            instrument,
         })
     }
 }
@@ -92,6 +88,8 @@ struct InvalidInstrumentSession;
 
 #[cfg_attr(test, derive(Debug))]
 struct InstrumentSession {
+    /// Proposal category code, eg CM for cm12345-1
+    category: String,
     proposal: u32,
     session: u16,
 }
@@ -100,13 +98,20 @@ impl FromStr for InstrumentSession {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (code_prop, vis) = s.split_once('-').ok_or(InvalidInstrumentSession)?;
-        let prop = code_prop
-            .chars()
-            .skip_while(|p| !p.is_ascii_digit())
-            .collect::<String>();
+        let split = code_prop
+            .find(|c: char| c.is_ascii_digit())
+            .ok_or(InvalidInstrumentSession)?;
+        let (category, prop) = code_prop.split_at(split);
+        if category.is_empty() || !category.chars().all(|c| c.is_ascii_alphabetic()) {
+            return Err(InvalidInstrumentSession);
+        }
         let proposal = prop.parse().map_err(|_| InvalidInstrumentSession)?;
         let session = vis.parse().map_err(|_| InvalidInstrumentSession)?;
-        Ok(Self { proposal, session })
+        Ok(Self {
+            category: category.to_ascii_uppercase(),
+            proposal,
+            session,
+        })
     }
 }
 
@@ -114,6 +119,8 @@ pub(crate) struct PolicyCheck {
     client: reqwest::Client,
     /// Rego query for getting admin rights
     admin: String,
+    /// Rego query for getting admin rights for a single instrument
+    instrument_admin: String,
     /// Rego query for getting access rights
     access: String,
 }
@@ -121,16 +128,21 @@ pub(crate) struct PolicyCheck {
 impl PolicyCheck {
     pub fn new(endpoint: PolicyOptions) -> Self {
         info!(
-            "Checking authorization against {:?} using {:?} for admin and {:?} for access",
-            endpoint.policy_host, endpoint.admin_query, endpoint.access_query
+            "Checking authorization against {:?} using {:?} for admin, {:?} for instrument admin and {:?} for access",
+            endpoint.policy_host,
+            endpoint.admin_query,
+            endpoint.instrument_admin_query,
+            endpoint.access_query
         );
 
         let host = endpoint.policy_host.trim_end_matches('/');
+        let query = |q: &str| format!("{}/{}", host, q.trim_start_matches('/'));
 
         Self {
             client: reqwest::Client::new(),
-            admin: format!("{}/{}", host, endpoint.admin_query.trim_start_matches('/')),
-            access: format!("{}/{}", host, endpoint.access_query.trim_start_matches('/')),
+            admin: query(&endpoint.admin_query),
+            instrument_admin: query(&endpoint.instrument_admin_query),
+            access: query(&endpoint.access_query),
         }
     }
     pub async fn check_access(
@@ -161,8 +173,11 @@ impl PolicyCheck {
         token: Option<&Authorization<Bearer>>,
         instrument: &str,
     ) -> Result<(), AuthError> {
-        self.authorise(&self.admin, AdminRequest::new(token, Some(instrument))?)
-            .await
+        self.authorise(
+            &self.instrument_admin,
+            AdminRequest::new(token, Some(instrument))?,
+        )
+        .await
     }
 
     async fn authorise(&self, query: &str, input: impl Serialize) -> Result<(), AuthError> {
@@ -226,6 +241,7 @@ mod tests {
     #[test]
     fn valid_instrument_session() {
         let session = InstrumentSession::from_str("cm12345-1").unwrap();
+        assert_eq!(session.category, "CM");
         assert_eq!(session.session, 1);
         assert_eq!(session.proposal, 12345);
     }
@@ -236,6 +252,8 @@ mod tests {
     #[case::invalid_session("cm12345-abc")]
     #[case::invalid_proposal("cm123abc-12")]
     #[case::negative_session("cm1234--12")]
+    #[case::no_category("12345-1")]
+    #[case::non_alphabetic_category("c.12345-1")]
     fn invalid_instrument_session(#[case] instrument_session: &str) {
         assert_matches!(
             InstrumentSession::from_str(instrument_session),
@@ -253,9 +271,10 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
-                            "visit": 4,
+                            "instrument": "i22",
+                            "instrument_session": 4,
                             "proposal": 1234,
+                            "proposal_category": "CM",
                             "audience": "account"
                         }
                     }));
@@ -266,6 +285,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         check
             .check_access(token("token").as_ref(), "i22", "cm1234-4")
@@ -284,9 +304,10 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
-                            "visit": 4,
+                            "instrument": "i22",
+                            "instrument_session": 4,
                             "proposal": 1234,
+                            "proposal_category": "CM",
                             "audience": "account"
                         }
                     }));
@@ -297,6 +318,7 @@ mod tests {
             policy_host: server.url("/"),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         check
             .check_access(token("token").as_ref(), "i22", "cm1234-4")
@@ -315,9 +337,10 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
-                            "visit": 4,
+                            "instrument": "i22",
+                            "instrument_session": 4,
                             "proposal": 1234,
+                            "proposal_category": "CM",
                             "audience": "account"
                         }
                     }));
@@ -328,6 +351,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "/demo/access".into(),
             admin_query: "/demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         check
             .check_access(token("token").as_ref(), "i22", "cm1234-4")
@@ -342,11 +366,11 @@ mod tests {
         let mock = server
             .mock_async(|when, then| {
                 when.method("POST")
-                    .path("/demo/admin")
+                    .path("/demo/instrument_admin")
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
+                            "instrument": "i22",
                             "audience": "account"
                         }
                     }));
@@ -357,6 +381,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         check
             .check_instrument_admin(token("token").as_ref(), "i22")
@@ -385,6 +410,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         check.check_admin(token("token").as_ref()).await.unwrap();
         mock.assert();
@@ -400,9 +426,10 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
+                            "instrument": "i22",
                             "proposal": 1234,
-                            "visit": 4,
+                            "proposal_category": "CM",
+                            "instrument_session": 4,
                             "audience": "account"
                         }
                     }));
@@ -413,6 +440,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
 
         let result = check
@@ -430,11 +458,11 @@ mod tests {
         let mock = server
             .mock_async(|when, then| {
                 when.method("POST")
-                    .path("/demo/admin")
+                    .path("/demo/instrument_admin")
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
+                            "instrument": "i22",
                             "audience": "account"
                         }
                     }));
@@ -445,6 +473,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")
@@ -476,6 +505,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         let result = check.check_admin(token("token").as_ref()).await;
 
@@ -497,6 +527,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         let result = check.check_access(None, "i22", "cm1234-4").await;
 
@@ -518,6 +549,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         let result = check.check_instrument_admin(None, "i22").await;
 
@@ -539,6 +571,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         let result = check.check_admin(None).await;
 
@@ -561,6 +594,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            instrument_admin_query: "demo/instrument_admin".into(),
         });
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")

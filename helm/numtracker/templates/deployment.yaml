@@ -62,6 +62,8 @@ spec:
               value: {{ .Values.numtracker.auth.access }}
             - name: NUMTRACKER_AUTH_ADMIN
               value: {{ .Values.numtracker.auth.admin }}
+            - name: NUMTRACKER_AUTH_INSTRUMENT_ADMIN
+              value: {{ .Values.numtracker.auth.instrumentAdmin }}
             {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}

@@ -32,7 +32,8 @@ numtracker:
   auth:
     enabled: false
     # host: OPA instance
-    # admin: rule determining admin access to an instrument
+    # admin: rule determining admin access
+    # instrumentAdmin: rule determining admin access to an instrument
     # access: rule determining access to an instrument session
 
 

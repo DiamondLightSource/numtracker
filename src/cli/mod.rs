@@ -103,14 +103,19 @@ pub struct PolicyOptions {
     pub policy_host: String,
     /// The Rego rule used to generate instrument access data
     ///
-    /// eg. v1/data/diamond/policy/session/write_to_beamline_visit
+    /// eg. v1/data/diamond/session/access
     #[clap(long, required = false, env = "NUMTRACKER_AUTH_ACCESS")]
     pub access_query: String,
     /// The Rego rule used to generate admin access data
     ///
-    /// eg. v1/data/diamond/policy/admin/configure_beamline
+    /// eg. v1/data/diamond/admin/admin
     #[clap(long, required = false, env = "NUMTRACKER_AUTH_ADMIN")]
     pub admin_query: String,
+    /// The Rego rule used to generate admin access data for a single instrument
+    ///
+    /// eg. v1/data/diamond/admin/configure_instrument
+    #[clap(long, required = false, env = "NUMTRACKER_AUTH_INSTRUMENT_ADMIN")]
+    pub instrument_admin_query: String,
 }
 
 #[derive(Debug, Args)]
@@ -256,6 +261,8 @@ mod tests {
             "demo/admin_check",
             "--access-query",
             "demo/access_check",
+            "--instrument-admin-query",
+            "demo/instrument_admin_check",
         ])
         .unwrap();
         let cmd = assert_matches!(cli.command, Command::Serve(cmd) => cmd);
@@ -264,6 +271,23 @@ mod tests {
         assert_eq!(policy.policy_host, "opa.example.com");
         assert_eq!(policy.admin_query, "demo/admin_check");
         assert_eq!(policy.access_query, "demo/access_check");
+        assert_eq!(policy.instrument_admin_query, "demo/instrument_admin_check");
+    }
+
+    #[test]
+    fn missing_instrument_admin_query() {
+        let err = Cli::try_parse_from([
+            APP,
+            "serve",
+            "--policy",
+            "opa.example.com",
+            "--admin-query",
+            "demo/admin-query",
+            "--access-query",
+            "demo/access-query",
+        ])
+        .unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
     }
 
     #[test]
@@ -275,6 +299,8 @@ mod tests {
             "opa.example.com",
             "--access-query",
             "demo/access-query",
+            "--instrument-admin-query",
+            "demo/instrument-admin-query",
         ])
         .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
@@ -289,6 +315,8 @@ mod tests {
             "opa.example.com",
             "--admin-query",
             "demo/admin-query",
+            "--instrument-admin-query",
+            "demo/instrument-admin-query",
         ])
         .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
@@ -303,6 +331,8 @@ mod tests {
             "demo/access-query",
             "--admin-query",
             "demo/admin-query",
+            "--instrument-admin-query",
+            "demo/instrument-admin-query",
         ])
         .unwrap_err();
         assert_eq!(err.kind(), ErrorKind::MissingRequiredArgument);
