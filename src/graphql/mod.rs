@@ -14,6 +14,7 @@
 
 use std::any;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::future::Future;
 use std::io::Write;
 use std::path::{Component, PathBuf};
@@ -160,12 +161,19 @@ struct DirectoryPath {
 struct ScanPaths {
     directory: DirectoryPath,
     subdirectory: Subdirectory,
+    metadata: HashMap<String, String>,
 }
 
 /// GraphQL type to provide current configuration for an instrument
 struct CurrentConfiguration {
     db_config: InstrumentConfiguration,
     high_file: Option<u32>,
+}
+
+#[derive(Debug, InputObject)]
+struct MetaKeyValue {
+    key: String,
+    value: String,
 }
 
 /// Error to be returned when a path contains non-unicode characters
@@ -323,6 +331,12 @@ impl FieldSource<ScanField> for ScanPaths {
             ScanField::Subdirectory => self.subdirectory.to_string().into(),
             ScanField::ScanNumber => self.directory.info.scan_number().to_string().into(),
             ScanField::Directory(dir) => self.directory.resolve(dir),
+            ScanField::Custom(key) => self
+                .metadata
+                .get(key)
+                .map(|s| s.as_str())
+                .unwrap_or("")
+                .into(),
         }
     }
 }
@@ -412,6 +426,7 @@ impl Mutation {
         instrument: String,
         instrument_session: String,
         sub: Option<Subdirectory>,
+        meta: Option<Vec<MetaKeyValue>>,
     ) -> async_graphql::Result<ScanPaths> {
         check_auth(ctx, |policy, token| {
             policy.check_access(token, &instrument, &instrument_session)
@@ -435,11 +450,18 @@ impl Mutation {
             warn!("Failed to increment tracker file: {e}");
         }
 
+        let metadata = meta
+            .into_iter()
+            .flatten()
+            .map(|kv| (kv.key, kv.value))
+            .collect();
+
         Ok(ScanPaths {
             directory: DirectoryPath {
                 instrument_session,
                 info: next_scan,
             },
+            metadata,
             subdirectory: sub.unwrap_or_default(),
         })
     }
