@@ -124,6 +124,17 @@ type Mutation {
 	Add or modify the stored configuration for an instrument
 	"""
 	configure(instrument: String!, config: ConfigurationUpdates!): CurrentConfiguration!
+	registerTemplate(instrument: String!, template: NamedTemplateInput!): NamedTemplate!
+}
+
+type NamedTemplate {
+	name: String!
+	template: String!
+}
+
+input NamedTemplateInput {
+	name: String!
+	template: ScanTemplate!
 }
 
 """
@@ -144,6 +155,7 @@ type Query {
 	Can be filtered to provide one or more specific instruments
 	"""
 	configurations(instrumentFilters: [String!]): [CurrentConfiguration!]!
+	namedTemplates(instrument: String!, names: [String!]): [NamedTemplate!]!
 }
 
 """
@@ -163,6 +175,7 @@ type ScanPaths {
 	The scan number for this scan. This should be unique for the requested instrument.
 	"""
 	scanNumber: Int!
+	template(name: String!): String!
 	"""
 	The paths where the given detectors should write their files.
 	

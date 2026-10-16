@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name, template FROM instrument_template WHERE instrument = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "template",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "4323ce25def2ee41c1019820cad67f86fe119aa5b5d7f36e49bece9ab6048c38"
+}
