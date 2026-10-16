@@ -21,14 +21,15 @@ pub enum ClientError {
 
 pub async fn run_client(options: ClientOptions) {
     let ClientOptions {
-        connection,
+        host,
+        auth,
         command,
     } = options;
 
     let conf = match ClientConfiguration::from_default_file().await {
         Ok(conf) => {
             info!("Configuration from file: {conf}");
-            conf.with_host(connection.host).with_auth(connection.auth)
+            conf.with_host(host).with_auth(auth)
         }
         Err(e) => {
             println!("Could not read configuration: {e}");
@@ -92,15 +93,15 @@ struct ConfigureMutation;
 
 impl NumtrackerClient {
     async fn from_config(config: ClientConfiguration) -> Result<Self, ClientError> {
+        let auth = match config.auth_config() {
+            Some((auth, client_id)) => Some(cli_auth::get_access_token(auth, client_id).await?),
+            None => None,
+        };
+
         let host = config.host.unwrap_or_else(|| {
             info!("No host specified, defaulting to localhost:8000");
             Url::parse("http://localhost:8000").expect("Constant URL is valid")
         });
-
-        let auth = match config.auth {
-            Some(auth) => Some(cli_auth::get_access_token(&auth).await?),
-            None => None,
-        };
         info!("Querying {host} with auth: {auth:?}");
         Ok(NumtrackerClient { auth, host })
     }
