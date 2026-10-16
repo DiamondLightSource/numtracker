@@ -16,8 +16,9 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::path::Path;
 
-pub use error::ConfigurationError;
 use error::NewConfigurationError;
+pub use error::{ConfigurationError, InsertConfigurationsError};
+use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteRow};
 use sqlx::{query_as, FromRow, QueryBuilder, Row, Sqlite, SqlitePool};
 use tracing::{info, instrument, trace};
@@ -35,9 +36,8 @@ pub struct SqliteScanPathService {
     pool: SqlitePool,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct RawPathTemplate<F>(String, PhantomData<F>);
-
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+struct RawPathTemplate<F>(String, #[serde(skip)] PhantomData<F>);
 impl<Spec> RawPathTemplate<Spec>
 where
     Spec: PathSpec,
@@ -60,7 +60,7 @@ impl<F> From<&str> for RawPathTemplate<F> {
 }
 
 /// The current configuration for an instrument
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstrumentConfiguration {
     name: String,
     scan_number: u32,
@@ -172,7 +172,7 @@ impl InstrumentConfigurationUpdate {
 
         trace!(
             instrument = self.name,
-            query = q.sql().as_str(),
+            query = q.sql().as_ref(),
             "Updating instrument configuration",
         );
 
@@ -220,7 +220,7 @@ impl InstrumentConfigurationUpdate {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 struct DbInstrumentConfig {
     #[allow(unused)] // unused but allows use of 'SELECT * ...' queries
     id: Option<i64>,
@@ -323,6 +323,48 @@ impl SqliteScanPathService {
             .collect())
     }
 
+    pub async fn insert_configurations(
+        &self,
+        configs: &[InstrumentConfiguration],
+        force_clear: bool,
+    ) -> Result<(), InsertConfigurationsError> {
+        let mut tx = self.pool.begin().await?;
+
+        if force_clear {
+            //User has chosen to overwrite existing data so delete the table before inserting new rows
+            sqlx::query!("DELETE FROM instrument")
+                .execute(&mut *tx)
+                .await?;
+        } else if !configs.is_empty() {
+            // maybe get rid of this
+            // Not forcing clear, check if table is empty
+            let (count,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM instrument")
+                .fetch_one(&mut *tx)
+                .await?;
+            if count > 0 {
+                //Table not empty, do not clear
+                return Err(InsertConfigurationsError::NotEmpty);
+            }
+        }
+
+        for config in configs {
+            sqlx::query!(
+                "INSERT INTO instrument (name, scan_number, directory, scan, detector, tracker_file_extension) VALUES (?, ?, ?, ?, ?, ?)",
+                config.name,
+                config.scan_number,
+                config.directory.0,
+                config.scan.0,
+                config.detector.0,
+                config.tracker_file_extension
+            )
+            .execute(&mut *tx)
+            .await?;
+        }
+
+        tx.commit().await?;
+        Ok(())
+    }
+
     pub async fn next_scan_configuration(
         &self,
         instrument: &str,
@@ -391,6 +433,15 @@ mod error {
         fn from(value: &str) -> Self {
             Self::MissingField(value.into())
         }
+    }
+
+    #[derive(Debug, Display, Error, From)]
+    pub enum InsertConfigurationsError {
+        #[display("Instrument table not empty and force_clear not set to true")]
+        NotEmpty,
+        #[from]
+        #[display("Error inserting configurations: {_0}")]
+        Db(sqlx::Error),
     }
 }
 
