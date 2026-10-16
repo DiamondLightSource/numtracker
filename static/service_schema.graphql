@@ -112,6 +112,11 @@ A template describing the path to the data directory for a given instrument sess
 """
 scalar DirectoryTemplate
 
+input MetaKeyValue {
+	key: String!
+	value: String!
+}
+
 """
 Queries that modify the state of the numtracker configuration in some way
 """
@@ -119,7 +124,7 @@ type Mutation {
 	"""
 	Generate scan file locations for the next scan
 	"""
-	scan(instrument: String!, instrumentSession: String!, sub: Subdirectory): ScanPaths!
+	scan(instrument: String!, instrumentSession: String!, sub: Subdirectory, meta: [MetaKeyValue!]): ScanPaths!
 	"""
 	Add or modify the stored configuration for an instrument
 	"""

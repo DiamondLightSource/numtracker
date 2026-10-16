@@ -32,7 +32,7 @@ pub enum DirectoryField {
     Instrument,
 }
 
-#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
 pub enum ScanField {
     #[display("subdirectory")]
     Subdirectory,
@@ -40,9 +40,11 @@ pub enum ScanField {
     ScanNumber,
     #[display("{_0}")]
     Directory(DirectoryField),
+    #[display("{_0}")]
+    Custom(String),
 }
 
-#[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
 pub enum DetectorField {
     #[display("detector")]
     Detector,
@@ -73,7 +75,10 @@ impl TryFrom<String> for ScanField {
         match value.as_str() {
             "scan_number" => Ok(ScanField::ScanNumber),
             "subdirectory" => Ok(ScanField::Subdirectory),
-            _ => Ok(ScanField::Directory(DirectoryField::try_from(value)?)),
+            _ => match DirectoryField::try_from(value) {
+                Ok(bf) => Ok(ScanField::Directory(bf)),
+                Err(InvalidKey(value)) => Ok(ScanField::Custom(value)),
+            },
         }
     }
 }
@@ -235,7 +240,6 @@ mod paths_tests {
     #[case::invalid_path_incomplete("data/{unclosed", TemplateErrorType::Incomplete)]
     #[case::invalid_path_empty("data/{}", TemplateErrorType::Empty)]
     #[case::invalid_path_nested("data/{nes{ted}}", TemplateErrorType::Nested)]
-    #[case::invalid_path_unrecognised("data/{detector}", TemplateErrorType::Unrecognised)]
     fn invalid_scan<E: PartialEq<InvalidPathTemplate> + Debug>(
         #[case] template: &str,
         #[case] err: E,
@@ -251,7 +255,6 @@ mod paths_tests {
     #[case::invalid_path_incomplete("data/{unclosed", TemplateErrorType::Incomplete)]
     #[case::invalid_path_empty("data/{}", TemplateErrorType::Empty)]
     #[case::invalid_path_nested("data/{nes{ted}}", TemplateErrorType::Nested)]
-    #[case::invalid_path_unrecognised("data/{unknown}", TemplateErrorType::Unrecognised)]
     fn invalid_detector<E: PartialEq<InvalidPathTemplate> + Debug>(
         #[case] template: &str,
         #[case] err: E,
