@@ -248,7 +248,7 @@ impl DbInstrumentConfig {
             self.directory,
             self.scan,
             self.detector,
-            self.tracker_file_extension
+            self.tracker_file_extension.filter(|ext| ext != &self.name),
         )
         .fetch_one(&db.pool)
         .await?;
@@ -676,6 +676,14 @@ mod db_tests {
         let db = SqliteScanPathService::memory().await;
         let upd = InstrumentConfigurationUpdate::empty("b21");
         assert!(ok!(upd.update_instrument(&db)).is_none());
+    }
+
+    #[tokio::test]
+    async fn extension_matching_instrument() {
+        let db = SqliteScanPathService::memory().await;
+
+        let cfg = ok!(update("i22").with_extension("i22").insert_new(&db));
+        assert_eq!(cfg.tracker_file_extension(), None)
     }
 
     #[tokio::test]
