@@ -160,11 +160,10 @@ impl InstrumentConfigurationUpdate {
             fields.push_bind_unseparated(detector.to_string());
         }
         if let Some(ext) = &self.tracker_file_extension {
-            if ext != &self.name {
-                // extension defaults to instrument name
-                fields.push("tracker_file_extension=");
-                fields.push_bind_unseparated(ext);
-            }
+            fields.push("tracker_file_extension=");
+            // If value matches instrument, set back to NULL and rely on instrument being default
+            let value = (ext != &self.name).then_some(ext);
+            fields.push_bind_unseparated(value);
         }
         q.push(" WHERE name = ");
         q.push_bind(&self.name);
@@ -728,5 +727,32 @@ mod db_tests {
         let db = SqliteScanPathService::memory().await;
         let upd = InstrumentConfigurationUpdate::empty("b21");
         assert!(ok!(upd.update_instrument(&db)).is_none());
+    }
+
+    #[tokio::test]
+    async fn reset_file_extension() {
+        let db = SqliteScanPathService::memory().await;
+
+        // Insert new config without extension defaults to None
+        let initial = ok!(update("i22").insert_new(&db));
+        assert_eq!(initial.tracker_file_extension(), None);
+
+        // Updating to a new extension set it as expected
+        let upd = InstrumentConfigurationUpdate::empty("i22").with_extension("other");
+        assert_eq!(
+            ok!(upd.update_instrument(&db))
+                .unwrap()
+                .tracker_file_extension(),
+            Some("other")
+        );
+
+        // Setting the extension back to match instrument clears it
+        let upd = InstrumentConfigurationUpdate::empty("i22").with_extension("i22");
+        assert_eq!(
+            ok!(upd.update_instrument(&db))
+                .unwrap()
+                .tracker_file_extension(),
+            None
+        );
     }
 }
