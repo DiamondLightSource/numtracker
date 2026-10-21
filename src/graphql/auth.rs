@@ -14,6 +14,7 @@
 
 use std::str::FromStr;
 
+use async_graphql::{Error, ErrorExtensions};
 use axum_extra::headers::authorization::Bearer;
 use axum_extra::headers::Authorization;
 use derive_more::{Display, Error, From};
@@ -123,10 +124,13 @@ impl PolicyCheck {
             "Checking authorization against {:?} using {:?} for admin and {:?} for access",
             endpoint.policy_host, endpoint.admin_query, endpoint.access_query
         );
+
+        let host = endpoint.policy_host.trim_end_matches('/');
+
         Self {
             client: reqwest::Client::new(),
-            admin: format!("{}/{}", endpoint.policy_host, endpoint.admin_query),
-            access: format!("{}/{}", endpoint.policy_host, &endpoint.access_query),
+            admin: format!("{}/{}", host, endpoint.admin_query.trim_start_matches('/')),
+            access: format!("{}/{}", host, endpoint.access_query.trim_start_matches('/')),
         }
     }
     pub async fn check_access(
@@ -186,15 +190,27 @@ pub enum AuthError {
     Missing,
 }
 
+impl ErrorExtensions for AuthError {
+    fn extend(&self) -> Error {
+        self.extend_with(|err, e| match err {
+            AuthError::ServerError(_) => e.set("code", "AUTH_SERVER_ERROR"),
+            AuthError::Failed => e.set("code", "AUTH_FAILED"),
+            AuthError::Missing => e.set("code", "AUTH_MISSING"),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::str::FromStr as _;
 
     use assert_matches::assert_matches;
+    use async_graphql::{ErrorExtensions, Value};
     use axum::http::HeaderValue;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
     use httpmock::MockServer;
+    use reqwest::Client;
     use rstest::rstest;
     use serde_json::json;
 
@@ -250,6 +266,68 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+        });
+        check
+            .check_access(token("token").as_ref(), "i22", "cm1234-4")
+            .await
+            .unwrap();
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn successful_check_access_with_trailing_slash_on_host() {
+        let server = MockServer::start();
+        let mock = server
+            .mock_async(|when, then| {
+                when.method("POST")
+                    .path("/demo/access")
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "beamline": "i22",
+                            "visit": 4,
+                            "proposal": 1234,
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": true}));
+            })
+            .await;
+        let check = PolicyCheck::new(PolicyOptions {
+            policy_host: server.url("/"),
+            access_query: "demo/access".into(),
+            admin_query: "demo/admin".into(),
+        });
+        check
+            .check_access(token("token").as_ref(), "i22", "cm1234-4")
+            .await
+            .unwrap();
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn successful_check_access_with_leading_slashes() {
+        let server = MockServer::start();
+        let mock = server
+            .mock_async(|when, then| {
+                when.method("POST")
+                    .path("/demo/access")
+                    .json_body_obj(&json!({
+                        "input": {
+                            "token": "token",
+                            "beamline": "i22",
+                            "visit": 4,
+                            "proposal": 1234,
+                            "audience": "account"
+                        }
+                    }));
+                then.status(200).json_body_obj(&json!({"result": true}));
+            })
+            .await;
+        let check = PolicyCheck::new(PolicyOptions {
+            policy_host: server.url(""),
+            access_query: "/demo/access".into(),
+            admin_query: "/demo/admin".into(),
         });
         check
             .check_access(token("token").as_ref(), "i22", "cm1234-4")
@@ -371,6 +449,7 @@ mod tests {
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")
             .await;
+
         let Err(AuthError::Failed) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -399,6 +478,7 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_admin(token("token").as_ref()).await;
+
         let Err(AuthError::Failed) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
@@ -419,10 +499,11 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_access(None, "i22", "cm1234-4").await;
+
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
-        mock.assert_hits(0);
+        mock.assert_calls(0);
     }
 
     #[tokio::test]
@@ -439,10 +520,11 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_instrument_admin(None, "i22").await;
+
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
-        mock.assert_hits(0);
+        mock.assert_calls(0);
     }
 
     #[tokio::test]
@@ -459,10 +541,11 @@ mod tests {
             admin_query: "demo/admin".into(),
         });
         let result = check.check_admin(None).await;
+
         let Err(AuthError::Missing) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
-        mock.assert_hits(0);
+        mock.assert_calls(0);
     }
 
     #[tokio::test]
@@ -482,9 +565,24 @@ mod tests {
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")
             .await;
+
         let Err(AuthError::ServerError(_)) = result else {
             panic!("Unexpected result from unauthorised check: {result:?}");
         };
         mock.assert();
+    }
+
+    #[rstest]
+    #[case::server_error(AuthError::ServerError(Client::new().get("invalid").build().unwrap_err()), "AUTH_SERVER_ERROR")]
+    #[case::failed(AuthError::Failed, "AUTH_FAILED")]
+    #[case::missing(AuthError::Missing, "AUTH_MISSING")]
+    #[tokio::test]
+
+    async fn auth_error_extensions(#[case] input: AuthError, #[case] expected: String) {
+        let e = input.extend();
+        let extensions = e.extensions.expect("Error should have extensions");
+        let code = extensions.get("code").unwrap();
+
+        assert_eq!(code, &Value::String(expected))
     }
 }

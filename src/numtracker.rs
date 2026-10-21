@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use std::collections::HashMap;
+use std::fs::Permissions;
 use std::io::Error;
+use std::os::unix::fs::PermissionsExt as _;
 use std::path::{Path, PathBuf};
 
 use derive_more::{Display, Error};
@@ -21,7 +23,7 @@ use derive_more::{Display, Error};
 pub use tests::TempTracker;
 use tokio::fs as async_fs;
 use tokio::sync::{Mutex, MutexGuard};
-use tracing::{info, instrument, trace};
+use tracing::{info, instrument, trace, warn};
 
 /// Central controller to access external directory trackers. Prevents concurrent access to the same
 /// instrument's directory.
@@ -123,11 +125,25 @@ impl GdaNumTracker<'_, '_> {
     async fn create_num_file(&self, num: u32) -> Result<(), Error> {
         trace!("Creating new scan number file: {num}.{}", self.ext);
         let next = self.file_name(num);
-        async_fs::OpenOptions::new()
+        let num_file = async_fs::OpenOptions::new()
             .create_new(true)
             .write(true)
-            .open(next)
+            .open(&next)
             .await?;
+
+        // Make file world writable so GDA or other processes can delete it
+        // Set permissions after file creation to prevent umask interfering
+        if let Err(e) = num_file
+            .set_permissions(Permissions::from_mode(0o666))
+            .await
+        {
+            // If it fails it's awkward but non-fatal so log and carry on
+            warn!(
+                "Failed to set file permissions on number file '{}': {e}",
+                next.display()
+            )
+        }
+
         if let Some(prev) = num.checked_sub(1) {
             let prev = self.file_name(prev);
             let _ = async_fs::remove_file(prev).await;

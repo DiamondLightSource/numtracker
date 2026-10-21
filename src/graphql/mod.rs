@@ -22,8 +22,8 @@ use std::path::{Component, PathBuf};
 use async_graphql::extensions::Tracing;
 use async_graphql::http::GraphiQLSource;
 use async_graphql::{
-    Context, Description, EmptySubscription, InputObject, InputValueError, InputValueResult,
-    Object, Scalar, ScalarType, Schema, SimpleObject, TypeName, Value,
+    Context, Description, EmptySubscription, ErrorExtensions, InputObject, InputValueError,
+    InputValueResult, Object, Scalar, ScalarType, Schema, SimpleObject, TypeName, Value,
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
@@ -37,6 +37,8 @@ use axum_extra::TypedHeader;
 use chrono::{Datelike, Local};
 use derive_more::{Display, Error};
 use tokio::net::TcpListener;
+use tokio::select;
+use tokio::signal::unix::{signal, SignalKind};
 use tracing::{debug, info, instrument, trace, warn};
 
 use crate::build_info::ServerStatus;
@@ -96,8 +98,21 @@ pub async fn serve_graphql(opts: ServeOptions) {
         .await
         .unwrap_or_else(|e| panic!("Could not listen on {:?}:{}: {e}", addr.0, addr.1));
     axum::serve(listener, app)
+        .with_graceful_shutdown(create_signal_handler())
         .await
         .expect("Can't serve graphql endpoint");
+}
+
+async fn create_signal_handler() {
+    let mut term = signal(SignalKind::terminate()).expect("Failed to create SIGTERM listener");
+    let mut int = signal(SignalKind::interrupt()).expect("Failed to create SIGINT listener");
+    let mut quit = signal(SignalKind::quit()).expect("Failed to create SIGQUIT listener");
+    let sig = select! {
+        _ = term.recv() => "SIGTERM",
+        _ = int.recv() => "SIGINT",
+        _ = quit.recv() => "SIGQUIT",
+    };
+    info!("Server interrupted by {sig}");
 }
 
 pub fn graphql_schema<W: Write>(mut out: W) -> Result<(), std::io::Error> {
@@ -258,8 +273,8 @@ impl ScanPaths {
 /// The current configuration for an instrument
 impl CurrentConfiguration {
     /// The name of the instrument
-    pub async fn instrument(&self) -> async_graphql::Result<&str> {
-        Ok(self.db_config.name())
+    pub async fn instrument(&self) -> &str {
+        self.db_config.name()
     }
     /// The template used to build the path to the data directory for an instrument
     pub async fn directory_template(&self) -> async_graphql::Result<String> {
@@ -278,19 +293,19 @@ impl CurrentConfiguration {
     /// The latest scan number stored in the DB. This is the last scan number provided by this
     /// service but may not reflect the most recent scan number for an instrument if an external
     /// service (eg GDA) has incremented its own number tracker.
-    pub async fn db_scan_number(&self) -> async_graphql::Result<u32> {
-        Ok(self.db_config.scan_number())
+    pub async fn db_scan_number(&self) -> u32 {
+        self.db_config.scan_number()
     }
     /// The highest matching number file for this instrument in the configured tracking directory.
     /// May be null if no directory is available for this instrument or if there are no matching
     /// number files.
-    pub async fn file_scan_number(&self) -> async_graphql::Result<Option<u32>> {
-        Ok(self.high_file)
+    pub async fn file_scan_number(&self) -> Option<u32> {
+        self.high_file
     }
     /// The file extension used for the file based tracking, eg using an extension of 'ext'
     /// would create files `1.ext`, `2.ext` etc
-    pub async fn tracker_file_extension(&self) -> async_graphql::Result<Option<&str>> {
-        Ok(self.db_config.tracker_file_extension())
+    pub async fn tracker_file_extension(&self) -> Option<&str> {
+        self.db_config.tracker_file_extension()
     }
 }
 
@@ -405,9 +420,9 @@ impl Query {
 impl Mutation {
     /// Generate scan file locations for the next scan
     #[instrument(skip(self, ctx))]
-    async fn scan<'ctx>(
+    async fn scan(
         &self,
-        ctx: &Context<'ctx>,
+        ctx: &Context<'_>,
         instrument: String,
         instrument_session: String,
         sub: Option<Subdirectory>,
@@ -453,9 +468,9 @@ impl Mutation {
 
     /// Add or modify the stored configuration for an instrument
     #[instrument(skip(self, ctx))]
-    async fn configure<'ctx>(
+    async fn configure(
         &self,
-        ctx: &Context<'ctx>,
+        ctx: &Context<'_>,
         instrument: String,
         config: ConfigurationUpdates,
     ) -> async_graphql::Result<CurrentConfiguration> {
@@ -486,7 +501,7 @@ where
         check(policy, token.as_ref())
             .await
             .inspect_err(|e| info!("Authorization failed: {e:?}"))
-            .map_err(async_graphql::Error::from)
+            .map_err(|e| e.extend())
     } else {
         trace!("No authorization configured");
         Ok(())
@@ -646,13 +661,15 @@ mod tests {
     use std::error::Error;
     use std::fs;
 
-    use async_graphql::{EmptySubscription, InputType as _, Request, Schema, SchemaBuilder, Value};
+    use async_graphql::{
+        value, EmptySubscription, ErrorExtensionValues, InputType as _, Request, Schema,
+        SchemaBuilder, Value,
+    };
     use axum::http::HeaderValue;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
     use httpmock::MockServer;
     use rstest::{fixture, rstest};
-    use serde_json::json;
     use tempfile::TempDir;
 
     use super::auth::PolicyCheck;
@@ -693,13 +710,6 @@ mod tests {
             scan_number: num,
             tracker_file_extension: ext.map(|e| e.into()),
         }
-    }
-
-    /// Helper for creating graphql values from literals
-    macro_rules! value {
-        ($tree:tt) => {
-            Value::from_json(json!($tree)).unwrap()
-        };
     }
 
     #[fixture]
@@ -1050,6 +1060,11 @@ mod tests {
             result.errors[0].message,
             "No authentication token was provided"
         );
+
+        let mut ext = ErrorExtensionValues::default();
+        ext.set("code", "AUTH_MISSING");
+        assert_eq!(result.errors[0].extensions, Some(ext));
+
         assert_eq!(result.data, Value::Null);
     }
 
@@ -1076,6 +1091,11 @@ mod tests {
 
         println!("{result:#?}");
         assert_eq!(result.errors[0].message, "Authentication failed");
+
+        let mut ext = ErrorExtensionValues::default();
+        ext.set("code", "AUTH_FAILED");
+        assert_eq!(result.errors[0].extensions, Some(ext));
+
         assert_eq!(result.data, Value::Null);
 
         // Ensure that the number wasn't incremented
