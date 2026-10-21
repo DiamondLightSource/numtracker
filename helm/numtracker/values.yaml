@@ -24,6 +24,11 @@ numtracker:
     enabled: false
     level: DEBUG
     # host: OTEL compatible host
+  graylog:
+    enabled: false
+    level: INFO
+    port: 12201
+    # host: DAQ Graylog GELF TCP hostname eg. graylog-log-target.diamond.ac.uk
   auth:
     enabled: false
     # host: OPA instance

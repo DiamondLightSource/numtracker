@@ -5,25 +5,39 @@ on:
     branches:
       - main
   pull_request:
+  merge_group:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  lint:
+  format:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
       with:
           toolchain: nightly
-          components: rustfmt, clippy
-    - uses: Swatinem/rust-cache@v2
+          components: rustfmt
     - name: Check formatting
       # Use nightly for formatting to enable unstable formatting styles
       # * group imports
       # * import_granularity
       run: cargo +nightly fmt -- --check
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+          toolchain: stable
+          components: clippy
+    - uses: Swatinem/rust-cache@v2
     - name: Clippy
       run: |
         cargo --version
@@ -34,7 +48,9 @@ jobs:
     name: Check prepared offline query data
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
       with:
           toolchain: stable
@@ -50,16 +66,28 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
     - uses: dtolnay/rust-toolchain@stable
       with:
           toolchain: stable
     - uses: Swatinem/rust-cache@v2
 
-    - name: Build Everything
-      run: cargo build --all-targets
-    - name: Run tests
-      run: cargo test --all-targets --verbose
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@cargo-llvm-cov
+
+    - name: Run tests and generate code coverage
+      run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7
+      with:
+        files: lcov.info
+        fail_ci_if_error: true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
     # Ensure that no files (most likely the Cargo.lock file) have changed
     - name: Unstaged Changes
       run: git diff --exit-code

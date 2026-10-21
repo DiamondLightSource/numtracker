@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: {{ include "numtracker.fullname" . }}
   labels:
@@ -47,12 +47,20 @@ spec:
             - name: NUMTRACKER_TRACING_LEVEL
               value: {{ .Values.numtracker.tracing.level }}
             {{- end }}
+            {{- if .Values.numtracker.graylog.enabled }}
+            - name: NUMTRACKER_GRAYLOG_HOST
+              value: {{ required "numtracker.graylog.host is required when numtracker.graylog.enabled is true" .Values.numtracker.graylog.host }}
+            - name: NUMTRACKER_GRAYLOG_PORT
+              value: "{{ .Values.numtracker.graylog.port }}"
+            - name: NUMTRACKER_GRAYLOG_LEVEL
+              value: {{ .Values.numtracker.graylog.level }}
+            {{- end }}
             {{- if .Values.numtracker.auth.enabled }}
-            - name: NUMTRACKER_AUTH_HOST
+            - name: NUMTRACKER_AUTHZ_HOST
               value: {{ .Values.numtracker.auth.host }}
-            - name: NUMTRACKER_AUTH_ACCESS
+            - name: NUMTRACKER_AUTHZ_ACCESS
               value: {{ .Values.numtracker.auth.access }}
-            - name: NUMTRACKER_AUTH_ADMIN
+            - name: NUMTRACKER_AUTHZ_ADMIN
               value: {{ .Values.numtracker.auth.admin }}
             {{- end }}
           securityContext:
