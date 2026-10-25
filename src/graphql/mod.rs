@@ -26,6 +26,7 @@ use async_graphql::{
 };
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse};
 use auth::{AuthError, PolicyCheck};
+use axum::extract::{Query as AxumQuery, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse};
 use axum::routing::{get, post};
@@ -35,6 +36,7 @@ use axum_extra::headers::Authorization;
 use axum_extra::TypedHeader;
 use chrono::{Datelike, Local};
 use derive_more::{Display, Error};
+use serde::Deserialize;
 use tokio::net::TcpListener;
 use tokio::select;
 use tokio::signal::unix::{signal, SignalKind};
@@ -43,7 +45,8 @@ use tracing::{debug, info, instrument, trace, warn};
 use crate::build_info::ServerStatus;
 use crate::cli::ServeOptions;
 use crate::db_service::{
-    InstrumentConfiguration, InstrumentConfigurationUpdate, SqliteScanPathService,
+    InsertConfigurationsError, InstrumentConfiguration, InstrumentConfigurationUpdate,
+    SqliteScanPathService,
 };
 use crate::numtracker::NumTracker;
 use crate::paths::{
@@ -67,7 +70,7 @@ pub async fn serve_graphql(opts: ServeOptions) {
     let schema = Schema::build(Query, Mutation, EmptySubscription)
         .extension(Tracing)
         .limit_directives(32)
-        .data(db)
+        .data(db.clone())
         .data(directory_numtracker)
         .data(opts.policy.map(PolicyCheck::new))
         .finish();
@@ -75,6 +78,8 @@ pub async fn serve_graphql(opts: ServeOptions) {
         // status check endpoint allows external processes to monitor status of server without
         // making graphql queries
         .route("/status", get(server_status))
+        .route("/admin/export", get(export_handler))
+        .route("/admin/restore", post(restore_handler))
         .route("/graphql", post(graphql_handler))
         // make it obvious that /graphql isn't expected to work when visiting from a browser
         .route(
@@ -88,6 +93,7 @@ pub async fn serve_graphql(opts: ServeOptions) {
         // Interactive graphiql playground
         .route("/graphiql", get(graphiql))
         // Make it look less like something is broken when going to any other page
+        .with_state(db)
         .fallback((
             StatusCode::NOT_FOUND,
             Html(include_str!("../../static/404.html")),
@@ -100,6 +106,33 @@ pub async fn serve_graphql(opts: ServeOptions) {
         .with_graceful_shutdown(create_signal_handler())
         .await
         .expect("Can't serve graphql endpoint");
+}
+
+async fn export_handler(
+    State(db): State<SqliteScanPathService>,
+) -> Result<Json<Vec<InstrumentConfiguration>>, StatusCode> {
+    let configs = db
+        .all_configurations()
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(Json(configs))
+}
+
+async fn restore_handler(
+    State(db): State<SqliteScanPathService>,
+    AxumQuery(params): AxumQuery<ImportParams>,
+    Json(configs): Json<Vec<InstrumentConfiguration>>,
+) -> Result<String, (StatusCode, String)> {
+    db.insert_configurations(&configs, params.force_clear)
+        .await
+        .map_err(|e| match e {
+            InsertConfigurationsError::NotEmpty => (
+                StatusCode::CONFLICT,
+                "Configurations already exist".to_string(),
+            ),
+            InsertConfigurationsError::Db(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+        })?;
+    Ok("Configurations restored".into())
 }
 
 async fn create_signal_handler() {
@@ -133,6 +166,12 @@ async fn graphql_handler(
         .execute(req.into_inner().data(auth_token.map(|header| header.0)))
         .await
         .into()
+}
+
+#[derive(Debug, Deserialize)]
+struct ImportParams {
+    #[serde(default)]
+    force_clear: bool,
 }
 
 /// Read-only API for GraphQL
@@ -644,16 +683,22 @@ mod tests {
         SchemaBuilder, Value,
     };
     use axum::http::HeaderValue;
+    use axum::routing::{get, post};
+    use axum::Router;
     use axum_extra::headers::authorization::{Bearer, Credentials};
     use axum_extra::headers::Authorization;
+    use axum_test::TestServer;
     use httpmock::MockServer;
+    use reqwest::StatusCode;
     use rstest::{fixture, rstest};
     use tempfile::TempDir;
 
     use super::auth::PolicyCheck;
-    use super::{ConfigurationUpdates, InputTemplate, Mutation, Query};
+    use super::{
+        export_handler, restore_handler, ConfigurationUpdates, InputTemplate, Mutation, Query,
+    };
     use crate::cli::PolicyOptions;
-    use crate::db_service::{ConfigurationError, SqliteScanPathService};
+    use crate::db_service::{ConfigurationError, InstrumentConfiguration, SqliteScanPathService};
     use crate::graphql::graphql_schema;
     use crate::numtracker::TempTracker;
 
@@ -759,6 +804,13 @@ mod tests {
             db: components.2,
             server,
         }
+    }
+
+    fn app(db: SqliteScanPathService) -> Router {
+        Router::new()
+            .route("/admin/export", get(export_handler))
+            .route("/admin/restore", post(restore_handler))
+            .with_state(db)
     }
 
     #[rstest]
@@ -1170,6 +1222,83 @@ mod tests {
             String::from_utf8(buf).unwrap(),
             include_str!("../../static/service_schema.graphql")
         );
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn export_single_configuration() {
+        let db = SqliteScanPathService::memory().await;
+        let cfg = updates(
+            Some("/tmp/{instrument}/data/{visit}/"),
+            Some("{subdirectory}/{instrument}-{scan_number}"),
+            Some("{subdirectory}/{instrument}-{scan_number}-{detector}"),
+            Some(122),
+            None,
+        );
+        cfg.into_update("i22").insert_new(&db).await.unwrap();
+
+        let server = TestServer::new(app(db));
+        let response = server.get("/admin/export").await;
+
+        response.assert_status_ok();
+        let configs: Vec<InstrumentConfiguration> = response.json();
+
+        assert_eq!(configs.len(), 1);
+        assert_eq!(configs[0].name(), "i22");
+        assert_eq!(configs[0].scan_number(), 122);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn export_multiple_configurations(#[future(awt)] db: SqliteScanPathService) {
+        let server = TestServer::new(app(db));
+        let response = server.get("/admin/export").await;
+
+        response.assert_status_ok();
+        let configs: Vec<InstrumentConfiguration> = response.json();
+
+        assert_eq!(configs.len(), 2);
+        assert_eq!(configs[0].name(), "i22");
+        assert_eq!(configs[0].scan_number(), 122);
+        assert_eq!(configs[1].name(), "b21");
+        assert_eq!(configs[1].scan_number(), 621);
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn export_empty_database() {
+        let db = SqliteScanPathService::memory().await;
+        let server = TestServer::new(app(db));
+        let response = server.get("/admin/export").await;
+
+        response.assert_status_ok();
+        let configs: Vec<InstrumentConfiguration> = response.json();
+
+        assert!(configs.is_empty());
+    }
+
+    #[rstest]
+    #[tokio::test]
+    async fn restore_rejects_non_empty_database() {
+        let db = SqliteScanPathService::memory().await;
+        let cfg = updates(
+            Some("/tmp/{instrument}/data/{visit}/"),
+            Some("{subdirectory}/{instrument}-{scan_number}"),
+            Some("{subdirectory}/{instrument}-{scan_number}-{detector}"),
+            Some(122),
+            None,
+        );
+        cfg.into_update("i22").insert_new(&db).await.unwrap();
+
+        let existing = db.all_configurations().await.unwrap();
+
+        let server = TestServer::new(app(db.clone()));
+        let response = server.post("/admin/restore").json(&existing).await;
+
+        response.assert_status(StatusCode::CONFLICT);
+
+        assert_eq!(db.all_configurations().await.unwrap()[0].name(), "i22");
+        assert_eq!(db.all_configurations().await.unwrap()[0].scan_number(), 122);
     }
 }
 #[cfg(test)]
