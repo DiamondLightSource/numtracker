@@ -44,6 +44,9 @@ pub struct AccessRequest<'a> {
     audience: &'a str,
     proposal: u32,
     instrument_session: u16,
+    /// The proposal's category code, e.g. "CM", checked against the proposal
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proposal_category: Option<String>,
     instrument: &'a str,
 }
 
@@ -58,6 +61,7 @@ impl<'a> AccessRequest<'a> {
             audience: AUDIENCE,
             proposal: instrument_session.proposal,
             instrument_session: instrument_session.session,
+            proposal_category: instrument_session.category,
             instrument,
         })
     }
@@ -86,6 +90,8 @@ struct InvalidInstrumentSession;
 
 #[cfg_attr(test, derive(Debug))]
 struct InstrumentSession {
+    /// Upper case category code, e.g. "CM" for "cm12345-1"
+    category: Option<String>,
     proposal: u32,
     session: u16,
 }
@@ -94,13 +100,18 @@ impl FromStr for InstrumentSession {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (code_prop, vis) = s.split_once('-').ok_or(InvalidInstrumentSession)?;
-        let prop = code_prop
-            .chars()
-            .skip_while(|p| !p.is_ascii_digit())
-            .collect::<String>();
+        let digits = code_prop
+            .find(|c: char| c.is_ascii_digit())
+            .ok_or(InvalidInstrumentSession)?;
+        let (code, prop) = code_prop.split_at(digits);
         let proposal = prop.parse().map_err(|_| InvalidInstrumentSession)?;
         let session = vis.parse().map_err(|_| InvalidInstrumentSession)?;
-        Ok(Self { proposal, session })
+        let category = (!code.is_empty()).then(|| code.to_ascii_uppercase());
+        Ok(Self {
+            category,
+            proposal,
+            session,
+        })
     }
 }
 
@@ -229,6 +240,13 @@ mod tests {
         let session = InstrumentSession::from_str("cm12345-1").unwrap();
         assert_eq!(session.session, 1);
         assert_eq!(session.proposal, 12345);
+        assert_eq!(session.category.as_deref(), Some("CM"));
+    }
+
+    #[test]
+    fn instrument_session_without_category() {
+        let session = InstrumentSession::from_str("12345-1").unwrap();
+        assert_eq!(session.category, None);
     }
 
     #[rstest]
@@ -257,6 +275,7 @@ mod tests {
                             "instrument": "i22",
                             "instrument_session": 4,
                             "proposal": 1234,
+                            "proposal_category": "CM",
                             "audience": "account"
                         }
                     }));
@@ -289,6 +308,7 @@ mod tests {
                             "instrument": "i22",
                             "instrument_session": 4,
                             "proposal": 1234,
+                            "proposal_category": "CM",
                             "audience": "account"
                         }
                     }));
@@ -321,6 +341,7 @@ mod tests {
                             "instrument": "i22",
                             "instrument_session": 4,
                             "proposal": 1234,
+                            "proposal_category": "CM",
                             "audience": "account"
                         }
                     }));
@@ -408,6 +429,7 @@ mod tests {
                             "token": "token",
                             "instrument": "i22",
                             "proposal": 1234,
+                            "proposal_category": "CM",
                             "instrument_session": 4,
                             "audience": "account"
                         }
