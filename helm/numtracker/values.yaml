@@ -34,6 +34,8 @@ numtracker:
     # host: OPA instance
     # admin: rule determining admin access to an instrument
     # access: rule determining access to an instrument session
+    # superAdmin: rule determining admin access to all instruments
+    #   (default v1/data/diamond/admin/admin)
 
 
 

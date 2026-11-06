@@ -106,8 +106,10 @@ impl FromStr for InstrumentSession {
 
 pub(crate) struct PolicyCheck {
     client: reqwest::Client,
-    /// Rego query for getting admin rights
+    /// Rego query for getting admin rights on an instrument
     admin: String,
+    /// Rego query for getting admin rights on all instruments
+    super_admin: String,
     /// Rego query for getting access rights
     access: String,
 }
@@ -124,6 +126,11 @@ impl PolicyCheck {
         Self {
             client: reqwest::Client::new(),
             admin: format!("{}/{}", host, endpoint.admin_query.trim_start_matches('/')),
+            super_admin: format!(
+                "{}/{}",
+                host,
+                endpoint.super_admin_query.trim_start_matches('/')
+            ),
             access: format!("{}/{}", host, endpoint.access_query.trim_start_matches('/')),
         }
     }
@@ -146,7 +153,7 @@ impl PolicyCheck {
         &self,
         token: Option<&Authorization<Bearer>>,
     ) -> Result<(), AuthError> {
-        self.authorise(&self.admin, AdminRequest::new(token, None)?)
+        self.authorise(&self.super_admin, AdminRequest::new(token, None)?)
             .await
     }
 
@@ -260,6 +267,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         check
             .check_access(token("token").as_ref(), "i22", "cm1234-4")
@@ -291,6 +299,7 @@ mod tests {
             policy_host: server.url("/"),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         check
             .check_access(token("token").as_ref(), "i22", "cm1234-4")
@@ -322,6 +331,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "/demo/access".into(),
             admin_query: "/demo/admin".into(),
+            super_admin_query: "/demo/super_admin".into(),
         });
         check
             .check_access(token("token").as_ref(), "i22", "cm1234-4")
@@ -351,6 +361,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         check
             .check_instrument_admin(token("token").as_ref(), "i22")
@@ -365,7 +376,7 @@ mod tests {
         let mock = server
             .mock_async(|when, then| {
                 when.method("POST")
-                    .path("/demo/admin")
+                    .path("/demo/super_admin")
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
@@ -379,6 +390,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         check.check_admin(token("token").as_ref()).await.unwrap();
         mock.assert();
@@ -407,6 +419,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
 
         let result = check
@@ -439,6 +452,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")
@@ -456,7 +470,7 @@ mod tests {
         let mock = server
             .mock_async(|when, then| {
                 when.method("POST")
-                    .path("/demo/admin")
+                    .path("/demo/super_admin")
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
@@ -470,6 +484,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         let result = check.check_admin(token("token").as_ref()).await;
 
@@ -491,6 +506,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         let result = check.check_access(None, "i22", "cm1234-4").await;
 
@@ -512,6 +528,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         let result = check.check_instrument_admin(None, "i22").await;
 
@@ -533,6 +550,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         let result = check.check_admin(None).await;
 
@@ -555,6 +573,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         let result = check
             .check_instrument_admin(token("token").as_ref(), "i22")

@@ -62,6 +62,10 @@ spec:
               value: {{ .Values.numtracker.auth.access }}
             - name: NUMTRACKER_AUTHZ_ADMIN
               value: {{ .Values.numtracker.auth.admin }}
+            {{- with .Values.numtracker.auth.superAdmin }}
+            - name: NUMTRACKER_AUTHZ_SUPER_ADMIN
+              value: {{ . }}
+            {{- end }}
             {{- end }}
           securityContext:
             {{- toYaml .Values.securityContext | nindent 12 }}

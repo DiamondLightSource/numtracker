@@ -752,6 +752,7 @@ mod tests {
             policy_host: server.url(""),
             access_query: "demo/access".into(),
             admin_query: "demo/admin".into(),
+            super_admin_query: "demo/super_admin".into(),
         });
         TestAuthEnv {
             schema: components.0.data(Some(check)).finish(),

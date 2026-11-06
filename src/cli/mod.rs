@@ -111,6 +111,15 @@ pub struct PolicyOptions {
     /// eg. v1/data/diamond/admin/configure_instrument
     #[clap(long, required = false, env = "NUMTRACKER_AUTHZ_ADMIN")]
     pub admin_query: String,
+    /// The Rego rule determining admin access across all instruments, used
+    /// when no instrument is given (eg listing every configuration)
+    #[clap(
+        long,
+        required = false,
+        env = "NUMTRACKER_AUTHZ_SUPER_ADMIN",
+        default_value = "v1/data/diamond/admin/admin"
+    )]
+    pub super_admin_query: String,
 }
 
 #[derive(Debug, Args)]
@@ -263,6 +272,7 @@ mod tests {
 
         assert_eq!(policy.policy_host, "opa.example.com");
         assert_eq!(policy.admin_query, "demo/admin_check");
+        assert_eq!(policy.super_admin_query, "v1/data/diamond/admin/admin");
         assert_eq!(policy.access_query, "demo/access_check");
     }
 
