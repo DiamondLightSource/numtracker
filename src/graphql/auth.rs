@@ -43,12 +43,8 @@ pub struct AccessRequest<'a> {
     token: &'a str,
     audience: &'a str,
     proposal: u32,
-    // This should stay as visit instead of instrument session number until the
-    // rules in the authz service are updated.
-    visit: u16,
-    // This should stay as beamline instead of instrument until the rules in the authz service are
-    // updated to use instrument
-    beamline: &'a str,
+    instrument_session: u16,
+    instrument: &'a str,
 }
 
 impl<'a> AccessRequest<'a> {
@@ -61,8 +57,8 @@ impl<'a> AccessRequest<'a> {
             token: token.ok_or(AuthError::Missing)?.token(),
             audience: AUDIENCE,
             proposal: instrument_session.proposal,
-            visit: instrument_session.session,
-            beamline: instrument,
+            instrument_session: instrument_session.session,
+            instrument,
         })
     }
 }
@@ -71,10 +67,8 @@ impl<'a> AccessRequest<'a> {
 pub struct AdminRequest<'a> {
     token: &'a str,
     audience: &'a str,
-    // This should stay as beamline instead of instrument until the rules in the authz service are
-    // updated to use instrument
     #[serde(skip_serializing_if = "Option::is_none")]
-    beamline: Option<&'a str>,
+    instrument: Option<&'a str>,
 }
 
 impl<'r> AdminRequest<'r> {
@@ -82,7 +76,7 @@ impl<'r> AdminRequest<'r> {
         Ok(Self {
             token: token.ok_or(AuthError::Missing)?.token(),
             audience: AUDIENCE,
-            beamline: instrument,
+            instrument,
         })
     }
 }
@@ -253,8 +247,8 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
-                            "visit": 4,
+                            "instrument": "i22",
+                            "instrument_session": 4,
                             "proposal": 1234,
                             "audience": "account"
                         }
@@ -284,8 +278,8 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
-                            "visit": 4,
+                            "instrument": "i22",
+                            "instrument_session": 4,
                             "proposal": 1234,
                             "audience": "account"
                         }
@@ -315,8 +309,8 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
-                            "visit": 4,
+                            "instrument": "i22",
+                            "instrument_session": 4,
                             "proposal": 1234,
                             "audience": "account"
                         }
@@ -346,7 +340,7 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
+                            "instrument": "i22",
                             "audience": "account"
                         }
                     }));
@@ -400,9 +394,9 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
+                            "instrument": "i22",
                             "proposal": 1234,
-                            "visit": 4,
+                            "instrument_session": 4,
                             "audience": "account"
                         }
                     }));
@@ -434,7 +428,7 @@ mod tests {
                     .json_body_obj(&json!({
                         "input": {
                             "token": "token",
-                            "beamline": "i22",
+                            "instrument": "i22",
                             "audience": "account"
                         }
                     }));
